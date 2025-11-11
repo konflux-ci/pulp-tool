@@ -1,6 +1,5 @@
 """Tests for error handling utilities."""
 
-import sys
 import pytest
 import httpx
 

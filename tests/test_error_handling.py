@@ -5,10 +5,8 @@ This module contains comprehensive tests for error handling,
 edge cases, and exception scenarios across the pulp-tool package.
 """
 
-import json
 import os
 import tempfile
-from pathlib import Path
 from unittest.mock import Mock, patch
 import pytest
 import httpx
@@ -211,46 +209,6 @@ class TestOAuth2ErrorHandling:
 
         with pytest.raises(ValueError):
             auth._retrieve_token()
-
-    @pytest.mark.skip(reason="_handle401 is specific to requests implementation, not present in httpx auth flow")
-    def test_handle401_connection_error(self, httpx_mock):
-        """Test _handle401 method with connection error."""
-        auth = OAuth2ClientCredentialsAuth(
-            client_id="test-client", client_secret="test-secret", token_url="https://test.com/token"
-        )
-
-        # Mock the token endpoint to succeed
-        httpx_mock.post("https://test.com/token").mock(
-            return_value=httpx.Response(200, json={"access_token": "new-token", "expires_in": 3600})
-        )
-
-        # Mock a 401 response that will trigger retry
-        httpx_mock.get("https://test.com/api").mock(return_value=httpx.Response(401, text="Unauthorized"))
-
-        # Mock the retry request to fail with connection error
-        httpx_mock.get("https://test.com/api").mock(side_effect=ConnectError("Connection failed"))
-
-        auth._access_token = "new-token"
-
-        # Create a mock response object for the _handle401 method
-        response = Mock()
-        response.status_code = 401
-        response.content = b"Unauthorized"
-        response.close = Mock()
-        response.request = Mock()
-
-        # Create a proper mock for the prepared request
-        prepared_request = Mock()
-        prepared_request.headers = {}
-        prepared_request.deregister_hook = Mock()
-        response.request.copy.return_value = prepared_request
-
-        # Create a mock for the connection
-        response.connection = Mock()
-        response.connection.send.side_effect = ConnectError("Connection failed")
-
-        with pytest.raises(ConnectError):
-            auth._handle401(response)
 
 
 class TestPulpHelperErrorHandling:

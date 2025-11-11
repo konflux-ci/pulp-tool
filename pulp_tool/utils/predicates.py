@@ -5,7 +5,6 @@ This module provides reusable boolean predicates to extract complex
 conditional logic into named functions.
 """
 
-from pathlib import Path
 from typing import Optional
 
 

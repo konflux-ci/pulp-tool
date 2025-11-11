@@ -18,12 +18,10 @@ import pytest
 from pydantic import ValidationError
 
 from pulp_tool.models.base import KonfluxBaseModel
-from pulp_tool.models.repository import RepositoryRefs, RepositoryInfo
+from pulp_tool.models.repository import RepositoryRefs
 from pulp_tool.models.context import (
     UploadContext,
     TransferContext,
-    ArchUploadConfig,
-    UploadCallbacks,
 )
 from pulp_tool.models.artifacts import (
     DownloadTask,
@@ -35,13 +33,9 @@ from pulp_tool.models.artifacts import (
     ContentData,
 )
 from pulp_tool.models.results import (
-    UploadResult,
-    RpmUploadResult,
     DownloadResult,
 )
 from pulp_tool.models.statistics import (
-    UploadStats,
-    FileSizeStats,
     DownloadStats,
     UploadCounts,
 )

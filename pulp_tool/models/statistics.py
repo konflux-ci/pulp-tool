@@ -5,7 +5,6 @@ from typing import List, Dict
 from pydantic import Field
 
 from .base import KonfluxBaseModel
-from .repository import RepositoryRefs
 
 
 class UploadStats(KonfluxBaseModel):

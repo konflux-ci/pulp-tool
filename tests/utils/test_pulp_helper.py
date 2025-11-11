@@ -6,7 +6,6 @@ repository setup, distribution URL retrieval, and helper methods.
 """
 
 from unittest.mock import Mock, patch
-import httpx
 from httpx import HTTPError
 import pytest
 

@@ -83,6 +83,7 @@ def _categorize_artifacts(
 
         # Determine artifact type
         artifact_type = None
+        file_url = ""  # Initialize to satisfy pylint
         if "sbom" in artifact:
             artifact_type = "sbom"
             file_url = f"{distros['sbom']}{artifact}"

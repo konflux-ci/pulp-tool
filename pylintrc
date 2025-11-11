@@ -15,7 +15,11 @@ persistent=no
 # cyclic-import
 #     Seems like cyclic-import is just a style check which is not going to be
 #     fixed: https://github.com/PyCQA/pylint/issues/6983
-disable=import-error,cyclic-import
+# no-member, unsupported-assignment-operation, unsubscriptable-object, 
+# unsupported-membership-test, assigning-non-slot
+#     Pydantic models create attributes dynamically at runtime, causing many
+#     false positives in Pylint. These are disabled for Pydantic model classes.
+disable=import-error,cyclic-import,no-member,unsupported-assignment-operation,unsubscriptable-object,unsupported-membership-test,assigning-non-slot
 
 # list of disabled messages:
 #I0011: 62: Locally disabling R0201

@@ -144,6 +144,7 @@ class PulpResultsModel(KonfluxBaseModel):
             sha256: SHA256 checksum
             labels: Labels associated with the artifact
         """
+        # pylint: disable=unsupported-assignment-operation  # Pydantic mutable field
         self.artifacts[key] = ArtifactInfo(labels=labels, url=url, sha256=sha256)
 
     def add_distribution(self, repo_type: str, url: str) -> None:
@@ -154,6 +155,7 @@ class PulpResultsModel(KonfluxBaseModel):
             repo_type: Type of repository (rpms, logs, sbom, artifacts)
             url: Distribution base URL
         """
+        # pylint: disable=unsupported-assignment-operation  # Pydantic mutable field
         self.distributions[repo_type] = url
 
     def add_error(self, error: str) -> None:
@@ -163,7 +165,7 @@ class PulpResultsModel(KonfluxBaseModel):
         Args:
             error: Error message to record
         """
-        self.upload_errors.append(error)
+        self.upload_errors.append(error)  # pylint: disable=no-member  # Pydantic field
 
     def to_json_dict(self) -> Dict[str, Any]:
         """
@@ -180,7 +182,7 @@ class PulpResultsModel(KonfluxBaseModel):
                     "url": info.url,
                     "sha256": info.sha256,
                 }
-                for key, info in self.artifacts.items()
+                for key, info in self.artifacts.items()  # pylint: disable=no-member  # Pydantic field
             },
             "distributions": self.distributions,
         }
@@ -188,7 +190,7 @@ class PulpResultsModel(KonfluxBaseModel):
     @property
     def total_uploaded(self) -> int:
         """Total number of artifacts uploaded."""
-        return self.uploaded_counts.total
+        return self.uploaded_counts.total  # pylint: disable=no-member  # Pydantic field
 
     @property
     def has_errors(self) -> bool:

@@ -4,7 +4,6 @@ Basic tests for pulp-tool package.
 This module contains basic tests to verify the package structure and imports.
 """
 
-import pytest
 import pulp_tool
 
 

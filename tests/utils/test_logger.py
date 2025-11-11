@@ -6,7 +6,6 @@ This module tests logging setup and formatter functionality.
 
 from unittest.mock import Mock, patch
 import logging
-import pytest
 
 from pulp_tool.utils import setup_logging, WrappingFormatter
 

@@ -7,7 +7,7 @@ to eliminate code duplication.
 
 from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
-from ..models.artifacts import PulledArtifacts, ArtifactData, ArtifactFile
+from ..models.artifacts import PulledArtifacts, ArtifactFile
 
 
 # Standard artifact types in order

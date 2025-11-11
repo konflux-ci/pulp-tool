@@ -1,6 +1,5 @@
 """Tests for predicate functions."""
 
-import pytest
 from pulp_tool.utils.predicates import (
     is_remote_url,
     has_required_certificates,

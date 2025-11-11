@@ -12,10 +12,6 @@ All mixin functionality is tested through the integrated PulpClient class,
 which is the correct approach for testing mixin-based architecture.
 """
 
-import json
-import os
-import tempfile
-from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import Mock, patch, mock_open
 import pytest
@@ -388,7 +384,7 @@ class TestPulpClient:
 
         # The method now raises TimeoutError instead of returning the last response
         with patch("time.sleep"), patch("time.time", side_effect=[0, 0.5, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0]):
-            with patch("pulp_tool.api.task_manager.logging") as mock_logging:
+            with patch("pulp_tool.api.task_manager.logging"):
                 result = mock_pulp_client.wait_for_finished_task("/pulp/api/v3/tasks/12345/", timeout=1)
 
         # Now returns a TaskResponse model even on timeout (last state)
@@ -434,7 +430,8 @@ class TestPulpClient:
         """Test get_file_locations method."""
         # Mock the artifacts endpoint
         httpx_mock.get(
-            "https://pulp.example.com/pulp/api/v3/test-domain/api/v3/artifacts/?pulp_href__in=/pulp/api/v3/artifacts/12345/"
+            "https://pulp.example.com/pulp/api/v3/test-domain/api/v3/artifacts/"
+            "?pulp_href__in=/pulp/api/v3/artifacts/12345/"
         ).mock(return_value=httpx.Response(200, json={"results": [{"pulp_href": "/pulp/api/v3/artifacts/12345/"}]}))
 
         artifacts = [{"file": "/pulp/api/v3/artifacts/12345/"}]
@@ -448,7 +445,8 @@ class TestPulpClient:
         """Test get_rpm_by_pkgIDs method."""
         # Mock the RPM search endpoint - URL encoding uses %2C for comma
         httpx_mock.get(
-            "https://pulp.example.com/pulp/api/v3/test-domain/api/v3/content/rpm/packages/?pkgId__in=abcd1234%2Cefgh5678"
+            "https://pulp.example.com/pulp/api/v3/test-domain/api/v3/content/rpm/packages/"
+            "?pkgId__in=abcd1234%2Cefgh5678"
         ).mock(
             return_value=httpx.Response(
                 200, json={"results": [{"pulp_href": "/pulp/api/v3/content/rpm/packages/12345/"}]}
@@ -508,7 +506,8 @@ class TestPulpClient:
 
         # Mock the file locations endpoint
         httpx_mock.get(
-            "https://pulp.example.com/pulp/api/v3/test-domain/api/v3/artifacts/?pulp_href__in=/pulp/api/v3/artifacts/67890/"
+            "https://pulp.example.com/pulp/api/v3/test-domain/api/v3/artifacts/"
+            "?pulp_href__in=/pulp/api/v3/artifacts/67890/"
         ).mock(return_value=httpx.Response(200, json=mock_file_locations))
 
         content_results = mock_content_data["results"]
@@ -702,12 +701,6 @@ class TestPulpClient:
 
         assert result.status_code == 200
         assert result.json()["pulp_href"] == "/pulp/api/v3/distributions/rpm/rpm/12345/"
-
-
-import pytest
-from unittest.mock import patch
-
-from pulp_tool.api import PulpClient
 
 
 class TestPulpClientAdditional:

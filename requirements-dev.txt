@@ -6,6 +6,7 @@ pytest>=6.0
 pytest-cov>=2.0
 pytest-mock>=3.6
 respx>=0.20.0
+diff-cover>=7.0
 
 # Code formatting and linting
 black>=21.0
