@@ -12,10 +12,10 @@ Key Functions:
     - extract_metadata_from_artifact_json(): Extract metadata fields from artifacts
     - determine_build_id(): Determine build ID from multiple sources
     - sanitize_build_id_for_repository(): Clean build IDs for repository naming
-    
+
 Organization:
     - Build ID Utilities
-    - Metadata Extraction Functions  
+    - Metadata Extraction Functions
     - File Validation Functions
     - Repository Validation Functions
 

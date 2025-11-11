@@ -5,12 +5,7 @@ This module contains comprehensive tests for OAuth2ClientCredentialsAuth
 and related authentication functionality.
 """
 
-import json
-import os
-import tempfile
 from datetime import datetime, timedelta
-from pathlib import Path
-from unittest.mock import Mock, patch, mock_open
 import pytest
 import httpx
 

@@ -1,14 +1,31 @@
 """Tests for Click CLI commands."""
 
-import pytest
 import tempfile
 import os
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 from click.testing import CliRunner
 import httpx
 
-from pulp_tool.cli import cli
+from pulp_tool.cli import cli, main
+
+
+class TestCLIEntryPoint:
+    """Test CLI entry point and main function."""
+
+    def test_main_function_success(self):
+        """Test main() entry point calls cli successfully."""
+        with patch("pulp_tool.cli.cli") as mock_cli:
+            mock_cli.return_value = None
+            main()
+            mock_cli.assert_called_once()
+
+    def test_main_function_keyboard_interrupt(self):
+        """Test main() handles KeyboardInterrupt gracefully."""
+        with patch("pulp_tool.cli.cli") as mock_cli, patch("pulp_tool.cli.sys.exit") as mock_exit:
+            mock_cli.side_effect = KeyboardInterrupt()
+            main()
+            mock_exit.assert_called_once_with(130)
 
 
 class TestCLIHelp:

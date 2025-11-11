@@ -5,11 +5,9 @@ This module tests RPM checking, uploading, and processing functions.
 """
 
 import os
-import glob
 from unittest.mock import Mock, patch
-import httpx
-from httpx import HTTPError
 import pytest
+import httpx
 
 from pulp_tool.utils import (
     upload_rpms_logs,
@@ -110,7 +108,8 @@ class TestRPMUtilities:
 
         # Mock the RPM search endpoint
         httpx_mock.get(
-            "https://pulp.example.com/pulp/api/v3/test-domain/api/v3/content/rpm/packages/?pulp_label_select=build_id~test-build"
+            "https://pulp.example.com/pulp/api/v3/test-domain/api/v3/content/rpm/packages/"
+            "?pulp_label_select=build_id~test-build"
         ).mock(return_value=httpx.Response(200, json={"results": []}))
 
         # Mock the file content creation endpoint for log uploads

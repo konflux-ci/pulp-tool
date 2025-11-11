@@ -25,17 +25,31 @@ jobs:
           pip install -r requirements-dev.txt
 
       - name: Check code formatting with Black
+        id: black
         run: black --check pulp_tool tests
         continue-on-error: true
 
       - name: Lint with Flake8
+        id: flake8
         run: flake8 pulp_tool tests --max-line-length=120
         continue-on-error: true
 
       - name: Lint with Pylint
-        run: pylint pulp_tool tests
+        id: pylint
+        run: pylint pulp_tool tests --errors-only
         continue-on-error: true
 
       - name: Type check with Mypy
+        id: mypy
         run: mypy pulp_tool
         continue-on-error: true
+
+      - name: Check for linting failures
+        if: steps.black.outcome == 'failure' || steps.flake8.outcome == 'failure' || steps.pylint.outcome == 'failure' || steps.mypy.outcome == 'failure'
+        run: |
+          echo "One or more linting checks failed:"
+          echo "  Black: ${{ steps.black.outcome }}"
+          echo "  Flake8: ${{ steps.flake8.outcome }}"
+          echo "  Pylint: ${{ steps.pylint.outcome }}"
+          echo "  Mypy: ${{ steps.mypy.outcome }}"
+          exit 1

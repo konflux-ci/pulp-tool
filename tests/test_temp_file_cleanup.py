@@ -6,7 +6,6 @@ These tests demonstrate proper temporary file handling patterns.
 
 from pathlib import Path
 import tempfile
-import os
 
 
 class TestTempFileFixtures:

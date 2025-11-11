@@ -1,7 +1,6 @@
 """Tests for logging utilities."""
 
 import logging
-import pytest
 
 from pulp_tool.utils.logging_utils import (
     log_operation_start,

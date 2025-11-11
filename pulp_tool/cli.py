@@ -8,7 +8,6 @@ for upload and transfer operations.
 
 import logging
 import sys
-import json
 import traceback
 from datetime import datetime, timezone
 from pathlib import Path
@@ -258,11 +257,17 @@ def upload(  # pylint: disable=too-many-arguments,too-many-positional-arguments
 )
 @click.option(
     "--content-types",
-    help="Comma-separated list of content types to transfer (rpm,log,sbom). If not specified, all types are transferred.",
+    help=(
+        "Comma-separated list of content types to transfer (rpm,log,sbom). "
+        "If not specified, all types are transferred."
+    ),
 )
 @click.option(
     "--archs",
-    help="Comma-separated list of architectures to transfer (e.g., x86_64,aarch64,noarch). If not specified, all architectures are transferred.",
+    help=(
+        "Comma-separated list of architectures to transfer (e.g., x86_64,aarch64,noarch). "
+        "If not specified, all architectures are transferred."
+    ),
 )
 @click.pass_context
 def transfer(  # pylint: disable=too-many-positional-arguments
@@ -596,7 +601,7 @@ def get_repo_md(  # pylint: disable=too-many-arguments,too-many-positional-argum
             for bid, path in successful_downloads:
                 click.echo(f"  ✓ {path.name} -> {path.absolute()}")
 
-            click.echo(f"\nTo use these repositories, copy the files to /etc/yum.repos.d/:")
+            click.echo("\nTo use these repositories, copy the files to /etc/yum.repos.d/:")
             if len(successful_downloads) == 1:
                 click.echo(f"  sudo cp {successful_downloads[0][1]} /etc/yum.repos.d/")
             else:
@@ -643,7 +648,7 @@ def get_repo_md(  # pylint: disable=too-many-arguments,too-many-positional-argum
 def main():
     """Main entry point for the CLI."""
     try:
-        cli()
+        cli()  # pylint: disable=no-value-for-parameter  # Click handles parameters
     except KeyboardInterrupt:
         click.echo("\n\nOperation cancelled by user", err=True)
         sys.exit(130)

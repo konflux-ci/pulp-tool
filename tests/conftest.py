@@ -11,12 +11,9 @@ Best Practices for Temporary Files in Tests:
 4. The temp_file_tracker fixture automatically ensures cleanup of all temp files
 """
 
-import json
 import tempfile
-import atexit
 from pathlib import Path
-from typing import Any, Dict, List
-from unittest.mock import MagicMock, Mock
+from unittest.mock import Mock
 
 import pytest
 import httpx
@@ -275,26 +272,19 @@ def temp_rpm_file():
 @pytest.fixture
 def temp_dir():
     """Create a temporary directory for testing."""
-    import os
+    import shutil
 
     temp_path = tempfile.mkdtemp()
 
     yield temp_path
 
     # Cleanup
-    import shutil
-
     shutil.rmtree(temp_path, ignore_errors=True)
 
 
 @pytest.fixture
 def temp_config_file(mock_config):
     """Create a temporary TOML config file."""
-    try:
-        import tomllib
-    except ImportError:
-        import tomli as tomllib
-
     with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".toml") as f:
         # Write valid TOML format
         f.write("[cli]\n")

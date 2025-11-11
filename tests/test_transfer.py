@@ -8,8 +8,8 @@ import tempfile
 import os
 import json
 import re
-from unittest.mock import Mock, patch, MagicMock, mock_open
-from httpx import Response, HTTPError
+from unittest.mock import Mock, patch, mock_open
+from httpx import HTTPError
 import httpx
 from pulp_tool.api import DistributionClient
 from pulp_tool.transfer import (
@@ -247,8 +247,6 @@ class TestBuildIdManagement:
         args = Mock()
         args.build_id = None
         args.artifact_location = temp_file
-
-        pulled_artifacts = {}
 
         # Test with artifact_json parameter
         result = determine_build_id(args, artifact_json=artifact_data)
@@ -558,8 +556,6 @@ class TestLoggingAndReporting:
         from pulp_tool.transfer import _log_storage_summary
         from pulp_tool.models.artifacts import PulledArtifacts, ArtifactFile
         import logging
-        import os
-        import tempfile
 
         # Create temporary files for test
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -633,7 +629,6 @@ class TestLoggingAndReporting:
         """Test logging Pulp upload info when upload_info is provided."""
         from pulp_tool.transfer import _log_pulp_upload_info
         from pulp_tool.models.results import PulpResultsModel
-        from pulp_tool.models.statistics import UploadCounts
 
         repositories = RepositoryRefs(
             rpms_href="",

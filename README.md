@@ -1,6 +1,6 @@
 # Pulp Tool
 
-A Python client for Pulp API operations including RPM, log, and SBOM file management.
+A Python client for Pulp API operations including RPM and file management.
 
 ## Overview
 
@@ -9,11 +9,6 @@ Pulp Tool provides a comprehensive, modern Python client for interacting with Pu
 The package emphasizes developer experience with comprehensive type safety, intuitive CLI commands, and a modular architecture that makes it easy to integrate into automated workflows.
 
 ## Installation
-
-### From PyPI (when published)
-
-```bash
-pip install pulp-tool
 ```
 
 ### From Source

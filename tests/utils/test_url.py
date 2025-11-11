@@ -5,7 +5,7 @@ This module tests URL utilities including build ID extraction,
 validation, and determination from various sources.
 """
 
-from unittest.mock import Mock, patch, mock_open
+from unittest.mock import Mock
 import pytest
 import tempfile
 import os

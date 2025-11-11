@@ -9,8 +9,6 @@ This test file covers validation models from pulp_tool.models.validation:
 Note: Other data models are tested in test_all_models.py
 """
 
-import pytest
-
 from pulp_tool.models.validation import (
     RpmCheckResult,
     ValidationResult,

@@ -5,11 +5,10 @@ This module tests session creation and configuration.
 """
 
 from unittest.mock import Mock, patch
-import httpx
-import pytest
 import tempfile
 import os
 import ssl
+import httpx
 
 from pulp_tool.utils import create_session_with_retry
 

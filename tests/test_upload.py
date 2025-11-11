@@ -5,9 +5,6 @@ import httpx
 from httpx import HTTPError
 import re
 from unittest.mock import Mock, patch, mock_open
-import tempfile
-import os
-from io import StringIO
 import json
 
 from pulp_tool.upload import (
@@ -15,7 +12,6 @@ from pulp_tool.upload import (
     _serialize_results_to_json,
     _upload_and_get_results_url,
     _extract_results_url,
-    collect_results,
     _handle_artifact_results,
     _handle_sbom_results,
 )
@@ -269,7 +265,6 @@ class TestHandleSbomResults:
 
     def test_handle_sbom_results_success(self, tmp_path):
         """Test successful SBOM results writing."""
-        from pulp_tool.upload import _handle_sbom_results
         from argparse import Namespace
 
         # Create mock results JSON with SBOM
@@ -278,7 +273,10 @@ class TestHandleSbomResults:
             "artifacts": {
                 "test-sbom.spdx.json": {
                     "labels": {"build_id": "test-build", "namespace": "test-ns"},
-                    "url": "https://pulp.example.com/pulp/content/test-build/sbom/test-sbom.spdx.json@sha256:abc123def456789",
+                    "url": (
+                        "https://pulp.example.com/pulp/content/test-build/sbom/"
+                        "test-sbom.spdx.json@sha256:abc123def456789"
+                    ),
                     "sha256": "abc123def456789",
                 },
                 "test-package.rpm": {
@@ -302,12 +300,11 @@ class TestHandleSbomResults:
         # Verify the file was created with correct content
         assert sbom_file.exists()
         content = sbom_file.read_text()
-        expected = "https://pulp.example.com/pulp/content/test-build/sbom/test-sbom.spdx.json@sha256:abc123def456789"
+        expected = "https://pulp.example.com/pulp/content/test-build/sbom/" "test-sbom.spdx.json@sha256:abc123def456789"
         assert content == expected
 
     def test_handle_sbom_results_no_sbom_found(self, tmp_path, caplog):
         """Test handling when no SBOM is found."""
-        from pulp_tool.upload import _handle_sbom_results
         from argparse import Namespace
         import logging
 
@@ -338,7 +335,6 @@ class TestHandleSbomResults:
 
     def test_handle_sbom_results_json_file_without_arch(self, tmp_path):
         """Test SBOM detection with .json extension (no arch label)."""
-        from pulp_tool.upload import _handle_sbom_results
         from argparse import Namespace
 
         # Create mock results JSON with .json file (SBOM) without arch
