@@ -1,5 +1,7 @@
 # Pulp Tool
 
+[![codecov](https://codecov.io/gh/konflux/pulp-tool/branch/main/graph/badge.svg)](https://codecov.io/gh/konflux/pulp-tool)
+
 A Python client for Pulp API operations including RPM and file management.
 
 ## Overview
@@ -539,6 +541,22 @@ pytest -v
 # Run specific test markers
 pytest -m unit
 pytest -m integration
+```
+
+### Code Coverage
+
+Code coverage is tracked using [Codecov](https://codecov.io/gh/konflux/pulp-tool). Coverage reports are automatically uploaded to Codecov when tests run in CI.
+
+- **Coverage Target**: 85% overall coverage
+- **Diff Coverage**: 100% coverage required for new/changed lines in pull requests
+- **View Coverage**: Check the [Codecov dashboard](https://codecov.io/gh/konflux/pulp-tool) for detailed coverage reports
+
+```bash
+# Generate coverage report locally
+pytest --cov=pulp_tool --cov-report=html --cov-report=term
+
+# View HTML report
+open htmlcov/index.html
 ```
 
 ### Code Formatting
