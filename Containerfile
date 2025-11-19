@@ -1,6 +1,6 @@
 # Containerfile for pulp-tool
 # Base image: Fedora 42
-FROM registry.fedoraproject.org/fedora:42@sha256:1a8a7625e48614e174e7a7bdf7bf5bd1c08ea02a11b918ef257cca5fd415fe94
+FROM registry.fedoraproject.org/fedora:44@sha256:3a7cc6afa16361f923d718b7d5f5f3183e9480b31e0e7607037de0093cf4c0da
 
 # Install Python 3 and pip
 RUN dnf install -y python3 python3-pip && dnf clean all
