@@ -150,7 +150,7 @@ py-serializable==2.1.0
     # via cyclonedx-python-lib
 pycodestyle==2.14.0
     # via flake8
-pydantic==2.13.3
+pydantic==2.13.4
     # via pulp-tool
 pydantic-core==2.46.3
     # via pydantic
