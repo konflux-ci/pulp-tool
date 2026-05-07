@@ -144,7 +144,7 @@ pluggy==1.6.0
     #   diff-cover
     #   pytest
     #   pytest-cov
-pre-commit==4.5.1
+pre-commit==4.6.0
     # via pulp-tool
 py-serializable==2.1.0
     # via cyclonedx-python-lib
