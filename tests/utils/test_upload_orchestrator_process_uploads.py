@@ -9,7 +9,10 @@ import pytest
 from pulp_tool.models.context import UploadRpmContext
 from pulp_tool.models.repository import RepositoryRefs
 from pulp_tool.models.results import PulpResultsModel, RpmUploadResult
-from pulp_tool.utils.upload_orchestrator import UploadOrchestrator
+from pulp_tool.utils.upload_orchestrator import (
+    UploadOrchestrator,
+    _rpm_repository_href_for_upload,
+)
 
 
 class TestUploadOrchestratorProcessUploads:
@@ -83,6 +86,81 @@ class TestUploadOrchestratorProcessUploads:
         )
         with pytest.raises(ValueError, match="RPM repository href is required"):
             orchestrator.process_uploads(mock_client, args, repositories)
+
+    def test_process_uploads_signed_by_missing_signed_repo_href(self) -> None:
+        """Test process_uploads raises when signed_by is set but rpms_signed_href is missing."""
+        orchestrator = UploadOrchestrator()
+        args = UploadRpmContext(
+            build_id="test-build",
+            date_str="2024-01-01 00:00:00",
+            namespace="test-ns",
+            parent_package="test-pkg",
+            rpm_path="/test/rpms",
+            sbom_path="/test/sbom.json",
+            signed_by="test-key-id",
+        )
+        mock_client = Mock()
+        repositories = RepositoryRefs(
+            rpms_href="/test/rpm-href",
+            rpms_prn="",
+            logs_href="",
+            logs_prn="logs-prn",
+            sbom_href="",
+            sbom_prn="sbom-prn",
+            artifacts_href="",
+            artifacts_prn="",
+            rpms_signed_href="",
+            rpms_signed_prn="",
+        )
+        with pytest.raises(ValueError, match="signed_by requires signed RPM repository href"):
+            orchestrator.process_uploads(mock_client, args, repositories)
+
+    def test_rpm_repository_href_for_upload_requires_unsigned_href(self) -> None:
+        """_rpm_repository_href_for_upload raises when unsigned upload has no rpms_href."""
+        args = UploadRpmContext(
+            build_id="test-build",
+            date_str="2024-01-01 00:00:00",
+            namespace="test-ns",
+            parent_package="test-pkg",
+            rpm_path="/test/rpms",
+        )
+        repositories = RepositoryRefs(
+            rpms_href="",
+            rpms_prn="",
+            logs_href="",
+            logs_prn="",
+            sbom_href="",
+            sbom_prn="",
+            artifacts_href="",
+            artifacts_prn="",
+        )
+        with pytest.raises(ValueError, match="RPM repository href is required"):
+            _rpm_repository_href_for_upload(args, repositories)
+
+    def test_rpm_repository_href_for_upload_requires_signed_href(self) -> None:
+        """_rpm_repository_href_for_upload raises when signed_by is set without rpms_signed_href."""
+        args = UploadRpmContext(
+            build_id="test-build",
+            date_str="2024-01-01 00:00:00",
+            namespace="test-ns",
+            parent_package="test-pkg",
+            rpm_path="/test/rpms",
+            signed_by="test-key-id",
+        )
+        repositories = RepositoryRefs(
+            rpms_href="/test/rpm-href",
+            rpms_prn="",
+            logs_href="",
+            logs_prn="",
+            sbom_href="",
+            sbom_prn="",
+            artifacts_href="",
+            artifacts_prn="",
+            rpms_signed_href="",
+            rpms_signed_prn="",
+        )
+        with pytest.raises(ValueError, match="signed_by requires signed RPM repository href"):
+            _rpm_repository_href_for_upload(args, repositories)
 
     def test_process_uploads_with_no_created_resources(self) -> None:
         """Test process_uploads handles empty created_resources."""
@@ -307,6 +385,41 @@ class TestUploadOrchestratorProcessUploads:
                     distribution_urls={},
                     pulp_helper=None,
                 )
+
+    def test_process_uploads_signed_by_uses_rpms_signed_href(self) -> None:
+        """Test process_uploads routes RPMs to the signed repository when signed_by is set."""
+        orchestrator = UploadOrchestrator()
+        args = UploadRpmContext(
+            build_id="test-build",
+            date_str="2024-01-01 00:00:00",
+            namespace="test-ns",
+            parent_package="test-pkg",
+            rpm_path="/test/rpms",
+            sbom_path="/test/sbom.json",
+            signed_by="test-key-id",
+        )
+        mock_client = Mock()
+        repositories = RepositoryRefs(
+            rpms_href="/test/rpm-href",
+            rpms_prn="",
+            logs_href="",
+            logs_prn="logs-prn",
+            sbom_href="",
+            sbom_prn="sbom-prn",
+            artifacts_href="",
+            artifacts_prn="",
+            rpms_signed_href="/test/rpm-signed-href",
+            rpms_signed_prn="rpms-signed-prn",
+        )
+        with (
+            patch("pulp_tool.utils.pulp_helper.PulpHelper") as mock_ph_cls,
+            patch.object(orchestrator, "process_architecture_uploads", return_value={}) as mock_arch,
+            patch("pulp_tool.services.upload_service.upload_sbom", return_value=[]),
+            patch("pulp_tool.services.upload_service.collect_results", return_value="https://example.com/results.json"),
+        ):
+            mock_ph_cls.return_value.get_distribution_urls_for_upload_context.return_value = {}
+            orchestrator.process_uploads(mock_client, args, repositories)
+        assert mock_arch.call_args[1]["rpm_href"] == "/test/rpm-signed-href"
 
     def test_process_uploads_with_results_json(self) -> None:
         """Test process_uploads calls process_uploads_from_results_json when results_json is set."""
