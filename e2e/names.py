@@ -35,12 +35,12 @@ _RPM_REPOS_BASE: Final = {
         "test.0-1.0.0-1.noarch.rpm",
         "test.0-1.0.0-1.x86_64.rpm",
     ],
-    f"{BUILD_ID_UPLOAD_FULL}/rpms": [
+    f"{BUILD_ID_UPLOAD_FULL}/rpms": [],
+    f"{BUILD_ID_UPLOAD_FULL}/rpms-signed": [
         "test.1-1.0.0-1.aarch64.rpm",
         "test.1-1.0.0-1.noarch.rpm",
         "test.1-1.0.0-1.x86_64.rpm",
     ],
-    f"{BUILD_ID_UPLOAD_FULL}/rpms-signed": [],
     REPO_CREATE_REPOSITORY: ["duck-0.6-1.noarch.rpm"],
     REPO_CREATE_REPOSITORY_JSON: ["duck-0.8-1.noarch.rpm", "giraffe-0.67-2.noarch.rpm"],
     f"{BUILD_ID_UPLOAD_RESULTS}/rpms": ["test.2-1.0.0-1.noarch.rpm"],
@@ -52,6 +52,7 @@ _FILE_REPOS_BASE: Final = {
     f"{BUILD_ID_UPLOAD_FILES}/logs": ["x86_64/build.log"],
     f"{BUILD_ID_UPLOAD_FILES}/sbom": ["sbom.json"],
     f"{BUILD_ID_UPLOAD_MINIMAL}/artifacts": ["pulp_results.json"],
+    f"{BUILD_ID_UPLOAD_FULL}/artifacts": ["pulp_results.json"],
     f"{BUILD_ID_UPLOAD_FULL}/sbom": ["sbom.json"],
     f"{BUILD_ID_UPLOAD_TARGET_ARCH}/artifacts": ["pulp_results.json"],
     f"{BUILD_ID_UPLOAD_RESULTS}/artifacts": ["pulp_results.json"],

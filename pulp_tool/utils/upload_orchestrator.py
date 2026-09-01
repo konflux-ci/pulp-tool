@@ -29,6 +29,23 @@ if TYPE_CHECKING:
     from .pulp_helper import PulpHelper
 
 
+def _use_signed_rpm_repository(context: UploadRpmContext) -> bool:
+    """True when RPMs should use the signed aggregate repo (not per-arch target repo)."""
+    signed_by = getattr(context, "signed_by", None)
+    return bool(signed_by and str(signed_by).strip()) and not context.target_arch_repo
+
+
+def _rpm_repository_href_for_upload(context: UploadRpmContext, repositories: RepositoryRefs) -> str:
+    """Return the RPM repository href for uploads (signed repo when ``signed_by`` is set)."""
+    if _use_signed_rpm_repository(context):
+        if not repositories.rpms_signed_href:
+            raise ValueError("signed_by requires signed RPM repository href")
+        return repositories.rpms_signed_href
+    if not repositories.rpms_href:
+        raise ValueError("RPM repository href is required but not found")
+    return repositories.rpms_href
+
+
 class UploadOrchestrator:
     """
     Orchestrates upload workflows for Pulp operations.
@@ -250,8 +267,10 @@ class UploadOrchestrator:
         if args.target_arch_repo:
             if pulp_helper is None:
                 raise ValueError("target_arch_repo requires PulpHelper for per-arch RPM repositories")
-        elif not repositories.rpms_href:
+        elif not _use_signed_rpm_repository(args) and not repositories.rpms_href:
             raise ValueError("RPM repository href is required but not found")
+        elif _use_signed_rpm_repository(args) and not repositories.rpms_signed_href:
+            raise ValueError("signed_by requires signed RPM repository href")
 
         # Get date_str from args
         date_str = args.date_str
@@ -261,6 +280,7 @@ class UploadOrchestrator:
 
         repo_helper = pulp_helper or PulpHelperCls(client, parent_package=args.parent_package)
         distribution_urls = repo_helper.get_distribution_urls_for_upload_context(args.build_id, args)
+        rpm_href = "" if args.target_arch_repo else _rpm_repository_href_for_upload(args, repositories)
 
         # Process each architecture - now updates results_model internally
         processed_uploads = self.process_architecture_uploads(
@@ -268,7 +288,7 @@ class UploadOrchestrator:
             args,
             repositories,
             date_str=date_str,
-            rpm_href=repositories.rpms_href,
+            rpm_href=rpm_href,
             results_model=results_model,
             distribution_urls=distribution_urls,
             pulp_helper=pulp_helper,
@@ -298,7 +318,7 @@ class UploadOrchestrator:
                         assert pulp_helper is not None  # noqa: S101  # enforced at start when target_arch_repo is set
                         root_rpm_href = pulp_helper.ensure_rpm_repository_for_arch(args.build_id, arch)
                     else:
-                        root_rpm_href = repositories.rpms_href
+                        root_rpm_href = rpm_href
                     created_resources.extend(
                         upload_rpms(
                             rpm_list,

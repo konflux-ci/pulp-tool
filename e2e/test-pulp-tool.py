@@ -7,6 +7,7 @@ Tests all commands, global options, and error scenarios
 import argparse
 import hashlib
 import json
+import logging
 import os
 import shutil
 import subprocess
@@ -32,6 +33,16 @@ from names import (
     resolve_run_id,
     scoped_base_path,
     scoped_build_id,
+)
+
+from distribution_fetch import (
+    DistributionFetchError,
+    distribution_client_from_config,
+    fetch_and_verify_sha256,
+    fetch_bytes,
+    format_fetch_check_summary,
+    format_pulp_results_for_diagnostics,
+    normalize_sha256_hex,
 )
 
 from large_upload import (
@@ -224,6 +235,105 @@ class E2ETestSuite:
             self.log_error(f"{test_name} (file not found: {filepath})")
             self.stats.failed += 1
             return False
+
+    def log_distribution_fetch_diagnostics(
+        self,
+        pulp_results_content: dict,
+        *,
+        pulp_results_url: str,
+        pulp_results_digest: str,
+        sbom_url: str,
+        failed_check: str | None = None,
+        failed_url: str | None = None,
+        failed_expected_sha256: str | None = None,
+        failed_artifact_entry: dict | None = None,
+        upload_output: str | None = None,
+    ) -> None:
+        """Print pulp_results.json and related context when distribution fetch checks fail."""
+        self.log_error("--- distribution fetch diagnostics ---")
+        if failed_check:
+            self.log_error(f"failed check: {failed_check}")
+        if failed_url:
+            self.log_error(f"failed url: {failed_url}")
+        if failed_expected_sha256:
+            self.log_error(f"failed expected_sha256: {normalize_sha256_hex(failed_expected_sha256)}")
+        if failed_artifact_entry is not None:
+            self.log_error(
+                "failed artifact entry:\n"
+                + json.dumps(failed_artifact_entry, indent=2, sort_keys=True)
+            )
+        self.log_error(f"konflux pulp_results URL file: {pulp_results_url}")
+        self.log_error(f"konflux pulp_results digest file: {pulp_results_digest}")
+        self.log_error(f"sbom results URL: {sbom_url}")
+        self.log_error(f"namespace: {self.namespace}")
+        self.log_error(f"base_url: {self.base_url}")
+        if upload_output:
+            preview = upload_output if len(upload_output) <= 4000 else f"{upload_output[:4000]}… (truncated)"
+            self.log_error(f"upload command output:\n{preview}")
+        self.log_error("pulp_results.json:")
+        print(format_pulp_results_for_diagnostics(pulp_results_content))
+        self.log_error("--- end distribution fetch diagnostics ---")
+
+    def verify_distribution_downloads(
+        self,
+        client,
+        pulp_results_content: dict,
+        sbom_url: str,
+        pulp_results_url: str,
+        pulp_results_digest: str,
+    ) -> None:
+        """HTTP GET distribution URLs and verify SHA256 against pulp_results metadata."""
+        rpm_key = "test.1-1.0.0-1.x86_64.rpm"
+        sbom_key = next(
+            (key for key in pulp_results_content.get("artifacts", {}) if key.endswith("/sbom.json") or key == "sbom.json"),
+            None,
+        )
+        checks: list[tuple[str, str, str, dict | None]] = [
+            (
+                "RPM (x86_64)",
+                pulp_results_content["artifacts"][rpm_key]["url"],
+                pulp_results_content["artifacts"][rpm_key]["sha256"],
+                pulp_results_content["artifacts"][rpm_key],
+            ),
+            (
+                "SBOM",
+                sbom_url,
+                pulp_results_content["artifacts"][sbom_key]["sha256"],
+                pulp_results_content["artifacts"].get(sbom_key),
+            ),
+            (
+                "pulp_results.json",
+                pulp_results_url,
+                normalize_sha256_hex(pulp_results_digest),
+                None,
+            ),
+        ]
+        diagnostics_logged = False
+        self.log_info("Starting distribution URL fetch verification (RPM, SBOM, pulp_results.json)")
+        for label, url, expected_sha256, artifact_entry in checks:
+            self.log_info(f"Distribution fetch check: {label}")
+            self.log_info(f"  URL: {url}")
+            self.log_info(f"  expected SHA256: {normalize_sha256_hex(expected_sha256)}")
+            try:
+                fetch_and_verify_sha256(client, url, expected_sha256, label=label)
+                self.stats.passed += 1
+                self.log_success(f"Distribution fetch verified: {label}")
+            except DistributionFetchError as exc:
+                self.stats.failed += 1
+                self.log_error(str(exc))
+                if not diagnostics_logged:
+                    self.log_distribution_fetch_diagnostics(
+                        pulp_results_content,
+                        pulp_results_url=pulp_results_url,
+                        pulp_results_digest=pulp_results_digest,
+                        sbom_url=sbom_url,
+                        failed_check=label,
+                        failed_url=url,
+                        failed_expected_sha256=expected_sha256,
+                        failed_artifact_entry=artifact_entry,
+                    )
+                    self.log_error(format_fetch_check_summary(label, url, expected_sha256, artifact_entry=artifact_entry))
+                    diagnostics_logged = True
 
     def run_test(self, test_name: str):
         """Mark start of a test"""
@@ -474,6 +584,8 @@ class E2ETestSuite:
         self.run_test(f"pulp-tool upload (full options) - using {rpm_dir}")
 
         sbom_results = self.output_dir / "sbom_results.json"
+        image_url_path = self.output_dir / "image_url"
+        image_digest_path = self.output_dir / "image_digest"
 
         cmd = [
             "pulp-tool",
@@ -492,7 +604,7 @@ class E2ETestSuite:
             "--sbom-path",
             str(self.sbom_file),
             "--artifact-results",
-            str(self.output_dir),
+            f"{image_url_path},{image_digest_path}",
             "--sbom-results",
             str(sbom_results),
             "--signed-by",
@@ -519,8 +631,20 @@ class E2ETestSuite:
             self.log_success("SBOM results match expected value")
 
         try:
-            with open(self.output_dir / "pulp_results.json") as results:
-                pulp_results_content = json.load(results)
+            if not self.assert_file_exists(image_url_path, "Konflux image URL result file"):
+                return
+            if not self.assert_file_exists(image_digest_path, "Konflux image digest result file"):
+                return
+
+            client = distribution_client_from_config(self.config_file)
+            pulp_results_url = image_url_path.read_text(encoding="utf-8").strip()
+            pulp_results_digest = image_digest_path.read_text(encoding="utf-8").strip()
+            self.log_info("Fetching pulp_results.json for structure validation")
+            self.log_info(f"  Konflux URL result: {pulp_results_url}")
+            self.log_info(f"  Konflux digest result: {pulp_results_digest}")
+            pulp_results_content = json.loads(
+                fetch_bytes(client, pulp_results_url, label="pulp_results.json").decode("utf-8")
+            )
             expected_pulp_artifacts = {
                 "test.1-1.0.0-1.x86_64.rpm",
                 "test.1-1.0.0-1.aarch64.rpm",
@@ -530,23 +654,71 @@ class E2ETestSuite:
             if not set(pulp_results_content["artifacts"].keys()) == expected_pulp_artifacts:
                 self.stats.failed += 1
                 self.log_error(f"Unexpected pulp artifacts: {pulp_results_content['artifacts'].keys()}")
+                self.log_distribution_fetch_diagnostics(
+                    pulp_results_content,
+                    pulp_results_url=pulp_results_url,
+                    pulp_results_digest=pulp_results_digest,
+                    sbom_url=sbom_results_content,
+                    failed_check="artifact keys",
+                    upload_output=output,
+                )
             else:
                 self.stats.passed += 1
                 self.log_success("Pulp results artifacts match expected values")
-            expected_pulp_distributions = {"rpms", "rpms_signed", "sbom"}
+            expected_pulp_distributions = {"artifacts", "rpms", "rpms_signed", "sbom"}
             if not set(pulp_results_content["distributions"].keys()) == expected_pulp_distributions:
                 self.stats.failed += 1
                 self.log_error(f"Unexpected pulp distributions: {pulp_results_content['distributions'].keys()}")
+                self.log_distribution_fetch_diagnostics(
+                    pulp_results_content,
+                    pulp_results_url=pulp_results_url,
+                    pulp_results_digest=pulp_results_digest,
+                    sbom_url=sbom_results_content,
+                    failed_check="distribution keys",
+                    upload_output=output,
+                )
             else:
                 self.stats.passed += 1
                 self.log_success("Pulp results distributions match expected values")
 
-        except json.JSONDecodeError:
+            self.verify_distribution_downloads(
+                client,
+                pulp_results_content,
+                sbom_results_content,
+                pulp_results_url,
+                pulp_results_digest,
+            )
+
+        except DistributionFetchError as exc:
+            self.stats.failed += 1
+            self.log_error(f"Distribution fetch setup failed: {exc}")
+            if "pulp_results_content" in locals():
+                self.log_distribution_fetch_diagnostics(
+                    pulp_results_content,
+                    pulp_results_url=pulp_results_url,
+                    pulp_results_digest=pulp_results_digest,
+                    sbom_url=sbom_results_content,
+                    failed_check=getattr(exc, "label", None) or "setup",
+                    failed_url=getattr(exc, "url", None) or pulp_results_url,
+                    upload_output=output,
+                )
+        except json.JSONDecodeError as exc:
             self.stats.failed += 2
-            self.log_error("Bad pulp_results.json file")
+            self.log_error(f"Bad pulp_results.json file: {exc}")
+            if "pulp_results_url" in locals():
+                self.log_error(f"pulp_results URL: {pulp_results_url}")
         except KeyError as e:
             self.stats.failed += 2
             self.log_error(f"pulp_results.json file missing key: {e}")
+            if "pulp_results_content" in locals():
+                self.log_distribution_fetch_diagnostics(
+                    pulp_results_content,
+                    pulp_results_url=pulp_results_url,
+                    pulp_results_digest=pulp_results_digest,
+                    sbom_url=sbom_results_content,
+                    failed_check="structure validation",
+                    upload_output=output,
+                )
 
     # Test: upload command with results-json
     def test_upload_results_json(self):
@@ -1168,6 +1340,16 @@ class E2ETestSuite:
             return 1
 
 
+def configure_e2e_logging(real_server: bool) -> None:
+    """Enable INFO logs from distribution fetch helpers during live e2e runs."""
+    level = logging.INFO if real_server else logging.WARNING
+    logging.basicConfig(
+        level=level,
+        format="[%(levelname)s] %(name)s: %(message)s",
+        force=True,
+    )
+
+
 def main():
     """Main entry point"""
     parser = argparse.ArgumentParser(
@@ -1247,6 +1429,7 @@ Examples:
     # Determine dry-run mode: if --real-server is used, dry-run is False
     # Otherwise, use the --dry-run flag (which defaults to True)
     dry_run = not args.real_server
+    configure_e2e_logging(args.real_server)
 
     # Create and run test suite
     suite = E2ETestSuite(
