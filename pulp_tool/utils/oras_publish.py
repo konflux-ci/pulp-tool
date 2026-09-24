@@ -10,6 +10,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
 
+from .constants import RESULTS_JSON_FILENAME
+from .oci_reference import oci_storage_oras_target, oci_storage_repository_name
 from .pulp_results_document import PULP_RESULTS_ORAS_MEDIA_TYPE
 
 logger = logging.getLogger(__name__)
@@ -59,10 +61,24 @@ def _oci_registry_config(oci_target: str) -> Iterator[str]:
         Path(config_path).unlink(missing_ok=True)
 
 
-def _run_oras(args: list[str], oci_target: str) -> subprocess.CompletedProcess[str]:
+def _run_oras(args: list[str], oci_target: str, *, cwd: str | Path | None = None) -> subprocess.CompletedProcess[str]:
     with _oci_registry_config(oci_target) as registry_config:
         cmd = ["oras", "--registry-config", registry_config, *args]
-        return subprocess.run(cmd, capture_output=True, text=True, check=False)
+        return subprocess.run(cmd, capture_output=True, text=True, check=False, cwd=cwd)
+
+
+def _parse_oras_resolve_output(oci_storage: str, resolved: str) -> tuple[str, str]:
+    """Parse ``oras resolve`` stdout (full ref or digest-only) into Konflux-style repo + digest."""
+    repository_name = oci_storage_repository_name(oci_storage)
+    text = resolved.strip()
+    if not text:
+        raise OrasPublishError("oras resolve returned empty output")
+    if "@" in text:
+        image_ref, digest = text.rsplit("@", 1)
+        return oci_storage_repository_name(image_ref), digest
+    if text.startswith("sha256:"):
+        return repository_name, text
+    raise OrasPublishError(f"oras resolve returned unexpected value: {text}")
 
 
 def resolve_oci_manifest(oci_storage: str) -> tuple[str, str]:
@@ -71,16 +87,13 @@ def resolve_oci_manifest(oci_storage: str) -> tuple[str, str]:
     if not target:
         raise OrasPublishError("oci_storage target is empty")
 
-    resolve_result = _run_oras(["resolve", target], target)
+    oras_ref = oci_storage_oras_target(target)
+    resolve_result = _run_oras(["resolve", oras_ref], target)
     if resolve_result.returncode != 0:
         raise OrasPublishError(
             f"oras resolve failed (exit {resolve_result.returncode}): {resolve_result.stderr or resolve_result.stdout}"
         )
-    resolved = (resolve_result.stdout or "").strip()
-    if "@" not in resolved:
-        raise OrasPublishError(f"oras resolve returned unexpected value: {resolved}")
-    image_ref, digest = resolved.rsplit("@", 1)
-    return image_ref, digest
+    return _parse_oras_resolve_output(target, resolve_result.stdout or "")
 
 
 def push_pulp_results_manifest(oci_storage: str, json_content: str) -> tuple[str, str]:
@@ -93,15 +106,19 @@ def push_pulp_results_manifest(oci_storage: str, json_content: str) -> tuple[str
     if not target:
         raise OrasPublishError("oci_storage target is empty")
 
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8") as tmp:
-        tmp.write(json_content)
-        tmp_path = tmp.name
-
-    try:
-        logger.info("ORAS push to %s", target)
+    oras_ref = oci_storage_oras_target(target)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        artifact_path = Path(tmpdir) / RESULTS_JSON_FILENAME
+        artifact_path.write_text(json_content, encoding="utf-8")
+        logger.info("ORAS push to %s", oras_ref)
         push_result = _run_oras(
-            ["push", target, f"{tmp_path}:{PULP_RESULTS_ORAS_MEDIA_TYPE}"],
+            [
+                "push",
+                oras_ref,
+                f"{RESULTS_JSON_FILENAME}:{PULP_RESULTS_ORAS_MEDIA_TYPE}",
+            ],
             target,
+            cwd=tmpdir,
         )
         if push_result.returncode != 0:
             raise OrasPublishError(
@@ -109,8 +126,6 @@ def push_pulp_results_manifest(oci_storage: str, json_content: str) -> tuple[str
             )
 
         return resolve_oci_manifest(target)
-    finally:
-        Path(tmp_path).unlink(missing_ok=True)
 
 
 __all__ = ["OrasPublishError", "push_pulp_results_manifest", "resolve_oci_manifest"]

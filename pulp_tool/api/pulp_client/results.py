@@ -46,13 +46,13 @@ class PulpClientResultsMixin:
         # If no results from build_id query and we have extra_artifacts, try querying by href
         # This handles the case where content hasn't been indexed yet
         if not raw_results and extra_artifacts:
+            href_list = [href for a in extra_artifacts if (href := (a.pulp_href or "").strip()) and "/content/" in href]
             logging.warning(
-                "No content found by build_id, trying direct href query for %d artifacts", len(extra_artifacts)
+                "No content found by build_id, trying direct href query for %d content href(s) (%d extra ref(s))",
+                len(href_list),
+                len(extra_artifacts),
             )
             try:
-                # Extract content hrefs from extra_artifacts
-                # Note: extra_artifacts contains content hrefs (not artifact hrefs)
-                href_list = [a.pulp_href for a in extra_artifacts if a.pulp_href]
                 if href_list:
                     href_query = ",".join(href_list)
                     resp = self.find_content("href", href_query)

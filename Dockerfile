@@ -4,6 +4,9 @@
 # Multi-stage layout: builder installs deps (network); runtime copies /app/install
 # only so the final image has no uv/pip fetch steps and fewer microdnf packages.
 
+# ORAS CLI + select-oci-auth (Konflux release-service-utils pattern).
+FROM quay.io/konflux-ci/oras:latest@sha256:6cea0b9e142c2e18429f5cd30d716715d932047cbf1631334c5c31f7e47c3a19 AS oras
+
 FROM registry.access.redhat.com/ubi10/ubi-minimal:10.2-1789645153 AS builder
 
 ARG VERSION=1.0.0
@@ -35,11 +38,6 @@ FROM registry.access.redhat.com/ubi10/ubi-minimal:10.2-1789645153
 # Konflux passes VERSION/RELEASE via build-args-file (.tekton/pulp-tool-container.build-args).
 ARG VERSION=1.0.0
 ARG RELEASE=1
-# ORAS CLI + Konflux registry auth adapter (import-to-quay push-to-quay-select-auth pattern).
-ARG ORAS_VERSION=1.2.2
-# build-trusted-artifacts select-oci-auth.sh (jq parses ~/.docker/config.json from Tekton).
-ARG SELECT_OCI_AUTH_URL=https://raw.githubusercontent.com/konflux-ci/build-trusted-artifacts/main/select-oci-auth.sh
-ARG TARGETARCH
 
 LABEL name="pulp-tool-container" \
       description="Konflux container image for pulp-tool Pulp API client operations" \
@@ -58,29 +56,14 @@ COPY LICENSE /licenses/LICENSE
 
 RUN microdnf install -y \
         python3 \
-        shadow-utils \
-        tar \
-        gzip \
-        jq && \
+        shadow-utils && \
     microdnf clean all
 
-RUN set -eux; \
-    case "${TARGETARCH}" in \
-        amd64) ORAS_ARCH=amd64 ;; \
-        arm64) ORAS_ARCH=arm64 ;; \
-        *) echo "unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
-    esac; \
-    microdnf install -y curl && microdnf clean all; \
-    curl -fsSL "https://github.com/oras-project/oras/releases/download/v${ORAS_VERSION}/oras_${ORAS_VERSION}_linux_${ORAS_ARCH}.tar.gz" \
-        -o /tmp/oras.tar.gz; \
-    tar -xz -C /usr/local/bin -f /tmp/oras.tar.gz oras; \
-    rm -f /tmp/oras.tar.gz; \
-    chmod 755 /usr/local/bin/oras; \
-    curl -fsSL "${SELECT_OCI_AUTH_URL}" -o /usr/local/bin/select-oci-auth; \
-    chmod 755 /usr/local/bin/select-oci-auth; \
-    microdnf remove -y curl && microdnf clean all; \
-    oras version; \
-    grep -q '^#!.*bash' /usr/local/bin/select-oci-auth
+COPY --from=oras /usr/bin/oras /usr/bin/oras
+COPY --from=oras /usr/bin/yq /usr/bin/yq
+COPY --from=oras /usr/local/bin/select-oci-auth /usr/local/bin/select-oci-auth
+COPY --from=oras /usr/local/bin/get-reference-base /usr/local/bin/get-reference-base
+RUN oras version && yq --version && test -x /usr/local/bin/select-oci-auth && test -x /usr/local/bin/get-reference-base
 
 COPY --from=builder /app/install /app/install
 

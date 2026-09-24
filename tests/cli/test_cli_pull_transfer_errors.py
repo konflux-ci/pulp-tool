@@ -148,10 +148,85 @@ class TestPullCommandTransferAndErrors:
             mock_result.failed = 0
             mock_download.return_value = mock_result
             result = runner.invoke(
-                cli, ["--build-id", "test-build", "--namespace", "test-ns", "pull", "--transfer-dest", str(config_path)]
+                cli,
+                [
+                    "--config",
+                    str(config_path),
+                    "--build-id",
+                    "test-build",
+                    "--namespace",
+                    "test-ns",
+                    "pull",
+                    "--transfer-dest",
+                    str(config_path),
+                ],
             )
             assert result.exit_code == 0
             mock_load.assert_called_once()
+            pull_ctx = mock_load.call_args.args[0]
+            assert "pulp.example.com" in pull_ctx.artifact_location
+
+    @patch("pulp_tool.cli.pull.DistributionClient")
+    @patch("pulp_tool.cli.pull.load_and_validate_artifacts")
+    @patch("pulp_tool.cli.pull.setup_repositories_if_needed")
+    @patch("pulp_tool.cli.pull.download_artifacts_concurrently")
+    @patch("pulp_tool.cli.pull.generate_pull_report")
+    @patch("pulp_tool.cli.pull.upload_downloaded_files_to_pulp")
+    def test_auto_artifact_location_uses_source_config_not_transfer_dest(
+        self, mock_upload, mock_report, mock_download, mock_setup, mock_load, mock_dist_client
+    ) -> None:
+        """``--build-id`` auto URL must use group ``--config`` base_url, not ``--transfer-dest``."""
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cert_path = Path(tmpdir) / "cert.pem"
+            cert_path.write_text("cert")
+            key_path = Path(tmpdir) / "key.pem"
+            key_path.write_text("key")
+            source_cfg = Path(tmpdir) / "source.toml"
+            source_cfg.write_text(
+                f'[cli]\nbase_url = "https://source.pulp.example"\ncert = "{cert_path}"\nkey = "{key_path}"'
+            )
+            dest_cfg = Path(tmpdir) / "dest.toml"
+            dest_cfg.write_text(
+                f'[cli]\nbase_url = "https://dest.pulp.example"\ncert = "{cert_path}"\nkey = "{key_path}"'
+            )
+            mock_dist_client_instance = Mock()
+            mock_dist_client_instance.session = Mock()
+            mock_dist_client_instance.session.close = Mock()
+            mock_dist_client.return_value = mock_dist_client_instance
+            from pulp_tool.models.artifacts import ArtifactData, ArtifactJsonResponse, ArtifactMetadata
+
+            mock_artifact_data = ArtifactData(
+                artifact_json=ArtifactJsonResponse(
+                    artifacts={"test.rpm": ArtifactMetadata(labels={"build_id": "test"})}, distributions={}
+                ),
+                artifacts={"test.rpm": ArtifactMetadata(labels={"build_id": "test"})},
+            )
+            mock_load.return_value = mock_artifact_data
+            mock_setup.return_value = None
+            mock_result = Mock()
+            mock_result.pulled_artifacts = Mock()
+            mock_result.completed = 0
+            mock_result.failed = 0
+            mock_download.return_value = mock_result
+            result = runner.invoke(
+                cli,
+                [
+                    "--config",
+                    str(source_cfg),
+                    "--build-id",
+                    "test-build",
+                    "--namespace",
+                    "test-ns",
+                    "pull",
+                    "--transfer-dest",
+                    str(dest_cfg),
+                ],
+            )
+            assert result.exit_code == 0
+            pull_ctx = mock_load.call_args.args[0]
+            assert pull_ctx.artifact_location.startswith("https://source.pulp.example/")
+            assert "dest.pulp.example" not in pull_ctx.artifact_location
 
     @patch("pulp_tool.cli.pull.publish_side_tag_results")
     @patch("pulp_tool.cli.pull.upload_rpms_to_side_tag_repository")
@@ -201,14 +276,8 @@ class TestPullCommandTransferAndErrors:
                 artifacts={"test.rpm": rpm_meta},
             )
             mock_load.return_value = mock_artifact_data
-            mock_setup.return_value = Mock()
-            mock_result = Mock()
-            mock_result.pulled_artifacts = PulledArtifacts()
-            mock_result.completed = 0
-            mock_result.failed = 0
-            mock_download.return_value = mock_result
             from pulp_tool.models.repository import RepositoryRefs
-            from pulp_tool.models.results import PulpResultsModel
+            from pulp_tool.pull.download import PullDestinationSetup
 
             repos = RepositoryRefs(
                 rpms_prn="r",
@@ -220,8 +289,18 @@ class TestPullCommandTransferAndErrors:
                 sbom_href="/sbom/",
                 artifacts_href="/artifacts/",
             )
+            mock_setup.return_value = PullDestinationSetup(client=Mock(), repositories=repos)
+            mock_result = Mock()
+            mock_result.pulled_artifacts = PulledArtifacts()
+            mock_result.completed = 0
+            mock_result.failed = 0
+            mock_download.return_value = mock_result
+            from pulp_tool.models.results import PulpResultsModel
+
             mock_upload.return_value = PulpResultsModel(build_id="test", repositories=repos)
-            mock_side_upload.return_value = []
+            from pulp_tool.pull.side_tag import SideTagUploadResult
+
+            mock_side_upload.return_value = SideTagUploadResult([], "https://rok/side/")
             result = runner.invoke(
                 cli,
                 [
@@ -315,27 +394,30 @@ class TestPullCommandTransferAndErrors:
             mock_load.return_value = mock_artifact_data
             mock_client = Mock()
             mock_client.close = Mock()
-            mock_setup.return_value = mock_client
+            from pulp_tool.models.repository import RepositoryRefs
+            from pulp_tool.models.statistics import UploadCounts
+            from pulp_tool.pull.download import PullDestinationSetup
+
+            transfer_repos = RepositoryRefs(
+                rpms_href="",
+                rpms_prn="",
+                logs_href="",
+                logs_prn="",
+                sbom_href="",
+                sbom_prn="",
+                artifacts_href="",
+                artifacts_prn="",
+            )
+            mock_setup.return_value = PullDestinationSetup(client=mock_client, repositories=transfer_repos)
             mock_result = Mock()
             mock_result.pulled_artifacts = Mock()
             mock_result.completed = 1
             mock_result.failed = 0
             mock_download.return_value = mock_result
-            from pulp_tool.models.repository import RepositoryRefs
-            from pulp_tool.models.statistics import UploadCounts
 
             mock_upload_info = PulpResultsModel(
                 build_id="test-build",
-                repositories=RepositoryRefs(
-                    rpms_href="",
-                    rpms_prn="",
-                    logs_href="",
-                    logs_prn="",
-                    sbom_href="",
-                    sbom_prn="",
-                    artifacts_href="",
-                    artifacts_prn="",
-                ),
+                repositories=transfer_repos,
                 artifacts={},
                 distributions={},
                 uploaded_counts=UploadCounts(),
@@ -412,27 +494,30 @@ class TestPullCommandTransferAndErrors:
             mock_load.return_value = mock_artifact_data
             mock_client = Mock()
             mock_client.close = Mock()
-            mock_setup.return_value = mock_client
+            from pulp_tool.models.repository import RepositoryRefs
+            from pulp_tool.models.statistics import UploadCounts
+            from pulp_tool.pull.download import PullDestinationSetup
+
+            transfer_repos = RepositoryRefs(
+                rpms_href="",
+                rpms_prn="",
+                logs_href="",
+                logs_prn="",
+                sbom_href="",
+                sbom_prn="",
+                artifacts_href="",
+                artifacts_prn="",
+            )
+            mock_setup.return_value = PullDestinationSetup(client=mock_client, repositories=transfer_repos)
             mock_result = Mock()
             mock_result.pulled_artifacts = Mock()
             mock_result.completed = 1
             mock_result.failed = 0
             mock_download.return_value = mock_result
-            from pulp_tool.models.repository import RepositoryRefs
-            from pulp_tool.models.statistics import UploadCounts
 
             mock_upload_info = PulpResultsModel(
                 build_id="test-build",
-                repositories=RepositoryRefs(
-                    rpms_href="",
-                    rpms_prn="",
-                    logs_href="",
-                    logs_prn="",
-                    sbom_href="",
-                    sbom_prn="",
-                    artifacts_href="",
-                    artifacts_prn="",
-                ),
+                repositories=transfer_repos,
                 artifacts={},
                 distributions={},
                 uploaded_counts=UploadCounts(),

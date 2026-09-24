@@ -66,7 +66,10 @@ test-e2e-container:
 	$$ENGINE build -f Dockerfile.e2e -t pulp-e2e:test . && \
 	$$ENGINE run --rm pulp-e2e:test python3 --version && \
 	$$ENGINE run --rm pulp-e2e:test pulp --help && \
-	$$ENGINE run --rm pulp-e2e:test python3 -c "import rpm_rs; print('rpm-rs OK')"
+	$$ENGINE run --rm pulp-e2e:test python3 -c "import rpm_rs; print('rpm-rs OK')" && \
+	$$ENGINE run --rm pulp-e2e:test oras version && \
+	$$ENGINE run --rm pulp-e2e:test yq --version && \
+	$$ENGINE run --rm pulp-e2e:test test -x /usr/local/bin/get-reference-base
 
 test-diff-coverage: test
 	@command -v diff-cover >/dev/null 2>&1 || { echo "diff-cover not found. Run: make install-dev"; exit 1; }

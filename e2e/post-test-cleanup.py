@@ -6,7 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from names import file_repo_names_for_cleanup, resolve_run_id, rpm_repo_names_for_cleanup
+from names import file_repo_names_for_cleanup, normalize_oci_storage, resolve_run_id, rpm_repo_names_for_cleanup
 
 
 def destroy_resource(config_path: Path, repo_type: str, resource: str, name: str, dry_run: bool = False) -> bool:
@@ -47,7 +47,7 @@ def destroy_resource(config_path: Path, repo_type: str, resource: str, name: str
     return True
 
 
-def cleanup_repos(config_path: Path, run_id: str | None, dry_run: bool = False) -> int:
+def cleanup_repos(config_path: Path, run_id: str | None, oci_storage: str | None, dry_run: bool = False) -> int:
     """Clean up all test repositories and distributions.
 
     Args:
@@ -58,8 +58,8 @@ def cleanup_repos(config_path: Path, run_id: str | None, dry_run: bool = False) 
     Returns:
         Exit code (0 for success, 1 if any failures occurred)
     """
-    rpm_repos = rpm_repo_names_for_cleanup(run_id)
-    file_repos = file_repo_names_for_cleanup(run_id)
+    rpm_repos = rpm_repo_names_for_cleanup(run_id, oci_storage)
+    file_repos = file_repo_names_for_cleanup(run_id, oci_storage)
 
     if dry_run:
         print("=== DRY RUN MODE: No resources will be destroyed ===\n")
@@ -133,6 +133,11 @@ def parse_args() -> argparse.Namespace:
         help="Run suffix used during e2e tests (default: E2E_RUN_ID env var)",
     )
     parser.add_argument(
+        "--oci-storage",
+        default=None,
+        help="OCI registry for ORAS e2e (must match test-pulp-tool.py; Konflux ociStorage)",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Show what would be destroyed without actually destroying anything",
@@ -150,7 +155,8 @@ def main() -> int:
 
     config_path = args.config.resolve()
     run_id = resolve_run_id(args.run_id)
-    return cleanup_repos(config_path, run_id, dry_run=args.dry_run)
+    oci_storage = normalize_oci_storage(args.oci_storage)
+    return cleanup_repos(config_path, run_id, oci_storage or None, dry_run=args.dry_run)
 
 
 if __name__ == "__main__":

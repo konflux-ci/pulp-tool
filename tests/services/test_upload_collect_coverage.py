@@ -112,6 +112,10 @@ class TestUploadAndExtract:
         assert url == "quay.io/ns/repo:tag"
         assert digest == "sha256:abc123"
 
+    def test_konflux_results_from_oci_ref_requires_digest(self) -> None:
+        with pytest.raises(ValueError, match="no digest"):
+            uc._konflux_results_from_oci_ref("quay.io/ns/repo:tag")
+
     def test_write_konflux_oci_results_writes_split_files(self, tmp_path) -> None:
         url_path = tmp_path / "url"
         digest_path = tmp_path / "digest"

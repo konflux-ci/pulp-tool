@@ -8,6 +8,7 @@ repositories for pull operations.
 import json
 import logging
 import traceback
+from dataclasses import dataclass
 from typing import Any
 
 import httpx
@@ -17,10 +18,19 @@ from ..api import DistributionClient, PulpClient
 from ..exceptions import PulpToolError
 from ..models.artifacts import ArtifactData, ArtifactJsonResponse, DownloadTask
 from ..models.context import PullContext
+from ..models.repository import RepositoryRefs
 from ..models.results import DownloadResult
 from ..utils import PulpHelper, determine_build_id, extract_metadata_from_artifact_json
 from ..utils.artifact_detection import categorize_artifacts_by_type
 from ..utils.config_manager import ConfigManager
+
+
+@dataclass(frozen=True, slots=True)
+class PullDestinationSetup:
+    """Destination Pulp client and repositories created for a pull transfer."""
+
+    client: PulpClient
+    repositories: RepositoryRefs
 
 
 def _categorize_artifacts(
@@ -108,7 +118,7 @@ def load_artifact_metadata(artifact_location: str, distribution_client: Distribu
 def setup_repositories_if_needed(
     args: PullContext,
     artifact_json: dict[str, Any] | ArtifactJsonResponse | None = None,
-) -> PulpClient | None:
+) -> PullDestinationSetup | None:
     """
     Set up repositories using PulpClient if configuration is provided.
 
@@ -117,7 +127,7 @@ def setup_repositories_if_needed(
         artifact_json: Optional artifact metadata to extract build_id from
 
     Returns:
-        PulpClient instance if repositories were set up, None otherwise
+        PullDestinationSetup if repositories were set up, None otherwise
     """
     if not args.config:
         logging.debug("No Pulp configuration provided, skipping repository setup")
@@ -158,10 +168,10 @@ def setup_repositories_if_needed(
 
         logging.info("Setting up repositories for pull operations: %s", build_id)
         repository_helper = PulpHelper(client, parent_package=parent_package)
-        repository_helper.setup_repositories(build_id)
+        repositories = repository_helper.setup_repositories(build_id)
         logging.info("Repository setup completed for pull operations")
 
-        return client
+        return PullDestinationSetup(client=client, repositories=repositories)
 
     except (PulpToolError, ValueError, RuntimeError, httpx.HTTPError) as e:
         logging.warning("Failed to setup repositories: %s", e)
@@ -316,5 +326,6 @@ __all__ = [
     "download_artifacts_concurrently",
     "load_artifact_metadata",
     "load_and_validate_artifacts",
+    "PullDestinationSetup",
     "setup_repositories_if_needed",
 ]

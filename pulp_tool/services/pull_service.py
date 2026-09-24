@@ -14,8 +14,10 @@ from ..models.results import PulpResultsModel
 
 if TYPE_CHECKING:
     from ..api import DistributionClient, PulpClient
+    from ..models.repository import RepositoryRefs
 
 from ..pull import (
+    PullDestinationSetup,
     download_artifacts_concurrently,
     generate_pull_report,
     load_and_validate_artifacts,
@@ -94,6 +96,8 @@ class PullService:
         pulp_client: "PulpClient",
         pulled_artifacts: PulledArtifacts,
         context: PullContext,
+        *,
+        repositories: "RepositoryRefs | None" = None,
     ) -> PulpResultsModel | None:
         """
         Upload downloaded artifacts to Pulp repositories.
@@ -107,7 +111,7 @@ class PullService:
             PulpResultsModel containing upload information, or None if upload skipped
         """
         logging.info("Uploading downloaded artifacts to Pulp repositories")
-        upload_info = upload_downloaded_files_to_pulp(pulp_client, pulled_artifacts, context)
+        upload_info = upload_downloaded_files_to_pulp(pulp_client, pulled_artifacts, context, repositories=repositories)
         logging.info("Upload completed: %d total artifacts uploaded", upload_info.total_uploaded)
         return upload_info
 
@@ -115,7 +119,7 @@ class PullService:
         self,
         context: PullContext,
         artifact_json: dict[str, Any] | ArtifactJsonResponse | None = None,
-    ) -> Optional["PulpClient"]:
+    ) -> PullDestinationSetup | None:
         """
         Set up destination repositories if configuration is provided.
 
@@ -124,7 +128,7 @@ class PullService:
             artifact_json: Optional artifact metadata
 
         Returns:
-            PulpClient instance if repositories were set up, None otherwise
+            PullDestinationSetup if repositories were set up, None otherwise
         """
         if not context.config:
             logging.debug("No Pulp configuration provided, skipping repository setup")
@@ -136,10 +140,10 @@ class PullService:
             return None
 
         logging.info("Setting up destination repositories")
-        pulp_client = setup_repositories_if_needed(context, artifact_json)
-        if pulp_client:
+        destination = setup_repositories_if_needed(context, artifact_json)
+        if destination:
             logging.info("Destination repositories set up successfully")
-        return pulp_client
+        return destination
 
     def generate_report(
         self,

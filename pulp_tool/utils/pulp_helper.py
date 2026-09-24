@@ -173,8 +173,9 @@ class PulpHelper:
         """
         sanitized_build = sanitize_build_id_for_repository(build_id)
         build_name = strip_namespace_from_build_id(sanitized_build)
-        base_path = side_tag_distribution_base_path(side_tag)
-        full_name = f"{build_name}/{base_path}"
+        tag_segment = side_tag_distribution_base_path(side_tag)
+        base_path = f"{build_name}/{tag_segment}"
+        full_name = base_path
         new_repo = RepositoryRequest(name=full_name, autopublish=True)
         new_distro = DistributionRequest(name=full_name, base_path=base_path)
         _prn, repository_href = self.create_or_get_repository(

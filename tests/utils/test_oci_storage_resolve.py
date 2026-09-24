@@ -23,3 +23,10 @@ class TestResolveOciStorage:
             mock_cfg = mock_cfg_cls.return_value
             mock_cfg.get.return_value = None
             assert resolve_oci_storage("", "/cfg.toml") is None
+
+    def test_returns_none_without_config_path(self) -> None:
+        assert resolve_oci_storage(None, None) is None
+
+    def test_returns_none_when_config_load_fails(self) -> None:
+        with patch("pulp_tool.utils.oci_storage_resolve.ConfigManager", side_effect=OSError("nope")):
+            assert resolve_oci_storage(None, "/cfg.toml") is None

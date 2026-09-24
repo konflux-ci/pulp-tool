@@ -83,6 +83,7 @@ The e2e test suite follows a four-phase lifecycle:
 - `--test-dir`: Working directory for test execution (default: temp directory)
 - `--real-server`: Test against a real Pulp server (default: e2e harness skips mutating operations)
 - `--skip-setup`: Skip creating fresh test directory (reuse existing)
+- `--oci-storage`: OCI registry for ORAS e2e (Konflux `ociStorage`; optional locally)
 
 **The `pulp-results` fixture:**
 
@@ -102,17 +103,20 @@ This is an **input file** (not output) containing references to pre-existing tes
 # Against real Pulp server
 ./test-pulp-tool.py --config /etc/pulp-access/cli.toml --rpm-dir ./test_pkgs --pulp-results /etc/pulp-results/pulp-results.json --real-server
 
-# Side-tag pull + ORAS manifest push (also requires `oras` on PATH — included in pulp-tool-container image)
-E2E_OCI_STORAGE='quay.io/org/repo:tag' ./test-pulp-tool.py --config /etc/pulp-access/cli.toml --rpm-dir ./test_pkgs --pulp-results /etc/pulp-results/pulp-results.json --real-server
+# Side-tag pull + ORAS manifest push (also requires `oras` on PATH — included in Dockerfile.e2e / pulp-tool-container)
+./test-pulp-tool.py --config /etc/pulp-access/cli.toml --rpm-dir ./test_pkgs --pulp-results /etc/pulp-results/pulp-results.json --real-server \
+  --oci-storage 'quay.io/org/repo:tag'
 ```
 
-**ORAS / `E2E_OCI_STORAGE`:** Set **`E2E_OCI_STORAGE`** to a writable OCI reference (same value Konflux passes as pipeline param **`ociStorage`** / pulp-tool **`--oci-storage`**). E2e passes `--oci-storage` on the command line rather than requiring `cli.oci_storage` in `cli.toml`. The Konflux **`pulp-tool-container`** image includes **`oras`** and **`select-oci-auth`** (registry credentials from `~/.docker/config.json`, same as import-to-quay); local runs need both on `PATH` (or `oras login` / `docker login` so `select-oci-auth` can emit a config) or ORAS cases are skipped.
+**ORAS / `--oci-storage`:** Pass the same OCI reference Konflux uses for pipeline param **`ociStorage`** (pulp-tool **`--oci-storage`**). E2e scripts take **`--oci-storage`** on the command line rather than reading an environment variable or requiring `cli.oci_storage` in `cli.toml`. The e2e runner image ([`Dockerfile.e2e`](../Dockerfile.e2e)) and **`pulp-tool-container`** ship **`oras`**, **`select-oci-auth`**, and **`get-reference-base`** (Konflux `oras` image) (registry credentials from `~/.docker/config.json`, same as import-to-quay); local runs need both on `PATH` (or `docker login` so `select-oci-auth` can emit a config) or ORAS cases are skipped. When **`--oci-storage`** is omitted, `post-test-validation.py` and `post-test-cleanup.py` skip ORAS/side-tag build repos (see [`names.py`](names.py)).
 
 | Test | What it exercises |
 |------|-------------------|
 | `test_upload_build_oras_publish` | `upload-build` with `--oci-storage` and `--artifact-results` (Tekton-style OCI URL/digest files); Pulp `pulp_results.json` gets `oci_manifest` |
-| `test_update_build_pull_from_oras_target` | `oras pull` of that manifest, then `pull --artifact-location` on the fetched JSON (stand-in for **update-build** reading the OCI target) |
-| `test_pull_side_tag_transfer` | `pull --transfer-dest --side-tag` ORAS publish after transfer |
+| `test_update_build_pull_from_oras_target` | Manual `oras pull`, then `pull --artifact-location` on the local JSON (legacy two-step flow) |
+| `test_pull_artifact_location_oci_manifest_ref` | `pull --artifact-location` with `oci_manifest@digest` ref (pulp-tool ORAS-pulls JSON; no `--build-id` / `--namespace`) |
+| `test_pull_side_tag_transfer` | `pull --transfer-dest --side-tag` from HTTPS `pulp_results`; writes Tekton-style OCI URL/digest via `--artifact-results` |
+| `test_pull_side_tag_transfer_from_oci_artifact_location` | Same flow with `--artifact-location` set to ORAS `oci_manifest@digest` (run-scoped `--side-tag` name) |
 
 For release workspaces, pair `pulp-tool pull --snapshot-path …` with **`create-trusted-artifact`** (see release-service-catalog `upload-src-rpm-sbom-attestation`).
 
@@ -147,6 +151,8 @@ For release workspaces, pair `pulp-tool pull --snapshot-path …` with **`create
 
 **Arguments:**
 - `--config`: Path to Pulp CLI config file (`cli.toml`) — **required**
+- `--run-id`: Run suffix (default: `E2E_RUN_ID` env var)
+- `--oci-storage`: OCI registry when ORAS e2e ran (must match `test-pulp-tool.py`)
 
 **Dependencies:** `pulp-cli` (Pulp CLI tool)
 
@@ -196,6 +202,8 @@ For release workspaces, pair `pulp-tool pull --snapshot-path …` with **`create
 
 **Arguments:**
 - `--config`: Path to Pulp CLI config file (`cli.toml`) — **required**
+- `--run-id`: Run suffix (default: `E2E_RUN_ID` env var)
+- `--oci-storage`: OCI registry when ORAS e2e ran (must match `test-pulp-tool.py`)
 - `--dry-run`: Show what would be destroyed without executing (optional)
 
 **Dependencies:** `pulp-cli` (Pulp CLI tool)
@@ -245,6 +253,8 @@ The e2e test suite runs automatically on pull requests via Konflux Tekton pipeli
      - `pulp-results` → `/etc/pulp-results/pulp-results.json` (fixture file with test repo/dist references)
 3. **post-test-validation**
    - Run `post-test-validation.py` to verify repository content (uses pre-installed `pulp-cli`)
+
+**ORAS:** Task param **`ociStorage`** (pipeline default matches Konflux artifact storage for `pulp-e2e-testing`) is passed as **`--oci-storage`** to `test-pulp-tool.py`, `post-test-validation.py`, and `post-test-cleanup.py` so all steps agree on whether ORAS/side-tag repos were created.
 
 ### Task: [`post-test-cleanup`](../.tekton/tasks/post-test-cleanup.yaml)
 
@@ -315,7 +325,7 @@ EOF
 
 ### Using the container images
 
-**E2e runner image** (UBI 10; `python3`, `gcc`, `pulp-cli`/`pulp`, `rpm-rs`):
+**E2e runner image** (UBI 10; `python3`, `pulp-cli`/`pulp`, `rpm-rs`, `oras`, `select-oci-auth`):
 
 ```bash
 make test-e2e-container

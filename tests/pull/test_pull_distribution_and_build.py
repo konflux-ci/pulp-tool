@@ -170,7 +170,9 @@ class TestRepositoryManagement:
             )
             mock_helper_instance.setup_repositories.return_value = mock_repos
             result = setup_repositories_if_needed(args)
-            assert result == mock_client
+            assert result is not None
+            assert result.client == mock_client
+            assert result.repositories == mock_repos
             mock_helper_instance.setup_repositories.assert_called_once_with("test-build")
 
     def test_setup_repositories_exception(self, temp_config_file) -> None:

@@ -13,6 +13,7 @@ Modules:
 """
 
 from .download import (
+    PullDestinationSetup,
     _categorize_artifacts,
     download_artifacts_concurrently,
     load_and_validate_artifacts,
@@ -23,6 +24,7 @@ from .reporting import generate_pull_report
 from .upload import upload_downloaded_files_to_pulp
 
 __all__ = [
+    "PullDestinationSetup",
     "_categorize_artifacts",
     "download_artifacts_concurrently",
     "load_artifact_metadata",

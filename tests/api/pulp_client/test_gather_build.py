@@ -67,6 +67,24 @@ class TestPulpClient:
         assert content_data.content_results[0].pulp_href == href
         assert len(content_data.artifacts) >= 1
 
+    def test_gather_content_data_ignores_repository_version_hrefs_in_fallback(
+        self, mock_pulp_client, httpx_mock
+    ) -> None:
+        """add_content task created_resources are repo versions; must not be sent to pulp_href__in."""
+        httpx_mock.get(
+            "https://pulp.example.com/pulp/api/v3/test-domain/api/v3/content/?pulp_label_select=build_id~test-build"
+        ).mock(return_value=httpx.Response(200, json={"results": []}))
+        extra = [
+            ExtraArtifactRef(
+                pulp_href="/api/pulp/domain/api/v3/repositories/rpm/rpm/abc/versions/1/",
+            )
+        ]
+        with patch.object(mock_pulp_client, "find_content", wraps=mock_pulp_client.find_content) as mock_find:
+            content_data = mock_pulp_client.gather_content_data("test-build", extra)
+        assert content_data.content_results == []
+        assert mock_find.call_count == 1
+        assert mock_find.call_args_list[0].args[0] == "build_id"
+
     def test_build_results_structure(
         self, mock_pulp_client, mock_content_data, mock_file_locations, httpx_mock
     ) -> None:

@@ -82,7 +82,7 @@ class TestPullService:
         mock_upload.return_value = mock_upload_info
         result = service.upload_artifacts(mock_client, mock_pulled_artifacts, context)
         assert result == mock_upload_info
-        mock_upload.assert_called_once_with(mock_client, mock_pulled_artifacts, context)
+        mock_upload.assert_called_once_with(mock_client, mock_pulled_artifacts, context, repositories=None)
         assert mock_logging.info.call_count >= 2
 
     @patch("pulp_tool.services.pull_service.setup_repositories_if_needed")
@@ -93,10 +93,10 @@ class TestPullService:
         context = PullContext(
             artifact_location="/test/path.json", config="/test/config.toml", transfer_dest="/test/config.toml"
         )
-        mock_client = Mock()
-        mock_setup.return_value = mock_client
+        mock_destination = Mock()
+        mock_setup.return_value = mock_destination
         result = service.setup_destination_repositories(context)
-        assert result == mock_client
+        assert result == mock_destination
         mock_setup.assert_called_once()
         assert mock_logging.info.call_count >= 1
 

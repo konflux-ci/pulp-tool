@@ -14,6 +14,10 @@ spec:
     - name: e2e-run-id
       description: Unique suffix for build-scoped Pulp resources (PipelineRun UID from the pipeline)
       type: string
+    - name: ociStorage
+      description: OCI registry used for ORAS e2e (must match run-e2e-test-suite for cleanup scope)
+      type: string
+      default: quay.io/redhat-user-workloads/artifact-storage-tenant/tooling/pulp-e2e-testing
   workspaces:
     - name: repository
   stepTemplate:
@@ -37,7 +41,8 @@ spec:
 
         python3 "${PULP_TOOL_PATH}/e2e/post-test-cleanup.py" \
           --config "${PULP_CLI_CONFIG}" \
-          --run-id "${E2E_RUN_ID}"
+          --run-id "${E2E_RUN_ID}" \
+          --oci-storage "$(params.ociStorage)"
 
       volumeMounts:
         - name: cli-toml-volume

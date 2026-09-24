@@ -6,11 +6,16 @@ metadata:
 spec:
   params:
     - name: e2e-image
-      description: Pre-built e2e test runner image (python3, pulp-cli, rpm-rs, gcc)
+      description: Pre-built e2e test runner image (python3, pulp-cli, rpm-rs, oras)
       type: string
     - name: e2e-run-id
       description: Unique suffix for build-scoped Pulp resources (PipelineRun UID from the pipeline)
       type: string
+    - name: ociStorage
+      description: |
+        OCI registry URL where the pipeline stores trusted artifacts, including
+        both resulting artifacts and intermediary by-products.
+      default: quay.io/redhat-user-workloads/artifact-storage-tenant/tooling/pulp-e2e-testing
   workspaces:
     - name: test
     - name: repository
@@ -47,7 +52,8 @@ spec:
           --config "${PULP_CLI_CONFIG}" \
           --rpm-dir "${TEST_WORKSPACE}/test_pkgs" \
           --pulp-results "${PULP_RESULTS}" \
-          --run-id "${E2E_RUN_ID}"
+          --run-id "${E2E_RUN_ID}" \
+          --oci-storage "$(params.ociStorage)"
 
       volumeMounts:
         - name: cli-toml-volume
@@ -61,7 +67,10 @@ spec:
         #!/usr/bin/env sh
         set -eu
 
-        "${PULP_TOOL_PATH}/e2e/post-test-validation.py" --config "${PULP_CLI_CONFIG}" --run-id "${E2E_RUN_ID}"
+        "${PULP_TOOL_PATH}/e2e/post-test-validation.py" \
+          --config "${PULP_CLI_CONFIG}" \
+          --run-id "${E2E_RUN_ID}" \
+          --oci-storage "$(params.ociStorage)"
 
       volumeMounts:
         - name: cli-toml-volume

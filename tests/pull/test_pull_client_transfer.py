@@ -68,6 +68,28 @@ class TestClientInitialization:
             assert result is not None
             assert result.build_id == "test-build"
 
+    def test_handle_pulp_upload_reuses_precreated_repositories(self) -> None:
+        """Pre-created destination repositories skip a second setup_repositories call."""
+        pulled_artifacts = PulledArtifacts()
+        args = Mock()
+        args.build_id = "test-build"
+        mock_client = Mock()
+        mock_repos = RepositoryRefs(
+            rpms_prn="rpm-repo",
+            logs_prn="log-repo",
+            sbom_prn="sbom-repo",
+            artifacts_prn="artifact-repo",
+            rpms_href="/pulp/api/v3/repositories/rpm/rpm/",
+            logs_href="/pulp/api/v3/repositories/file/file/",
+            sbom_href="/pulp/api/v3/repositories/file/file/",
+            artifacts_href="/pulp/api/v3/repositories/file/file/",
+        )
+        with patch("pulp_tool.pull.upload.PulpHelper") as mock_helper:
+            mock_helper_instance = Mock()
+            mock_helper.return_value = mock_helper_instance
+            upload_downloaded_files_to_pulp(mock_client, pulled_artifacts, args, repositories=mock_repos)
+            mock_helper_instance.setup_repositories.assert_not_called()
+
 
 class TestTransferHelpers:
     """Test pull helper functions."""

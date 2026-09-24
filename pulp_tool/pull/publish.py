@@ -10,7 +10,7 @@ from ..models.artifacts import ArtifactData
 from ..models.context import PullContext
 from ..models.results import PulpResultsModel
 from ..services.upload_collect import _write_konflux_oci_results
-from ..utils import PulpHelper, create_labels, determine_build_id
+from ..utils import create_labels, determine_build_id
 from ..utils.pulp_results_document import (
     SideTagRpmTransfer,
     apply_side_tag_transfer_to_document,
@@ -26,6 +26,8 @@ def publish_side_tag_results(
     context: PullContext,
     upload_info: PulpResultsModel,
     transfers: list[SideTagRpmTransfer],
+    *,
+    side_tag_distribution_base: str = "",
 ) -> None:
     """
     Merge side-tag transfer into pulp_results.json, upload to Pulp, ORAS-push, and write Tekton results.
@@ -46,8 +48,9 @@ def publish_side_tag_results(
             parent_package = meta.parent_package
             break
 
-    helper = PulpHelper(pulp_client, parent_package=parent_package)
-    _repo_href, distribution_base = helper.ensure_side_tag_rpm_repository(build_id, side_tag)
+    distribution_base = side_tag_distribution_base.strip()
+    if not distribution_base:
+        raise ValueError("side_tag_distribution_base is required when publishing side-tag transfer results")
 
     source_doc = document_from_artifact_json(artifact_data.artifact_json)
     merged = apply_side_tag_transfer_to_document(

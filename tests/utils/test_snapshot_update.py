@@ -29,3 +29,9 @@ class TestUpdateSnapshotPulpResultsManifest:
         bad.write_text("not json", encoding="utf-8")
         with pytest.raises(ValueError, match="not valid JSON"):
             update_snapshot_pulp_results_manifest(bad, "ref")
+
+    def test_empty_manifest_ref_raises(self, tmp_path: Path) -> None:
+        snapshot = tmp_path / "snapshot.json"
+        snapshot.write_text("{}", encoding="utf-8")
+        with pytest.raises(ValueError, match="empty"):
+            update_snapshot_pulp_results_manifest(snapshot, "  ")

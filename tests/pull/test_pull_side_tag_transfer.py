@@ -2,6 +2,8 @@
 
 from unittest.mock import Mock, patch
 
+import pytest
+
 from pulp_tool.models.artifacts import ArtifactData, ArtifactJsonResponse, ArtifactMetadata
 from pulp_tool.models.context import PullContext
 from pulp_tool.models.repository import RepositoryRefs
@@ -11,6 +13,63 @@ from pulp_tool.utils.pulp_results_document import SideTagRpmTransfer
 
 
 class TestPublishSideTagResults:
+    def test_publish_noop_without_transfers(self) -> None:
+        context = PullContext(
+            artifact_location="http://example.com/pulp_results.json",
+            side_tag="mytest",
+            oci_storage="quay.io/ns/repo:latest",
+        )
+        with patch("pulp_tool.pull.publish.sync_pulp_results_with_oci_registry") as mock_sync:
+            publish_side_tag_results(Mock(), ArtifactData(artifact_json={}, artifacts={}), context, Mock(), [])
+            mock_sync.assert_not_called()
+
+    def test_publish_requires_oci_storage(self) -> None:
+        context = PullContext(
+            artifact_location="http://example.com/pulp_results.json",
+            side_tag="mytest",
+        )
+        transfers = [
+            SideTagRpmTransfer(
+                artifact_key="pkg.rpm",
+                pulp_href="/pulp/new/",
+                sha256="bb",
+                distribution_url="https://rok/pkg.rpm",
+            )
+        ]
+        with pytest.raises(ValueError, match="oci-storage"):
+            publish_side_tag_results(
+                Mock(),
+                ArtifactData(artifact_json={}, artifacts={}),
+                context,
+                Mock(),
+                transfers,
+                side_tag_distribution_base="https://rok/side-tag-mytest/",
+            )
+
+    def test_publish_requires_distribution_base(self) -> None:
+        context = PullContext(
+            artifact_location="http://example.com/pulp_results.json",
+            side_tag="mytest",
+            oci_storage="quay.io/ns/repo:latest",
+        )
+        transfers = [
+            SideTagRpmTransfer(
+                artifact_key="pkg.rpm",
+                pulp_href="/pulp/new/",
+                sha256="bb",
+                distribution_url="https://rok/pkg.rpm",
+            )
+        ]
+        with pytest.raises(ValueError, match="side_tag_distribution_base"):
+            publish_side_tag_results(
+                Mock(),
+                ArtifactData(artifact_json={}, artifacts={}),
+                context,
+                Mock(),
+                transfers,
+                side_tag_distribution_base="",
+            )
+
     def test_publish_side_tag_results_orchestration(self) -> None:
         mock_client = Mock()
         artifact_data = ArtifactData(
@@ -21,7 +80,7 @@ class TestPublishSideTagResults:
                         href="/pulp/src/",
                         url="https://example.com/pkg.rpm",
                         sha256="aa",
-                        labels={"build_id": "b1", "namespace": "ns"},
+                        labels={"build_id": "b1", "namespace": "ns", "parent_package": "parent-pkg"},
                     )
                 },
                 distributions={"rpms": "https://example.com/rpms/"},  # type: ignore[dict-item]
@@ -31,7 +90,7 @@ class TestPublishSideTagResults:
                     href="/pulp/src/",
                     url="https://example.com/pkg.rpm",
                     sha256="aa",
-                    labels={"build_id": "b1", "namespace": "ns"},
+                    labels={"build_id": "b1", "namespace": "ns", "parent_package": "parent-pkg"},
                 )
             },
         )
@@ -65,7 +124,6 @@ class TestPublishSideTagResults:
             )
         ]
         with (
-            patch("pulp_tool.pull.publish.PulpHelper") as mock_helper_cls,
             patch(
                 "pulp_tool.pull.publish.sync_pulp_results_with_oci_registry",
                 return_value=("quay.io/ns/repo@sha256:final", Mock()),
@@ -73,9 +131,14 @@ class TestPublishSideTagResults:
             patch("pulp_tool.pull.publish._write_konflux_oci_results") as mock_write,
             patch("pulp_tool.pull.publish.update_snapshot_pulp_results_manifest") as mock_snapshot,
         ):
-            mock_helper = mock_helper_cls.return_value
-            mock_helper.ensure_side_tag_rpm_repository.return_value = ("/rpms/side/", "https://rok/side-tag-mytest/")
-            publish_side_tag_results(mock_client, artifact_data, context, upload_info, transfers)
+            publish_side_tag_results(
+                mock_client,
+                artifact_data,
+                context,
+                upload_info,
+                transfers,
+                side_tag_distribution_base="https://rok/side-tag-mytest/",
+            )
             mock_write.assert_called_once()
             mock_snapshot.assert_not_called()
 
@@ -131,7 +194,6 @@ class TestPublishSideTagResults:
             )
         ]
         with (
-            patch("pulp_tool.pull.publish.PulpHelper") as mock_helper_cls,
             patch(
                 "pulp_tool.pull.publish.sync_pulp_results_with_oci_registry",
                 return_value=("quay.io/ns/repo@sha256:final", Mock()),
@@ -139,7 +201,12 @@ class TestPublishSideTagResults:
             patch("pulp_tool.pull.publish._write_konflux_oci_results"),
             patch("pulp_tool.pull.publish.update_snapshot_pulp_results_manifest") as mock_snapshot,
         ):
-            mock_helper = mock_helper_cls.return_value
-            mock_helper.ensure_side_tag_rpm_repository.return_value = ("/rpms/side/", "https://rok/side/")
-            publish_side_tag_results(mock_client, artifact_data, context, upload_info, transfers)
+            publish_side_tag_results(
+                mock_client,
+                artifact_data,
+                context,
+                upload_info,
+                transfers,
+                side_tag_distribution_base="https://rok/side/",
+            )
             mock_snapshot.assert_called_once_with("/data/snapshot.json", "quay.io/ns/repo@sha256:final")

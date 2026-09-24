@@ -33,6 +33,11 @@ spec:
       description: Enable Konflux cache proxy (passed to init; feeds buildah HTTP_PROXY/NO_PROXY)
       type: string
       default: "false"
+    - name: ociStorage
+      description: |
+        OCI registry for ORAS e2e tests (same default as Konflux trusted-artifact storage for this component).
+      type: string
+      default: quay.io/redhat-user-workloads/artifact-storage-tenant/tooling/pulp-e2e-testing
   workspaces:
     - name: test
       description: Workspace for test artifacts
@@ -119,6 +124,8 @@ spec:
           value: $(tasks.build-e2e-image.results.IMAGE_REF)
         - name: e2e-run-id
           value: $(context.pipelineRun.uid)
+        - name: ociStorage
+          value: $(params.ociStorage)
       taskRef:
         resolver: git
         params:
@@ -138,6 +145,8 @@ spec:
       params:
         - name: e2e-run-id
           value: $(context.pipelineRun.uid)
+        - name: ociStorage
+          value: $(params.ociStorage)
       taskRef:
         resolver: git
         params:

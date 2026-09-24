@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+from dataclasses import dataclass
 
 import httpx
 
@@ -17,12 +18,20 @@ from ..utils.pulp_tasks import wait_for_successful_task
 from ..utils.rpm_operations import calculate_sha256_checksum, upload_rpms_parallel
 
 
+@dataclass(frozen=True, slots=True)
+class SideTagUploadResult:
+    """RPMs promoted to a side-tag repository and its distribution base URL."""
+
+    transfers: list[SideTagRpmTransfer]
+    distribution_base_url: str = ""
+
+
 def upload_rpms_to_side_tag_repository(
     pulp_client: PulpClient,
     pulled_artifacts: PulledArtifacts,
     artifact_data: ArtifactData,
     context: PullContext,
-) -> list[SideTagRpmTransfer]:
+) -> SideTagUploadResult:
     """
     Re-upload downloaded RPMs to the side-tag RPM repository with lineage labels.
 
@@ -30,7 +39,7 @@ def upload_rpms_to_side_tag_repository(
     """
     side_tag = (context.side_tag or "").strip()
     if not side_tag or not pulled_artifacts.rpms:
-        return []
+        return SideTagUploadResult([], "")
 
     parent_package = extract_metadata_from_artifacts(pulled_artifacts, "parent_package")
     helper = PulpHelper(pulp_client, parent_package=parent_package)
@@ -99,7 +108,7 @@ def upload_rpms_to_side_tag_repository(
             )
         )
 
-    return transfers
+    return SideTagUploadResult(transfers, distribution_base_url)
 
 
-__all__ = ["upload_rpms_to_side_tag_repository"]
+__all__ = ["SideTagUploadResult", "upload_rpms_to_side_tag_repository"]
