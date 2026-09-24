@@ -55,6 +55,7 @@ Shared: namespace `artifact-storage-tenant`, app/component `tooling` / `pulp-too
 - [ ] `.tekton/` embedded scripts pass Checkton (`pre-commit run --hook-stage pre-push checkton --all-files` or CI tekton-lint job)
 - [ ] `Dockerfile` builds (`make test-container` or Konflux PR `build-container` task)
 - [ ] `pulp-tool --version` / `--help` in built image
+- [ ] `oras version` and `select-oci-auth` in built image (ORAS push uses Tekton `~/.docker/config.json` via [select-oci-auth.sh](https://github.com/konflux-ci/build-trusted-artifacts/blob/main/select-oci-auth.sh))
 - [ ] Python matches UBI base (currently **3.12** on UBI 10 minimal)
 - [ ] `.tekton/` image refs and PAC CEL expressions correct
 - [ ] `build-source-image` task succeeds on PR/main (release `push-snapshot` requires `.src` tag on Quay)

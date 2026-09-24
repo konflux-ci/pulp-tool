@@ -40,6 +40,26 @@ class TestPulpHelperRepositoryMethods:
         assert callable(methods.wait_for_finished_task)
 
 
+class TestPulpHelperSideTagRepository:
+    """Side-tag RPM repository helper."""
+
+    def test_ensure_side_tag_rpm_repository(self, mock_pulp_client) -> None:
+        helper = PulpHelper(mock_pulp_client)
+        with (
+            patch.object(helper, "create_or_get_repository", return_value=("prn:rpm", "/pulp/rpm/href/")),
+            patch.object(helper, "distribution_url_for_base_path", return_value="https://pulp.example/ns/side-tag-t/"),
+        ):
+            href, url = helper.ensure_side_tag_rpm_repository("build-1", "t")
+        assert href == "/pulp/rpm/href/"
+        assert "side-tag-t" in url
+
+    def test_ensure_side_tag_rpm_repository_missing_href(self, mock_pulp_client) -> None:
+        helper = PulpHelper(mock_pulp_client)
+        with patch.object(helper, "create_or_get_repository", return_value=("prn:rpm", None)):
+            with pytest.raises(RuntimeError, match="No repository href"):
+                helper.ensure_side_tag_rpm_repository("build-1", "t")
+
+
 class TestPulpHelperRepositorySetup:
     """Test PulpHelper repository setup methods."""
 

@@ -10,7 +10,7 @@ import json
 import logging
 import traceback
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from ..models.artifacts import ContentData, ExtraArtifactRef, FileInfoMap, FileInfoModel, PulpContentRow
 from ..models.context import UploadContext
@@ -26,6 +26,7 @@ from ..utils.constants import (
     SUPPORTED_ARCHITECTURES,
     results_json_rpm_arch_distribution_key,
 )
+from ..utils.pulp_results_oci_publish import sync_pulp_results_with_oci_registry
 from ..utils.pulp_tasks import create_file_content_and_wait
 from ..utils.response_utils import content_find_results_from_response
 from .upload_common import _distribution_urls_for_context
@@ -84,30 +85,54 @@ def _save_results_to_folder(folder_path: str, json_content: str, context: Upload
         return None
 
 
+def _konflux_artifact_results_paths(context: UploadContext) -> tuple[str, str] | None:
+    artifact_results = (context.artifact_results or "").strip()
+    if not artifact_results or "," not in artifact_results:
+        return None
+    url_path, digest_path = artifact_results.split(",", 1)
+    return url_path.strip(), digest_path.strip()
+
+
 def _upload_and_get_results_url(
     client: PulpClient, context: UploadContext, artifact_repository_prn: str, json_content: str, date: str
 ) -> str | None:
     """Upload results JSON and return the distribution URL."""
     labels = create_labels(context.build_id, "", context.namespace, context.parent_package, date)
+    konflux_paths = _konflux_artifact_results_paths(context)
+    oci_storage = (getattr(context, "oci_storage", None) or "").strip()
 
     try:
-        task_response = create_file_content_and_wait(
-            client,
-            artifact_repository_prn,
-            json_content,
-            build_id=context.build_id,
-            pulp_label=labels,
-            filename=RESULTS_JSON_FILENAME,
-            operation="upload results JSON",
-        )
-        logging.info("Results JSON uploaded successfully")
-
-        results_json_url = _extract_results_url(client, context, task_response)
-
-        if context.artifact_results:
-            _handle_artifact_results(client, context, task_response)
+        if oci_storage:
+            document = cast(dict[str, Any], json.loads(json_content))
+            oci_ref, task_response = sync_pulp_results_with_oci_registry(
+                client,
+                artifact_repository_prn,
+                document,
+                oci_storage,
+                labels,
+                build_id=context.build_id,
+                record_manifest_history=False,
+            )
+            logging.info("Results JSON uploaded to Pulp and ORAS")
+            results_json_url = _extract_results_url(client, context, task_response)
+            if konflux_paths:
+                _write_konflux_oci_results(oci_ref, konflux_paths[0], konflux_paths[1])
         else:
-            logging.info("Results JSON available at: %s", results_json_url)
+            task_response = create_file_content_and_wait(
+                client,
+                artifact_repository_prn,
+                json_content,
+                build_id=context.build_id,
+                pulp_label=labels,
+                filename=RESULTS_JSON_FILENAME,
+                operation="upload results JSON",
+            )
+            logging.info("Results JSON uploaded successfully")
+            results_json_url = _extract_results_url(client, context, task_response)
+            if konflux_paths:
+                _handle_artifact_results(client, context, task_response)
+            else:
+                logging.info("Results JSON available at: %s", results_json_url)
 
         if context.sbom_results:
             _handle_sbom_results(client, context, json_content)
@@ -357,6 +382,21 @@ def _write_konflux_results(image_url: str, digest: str, url_path: str, digest_pa
     logging.debug("Image digest: %s", digest)
 
 
+def _konflux_results_from_oci_ref(oci_ref: str) -> tuple[str, str]:
+    """Split ``image@sha256:…`` into Tekton-style URL and digest (matches import-to-quay IMAGE_URL + digest)."""
+    image_url, digest = _parse_oci_reference(oci_ref.strip())
+    if not digest:
+        raise ValueError(f"OCI reference has no digest: {oci_ref}")
+    return image_url, _format_sha256_digest(digest)
+
+
+def _write_konflux_oci_results(oci_ref: str, url_path: str, digest_path: str) -> tuple[str, str]:
+    """Write Konflux ``PULP-IMAGE_URL`` / ``PULP-IMAGE_DIGEST`` files from an ORAS-published manifest ref."""
+    image_url, digest = _konflux_results_from_oci_ref(oci_ref)
+    _write_konflux_results(image_url, digest, url_path.strip(), digest_path.strip())
+    return image_url, digest
+
+
 def _format_sha256_digest(sha256_hex: str) -> str:
     """Format a SHA256 hex digest for Konflux artifact result files."""
     if sha256_hex.startswith("sha256:"):
@@ -481,6 +521,8 @@ __all__ = [
     "_add_distributions_to_results",
     "_find_artifact_content",
     "_parse_oci_reference",
+    "_write_konflux_oci_results",
+    "_konflux_results_from_oci_ref",
     "_handle_artifact_results",
     "_handle_sbom_results",
 ]

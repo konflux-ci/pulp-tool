@@ -186,6 +186,9 @@ class ArtifactMetadata(KonfluxBaseModel):
     labels: dict[str, str] = Field(default_factory=dict)
     url: str | None = None
     sha256: str | None = None
+    href: str | None = None
+    href_history: list[dict[str, Any]] = Field(default_factory=list)
+    distributions: dict[str, str] = Field(default_factory=dict)
 
     @field_validator("url")
     @classmethod
@@ -235,6 +238,9 @@ class ArtifactJsonResponse(KonfluxBaseModel):
 
     artifacts: dict[str, ArtifactMetadata] = Field(default_factory=dict)
     distributions: dict[str, AnyHttpUrl] | None = None
+    version: int | None = None
+    oci_manifest: str | None = None
+    oci_manifest_history: list[dict[str, Any]] = Field(default_factory=list)
 
     @property
     def artifact_count(self) -> int:

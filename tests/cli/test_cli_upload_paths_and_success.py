@@ -63,8 +63,8 @@ class TestUploadCommandPathsAndSuccess:
             )
             assert result.exit_code != 0
 
-    @patch("pulp_tool.cli.upload.PulpClient")
-    @patch("pulp_tool.cli.upload.PulpHelper")
+    @patch("pulp_tool.cli.upload_build.PulpClient")
+    @patch("pulp_tool.cli.upload_build.PulpHelper")
     def test_upload_success(self, mock_helper_class, mock_client_class) -> None:
         """Test successful upload flow."""
         runner = CliRunner()
@@ -117,8 +117,8 @@ class TestUploadCommandPathsAndSuccess:
             assert result.exit_code == 0
             assert "RESULTS JSON:" in result.output
 
-    @patch("pulp_tool.cli.upload.PulpClient")
-    @patch("pulp_tool.cli.upload.PulpHelper")
+    @patch("pulp_tool.cli.upload_build.PulpClient")
+    @patch("pulp_tool.cli.upload_build.PulpHelper")
     def test_upload_target_arch_repo_flag(self, mock_helper_class, mock_client_class) -> None:
         """--target-arch-repo is passed to setup_repositories and UploadRpmContext."""
         runner = CliRunner()
@@ -183,8 +183,8 @@ class TestUploadCommandPathsAndSuccess:
             assert context.skip_logs_repo is True
             assert context.skip_sbom_repo is False
 
-    @patch("pulp_tool.cli.upload.PulpClient")
-    @patch("pulp_tool.cli.upload.PulpHelper")
+    @patch("pulp_tool.cli.upload_build.PulpClient")
+    @patch("pulp_tool.cli.upload_build.PulpHelper")
     def test_upload_with_base64_config(self, mock_helper_class, mock_client_class) -> None:
         """Test upload command with base64-encoded config."""
         runner = CliRunner()
@@ -248,8 +248,8 @@ class TestUploadCommandPathsAndSuccess:
             assert config_path is not None
             assert config_path == base64_config
 
-    @patch("pulp_tool.cli.upload.PulpClient")
-    @patch("pulp_tool.cli.upload.PulpHelper")
+    @patch("pulp_tool.cli.upload_build.PulpClient")
+    @patch("pulp_tool.cli.upload_build.PulpHelper")
     def test_upload_with_artifact_results(self, mock_helper_class, mock_client_class) -> None:
         """Test upload with artifact results output."""
         runner = CliRunner()
@@ -305,8 +305,8 @@ class TestUploadCommandPathsAndSuccess:
             )
             assert result.exit_code == 0
 
-    @patch("pulp_tool.cli.upload.PulpClient")
-    @patch("pulp_tool.cli.upload.PulpHelper")
+    @patch("pulp_tool.cli.upload_build.PulpClient")
+    @patch("pulp_tool.cli.upload_build.PulpHelper")
     def test_upload_with_artifact_results_folder(self, mock_helper_class, mock_client_class) -> None:
         """Test upload with --artifact-results as folder path (saves locally, skips Pulp upload)."""
         runner = CliRunner()

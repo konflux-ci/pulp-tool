@@ -15,6 +15,10 @@ BUILD_ID_UPLOAD_RESULTS: Final = "test-upload-results"
 BUILD_ID_UPLOAD_TARGET_ARCH: Final = "test-build-789"
 BUILD_ID_UPLOAD_FILES: Final = "test-build-files"
 BUILD_ID_UPLOAD_LARGE: Final = "test-build-large"
+BUILD_ID_PULL_SIDE_TAG: Final = "test-pull-side-tag"
+BUILD_ID_UPLOAD_ORAS: Final = "test-upload-oras"
+SIDE_TAG_E2E_NAME: Final = "e2e-test"
+SIDE_TAG_E2E_REPO_SUFFIX: Final = f"side-tag-{SIDE_TAG_E2E_NAME}"
 
 # Standalone repositories from create-repository tests.
 REPO_CREATE_REPOSITORY: Final = "test-repo"
@@ -35,6 +39,9 @@ _RPM_REPOS_BASE: Final = {
         "test.0-1.0.0-1.noarch.rpm",
         "test.0-1.0.0-1.x86_64.rpm",
     ],
+    f"{BUILD_ID_UPLOAD_ORAS}/rpms": ["test.2-1.0.0-1.noarch.rpm"],
+    f"{BUILD_ID_PULL_SIDE_TAG}/rpms": ["test.0-1.0.0-1.noarch.rpm"],
+    f"{BUILD_ID_PULL_SIDE_TAG}/{SIDE_TAG_E2E_REPO_SUFFIX}": ["test.0-1.0.0-1.noarch.rpm"],
     f"{BUILD_ID_UPLOAD_FULL}/rpms": [],
     f"{BUILD_ID_UPLOAD_FULL}/rpms-signed": [
         "test.1-1.0.0-1.aarch64.rpm",
@@ -52,6 +59,8 @@ _FILE_REPOS_BASE: Final = {
     f"{BUILD_ID_UPLOAD_FILES}/logs": ["x86_64/build.log"],
     f"{BUILD_ID_UPLOAD_FILES}/sbom": ["sbom.json"],
     f"{BUILD_ID_UPLOAD_MINIMAL}/artifacts": ["pulp_results.json"],
+    f"{BUILD_ID_UPLOAD_ORAS}/artifacts": ["pulp_results.json"],
+    f"{BUILD_ID_PULL_SIDE_TAG}/artifacts": ["pulp_results.json"],
     f"{BUILD_ID_UPLOAD_FULL}/artifacts": ["pulp_results.json"],
     f"{BUILD_ID_UPLOAD_FULL}/sbom": ["sbom.json"],
     f"{BUILD_ID_UPLOAD_TARGET_ARCH}/artifacts": ["pulp_results.json"],

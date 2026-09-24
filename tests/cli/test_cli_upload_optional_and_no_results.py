@@ -29,8 +29,8 @@ class TestUploadCommandOptionalAndNoResults:
             assert result.exit_code == 1
             assert "Failed to read results JSON" in result.output
 
-    @patch("pulp_tool.cli.upload.PulpClient")
-    @patch("pulp_tool.cli.upload.PulpHelper")
+    @patch("pulp_tool.cli.upload_build.PulpClient")
+    @patch("pulp_tool.cli.upload_build.PulpHelper")
     def test_upload_no_results_json(self, mock_helper_class, mock_client_class) -> None:
         """Test upload when results JSON is not created."""
         runner = CliRunner()
@@ -83,7 +83,7 @@ class TestUploadCommandOptionalAndNoResults:
             assert result.exit_code == 1
             assert "results JSON was not created" in result.output
 
-    @patch("pulp_tool.cli.upload.PulpClient")
+    @patch("pulp_tool.cli.upload_build.PulpClient")
     def test_upload_generic_exception(self, mock_client_class) -> None:
         """Test upload with generic exception."""
         runner = CliRunner()
@@ -117,8 +117,8 @@ class TestUploadCommandOptionalAndNoResults:
             )
             assert result.exit_code == 1
 
-    @patch("pulp_tool.cli.upload.PulpClient")
-    @patch("pulp_tool.cli.upload.PulpHelper")
+    @patch("pulp_tool.cli.upload_build.PulpClient")
+    @patch("pulp_tool.cli.upload_build.PulpHelper")
     def test_upload_without_rpm_path(self, mock_helper_class, mock_client_class) -> None:
         """Test upload without rpm-path (should use current directory)."""
         runner = CliRunner()
@@ -174,8 +174,8 @@ class TestUploadCommandOptionalAndNoResults:
             finally:
                 os.chdir(original_cwd)
 
-    @patch("pulp_tool.cli.upload.PulpClient")
-    @patch("pulp_tool.cli.upload.PulpHelper")
+    @patch("pulp_tool.cli.upload_build.PulpClient")
+    @patch("pulp_tool.cli.upload_build.PulpHelper")
     def test_upload_without_sbom_path(self, mock_helper_class, mock_client_class) -> None:
         """Test upload without sbom-path (should skip SBOM upload)."""
         runner = CliRunner()
@@ -224,8 +224,8 @@ class TestUploadCommandOptionalAndNoResults:
             assert result.exit_code == 0
             assert "RESULTS JSON:" in result.output
 
-    @patch("pulp_tool.cli.upload.PulpClient")
-    @patch("pulp_tool.cli.upload.PulpHelper")
+    @patch("pulp_tool.cli.upload_build.PulpClient")
+    @patch("pulp_tool.cli.upload_build.PulpHelper")
     def test_upload_without_parent_package(self, mock_helper_class, mock_client_class) -> None:
         """Test upload without parent-package (should not include in labels)."""
         runner = CliRunner()
@@ -279,8 +279,8 @@ class TestUploadCommandOptionalAndNoResults:
             assert call_args is not None
             assert call_args.kwargs.get("parent_package") is None
 
-    @patch("pulp_tool.cli.upload.PulpClient")
-    @patch("pulp_tool.cli.upload.PulpHelper")
+    @patch("pulp_tool.cli.upload_build.PulpClient")
+    @patch("pulp_tool.cli.upload_build.PulpHelper")
     def test_upload_all_optional_omitted(self, mock_helper_class, mock_client_class) -> None:
         """Test upload with all optional parameters omitted."""
         runner = CliRunner()

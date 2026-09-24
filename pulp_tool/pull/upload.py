@@ -17,6 +17,7 @@ from ..utils import PulpHelper, determine_build_id, extract_metadata_from_artifa
 from ..utils.error_handling import handle_generic_error
 from ..utils.pulp_tasks import create_file_content_and_wait, wait_for_successful_task
 from ..utils.rpm_operations import upload_rpms_parallel
+from .reporting import _log_upload_summary
 
 
 def _upload_sboms_and_logs(
@@ -164,9 +165,6 @@ def upload_downloaded_files_to_pulp(
     # Upload different artifact types
     _upload_sboms_and_logs(pulp_client, pulled_artifacts, repositories, upload_info)
     _upload_rpms_to_repository(pulp_client, pulled_artifacts, repositories, upload_info)
-
-    # Log upload summary at WARNING level so it's always visible
-    from .reporting import _log_upload_summary
 
     _log_upload_summary(upload_info)
 

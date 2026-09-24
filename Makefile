@@ -57,7 +57,9 @@ test-container:
 	$$ENGINE build --build-arg-file .tekton/pulp-tool-container.build-args -t pulp-tool:test . && \
 	$$ENGINE run --rm pulp-tool:test python3 --version && \
 	$$ENGINE run --rm pulp-tool:test pulp-tool --version && \
-	$$ENGINE run --rm pulp-tool:test pulp-tool --help
+	$$ENGINE run --rm pulp-tool:test pulp-tool --help && \
+	$$ENGINE run --rm pulp-tool:test oras version && \
+	$$ENGINE run --rm pulp-tool:test sh -c 'select-oci-auth quay.io/example/repo 2>/dev/null | grep -q auths'
 
 test-e2e-container:
 	@command -v podman >/dev/null 2>&1 && ENGINE=podman || ENGINE=docker; \

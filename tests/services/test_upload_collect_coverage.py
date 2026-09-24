@@ -69,6 +69,60 @@ class TestUploadAndExtract:
             uc._upload_and_get_results_url(mock_pulp_client, ctx, "prn", "{}", "2024-01-01")
         mock_h.assert_called_once_with(mock_pulp_client, ctx, tr)
 
+    def test_konflux_artifact_results_paths_invalid_format(self) -> None:
+        ctx = _minimal_context(artifact_results="only-one-path")
+        assert uc._konflux_artifact_results_paths(ctx) is None
+
+    def test_upload_and_get_results_url_oras_without_konflux_result_files(self, mock_pulp_client: Mock) -> None:
+        tr = TaskResponse(pulp_href="/t/", state="completed", result={"relative_path": "x.json"})
+        ctx = _minimal_context(artifact_results=None, oci_storage="quay.io/ns/repo:latest")
+        with (
+            patch.object(
+                uc,
+                "sync_pulp_results_with_oci_registry",
+                return_value=("quay.io/ns/repo@sha256:abc", tr),
+            ) as mock_sync,
+            patch.object(uc, "_extract_results_url", return_value="https://u/x.json"),
+            patch.object(uc, "_write_konflux_results") as mock_write,
+        ):
+            uc._upload_and_get_results_url(mock_pulp_client, ctx, "prn", '{"artifacts":{}}', "2024-01-01")
+        mock_sync.assert_called_once()
+        mock_write.assert_not_called()
+
+    def test_upload_and_get_results_url_uses_oras_when_oci_storage_set(self, mock_pulp_client: Mock) -> None:
+        tr = TaskResponse(pulp_href="/t/", state="completed", result={"relative_path": "x.json"})
+        ctx = _minimal_context(artifact_results="/u,/d", oci_storage="quay.io/ns/repo:latest")
+        with (
+            patch.object(
+                uc,
+                "sync_pulp_results_with_oci_registry",
+                return_value=("quay.io/ns/repo@sha256:abc", tr),
+            ) as mock_sync,
+            patch.object(uc, "_extract_results_url", return_value="https://u/x.json"),
+            patch.object(uc, "_write_konflux_oci_results") as mock_write,
+            patch.object(uc, "_handle_artifact_results") as mock_legacy,
+        ):
+            uc._upload_and_get_results_url(mock_pulp_client, ctx, "prn", '{"artifacts":{}}', "2024-01-01")
+        mock_sync.assert_called_once()
+        mock_write.assert_called_once_with("quay.io/ns/repo@sha256:abc", "/u", "/d")
+        mock_legacy.assert_not_called()
+
+    def test_konflux_results_from_oci_ref(self) -> None:
+        url, digest = uc._konflux_results_from_oci_ref("quay.io/ns/repo:tag@sha256:abc123")
+        assert url == "quay.io/ns/repo:tag"
+        assert digest == "sha256:abc123"
+
+    def test_write_konflux_oci_results_writes_split_files(self, tmp_path) -> None:
+        url_path = tmp_path / "url"
+        digest_path = tmp_path / "digest"
+        image_url, digest = uc._write_konflux_oci_results(
+            "quay.io/ns/repo:1@sha256:deadbeef", str(url_path), str(digest_path)
+        )
+        assert image_url == "quay.io/ns/repo:1"
+        assert digest == "sha256:deadbeef"
+        assert url_path.read_text(encoding="utf-8") == "quay.io/ns/repo:1"
+        assert digest_path.read_text(encoding="utf-8") == "sha256:deadbeef"
+
     def test_upload_and_get_results_url_failure_logs_traceback(self, mock_pulp_client: Mock) -> None:
         ctx = _minimal_context()
         with (

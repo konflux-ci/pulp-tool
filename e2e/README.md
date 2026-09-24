@@ -101,7 +101,20 @@ This is an **input file** (not output) containing references to pre-existing tes
 
 # Against real Pulp server
 ./test-pulp-tool.py --config /etc/pulp-access/cli.toml --rpm-dir ./test_pkgs --pulp-results /etc/pulp-results/pulp-results.json --real-server
+
+# Side-tag pull + ORAS manifest push (also requires `oras` on PATH — included in pulp-tool-container image)
+E2E_OCI_STORAGE='quay.io/org/repo:tag' ./test-pulp-tool.py --config /etc/pulp-access/cli.toml --rpm-dir ./test_pkgs --pulp-results /etc/pulp-results/pulp-results.json --real-server
 ```
+
+**ORAS / `E2E_OCI_STORAGE`:** Set **`E2E_OCI_STORAGE`** to a writable OCI reference (same value Konflux passes as pipeline param **`ociStorage`** / pulp-tool **`--oci-storage`**). E2e passes `--oci-storage` on the command line rather than requiring `cli.oci_storage` in `cli.toml`. The Konflux **`pulp-tool-container`** image includes **`oras`** and **`select-oci-auth`** (registry credentials from `~/.docker/config.json`, same as import-to-quay); local runs need both on `PATH` (or `oras login` / `docker login` so `select-oci-auth` can emit a config) or ORAS cases are skipped.
+
+| Test | What it exercises |
+|------|-------------------|
+| `test_upload_build_oras_publish` | `upload-build` with `--oci-storage` and `--artifact-results` (Tekton-style OCI URL/digest files); Pulp `pulp_results.json` gets `oci_manifest` |
+| `test_update_build_pull_from_oras_target` | `oras pull` of that manifest, then `pull --artifact-location` on the fetched JSON (stand-in for **update-build** reading the OCI target) |
+| `test_pull_side_tag_transfer` | `pull --transfer-dest --side-tag` ORAS publish after transfer |
+
+For release workspaces, pair `pulp-tool pull --snapshot-path …` with **`create-trusted-artifact`** (see release-service-catalog `upload-src-rpm-sbom-attestation`).
 
 ---
 

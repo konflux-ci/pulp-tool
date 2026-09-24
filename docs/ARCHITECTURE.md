@@ -62,7 +62,10 @@ flowchart TB
 | Other API surface | `pulp_tool/api/` (`artifacts/`, `content/`, `distributions/`, `repositories/`, `tasks/`) | Typed calls aligned with Pulp endpoints |
 | Orchestration | `pulp_tool/utils/pulp_helper.py`, `upload_orchestrator.py` | Repo setup, upload pipelines |
 | Services | `pulp_tool/services/upload_service.py`, `upload_collect.py` | Same flows as CLI; Konflux results JSON, SBOM, artifact results |
-| Pull | `pulp_tool/pull/` | Download / transfer helpers |
+| Pull | `pulp_tool/pull/` | Download / transfer helpers; optional `--side-tag` ROK promotion (`side_tag.py`, `publish.py`) |
+| Results document | `pulp_tool/utils/pulp_results_document.py` | Versioned `pulp_results.json` merge (`version`, `href_history`, `oci_manifest_history`, per-artifact `distributions`) |
+| Snapshot update | `pulp_tool/utils/snapshot_update.py` | Release snapshot `pulpResultsOciManifest` after side-tag ORAS publish (trusted-artifact workspace) |
+| ORAS results sync | `pulp_tool/utils/pulp_results_oci_publish.py` | Shared Pulp + ORAS publish for `upload-build` and pull side-tag |
 | Models | `pulp_tool/models/` | Pydantic: context, Pulp DTOs, results |
 | Utils | `pulp_tool/utils/` | Validation, logging, RPM helpers, session retries |
 | Container | `Dockerfile`, `.tekton/pulp-tool-container-build-*.yaml` | Konflux Tekton → upstream `docker-build-oci-ta` (`buildah-oci-ta`); **changing-pulp-container** skill + [reference.md](../skills/changing-pulp-container/reference.md) |
@@ -92,7 +95,7 @@ No application database: state is on Pulp and in generated JSON artifacts.
 | **Pulp** | Primary API; plugins (e.g. RPM) assumed per deployment |
 | **[pulp-access-controller](https://github.com/pulp/pulp-access-controller)** | Konflux operator: `PulpAccessRequest` → `pulp-access` secret (`cli.toml`, domain `konflux-<namespace>`); uses [terms-based registry](https://access.redhat.com/terms-based-registry/accounts) for credentials (controller-generated, not manual user setup) |
 | **Konflux / Tekton** | Runs `pulp-tool` in `import-to-quay` and `push-artifacts-to-storage` (different config mounts and flags) |
-| **Container registry** | Quay image for tooling (`pulp-tool-container`); details in Tekton YAMLs linked from [CLAUDE.md](../CLAUDE.md) |
+| **Container registry** | Quay image for tooling (`pulp-tool-container`); ORAS publish uses `select-oci-auth` + Tekton-injected `~/.docker/config.json` (same pattern as import-to-quay Quay push); details in [CLAUDE.md](../CLAUDE.md) |
 | **OAuth / Basic** | Auth modes supported via client config (see [README](../README.md) / Pulp docs) |
 
 ---

@@ -153,6 +153,95 @@ class TestPullCommandTransferAndErrors:
             assert result.exit_code == 0
             mock_load.assert_called_once()
 
+    @patch("pulp_tool.cli.pull.publish_side_tag_results")
+    @patch("pulp_tool.cli.pull.upload_rpms_to_side_tag_repository")
+    @patch("pulp_tool.cli.pull.DistributionClient")
+    @patch("pulp_tool.cli.pull.load_and_validate_artifacts")
+    @patch("pulp_tool.cli.pull.setup_repositories_if_needed")
+    @patch("pulp_tool.cli.pull.download_artifacts_concurrently")
+    @patch("pulp_tool.cli.pull.generate_pull_report")
+    @patch("pulp_tool.cli.pull.upload_downloaded_files_to_pulp")
+    def test_pull_side_tag_transfer_invokes_publish(
+        self,
+        mock_upload,
+        mock_report,
+        mock_download,
+        mock_setup,
+        mock_load,
+        mock_dist_client,
+        mock_side_upload,
+        mock_publish,
+    ) -> None:
+        """Side-tag transfer runs upload and publish after mainline upload."""
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cert_path = Path(tmpdir) / "cert.pem"
+            cert_path.write_text("cert")
+            key_path = Path(tmpdir) / "key.pem"
+            key_path.write_text("key")
+            config_path = Path(tmpdir) / "config.toml"
+            config_path.write_text(
+                f'[cli]\nbase_url = "https://pulp.example.com"\n'
+                f'oci_storage = "quay.io/ns/repo:latest"\n'
+                f'cluster = "c1"\n'
+                f'cert = "{cert_path}"\nkey = "{key_path}"'
+            )
+            mock_dist_client_instance = Mock()
+            mock_dist_client_instance.session = Mock()
+            mock_dist_client_instance.session.close = Mock()
+            mock_dist_client.return_value = mock_dist_client_instance
+            from pulp_tool.models.artifacts import ArtifactData, ArtifactJsonResponse, ArtifactMetadata, PulledArtifacts
+
+            rpm_meta = ArtifactMetadata(
+                labels={"build_id": "test"},
+                url="https://pulp.example.com/test.rpm",
+            )
+            mock_artifact_data = ArtifactData(
+                artifact_json=ArtifactJsonResponse(artifacts={"test.rpm": rpm_meta}, distributions={}),
+                artifacts={"test.rpm": rpm_meta},
+            )
+            mock_load.return_value = mock_artifact_data
+            mock_setup.return_value = Mock()
+            mock_result = Mock()
+            mock_result.pulled_artifacts = PulledArtifacts()
+            mock_result.completed = 0
+            mock_result.failed = 0
+            mock_download.return_value = mock_result
+            from pulp_tool.models.repository import RepositoryRefs
+            from pulp_tool.models.results import PulpResultsModel
+
+            repos = RepositoryRefs(
+                rpms_prn="r",
+                logs_prn="l",
+                sbom_prn="s",
+                artifacts_prn="a",
+                rpms_href="/rpms/",
+                logs_href="/logs/",
+                sbom_href="/sbom/",
+                artifacts_href="/artifacts/",
+            )
+            mock_upload.return_value = PulpResultsModel(build_id="test", repositories=repos)
+            mock_side_upload.return_value = []
+            result = runner.invoke(
+                cli,
+                [
+                    "--build-id",
+                    "test-build",
+                    "--namespace",
+                    "test-ns",
+                    "pull",
+                    "--transfer-dest",
+                    str(config_path),
+                    "--side-tag",
+                    "mytest",
+                    "--oci-storage",
+                    "quay.io/ns/repo:latest",
+                ],
+            )
+            assert result.exit_code == 0
+            mock_side_upload.assert_called_once()
+            mock_publish.assert_called_once()
+
     @patch("pulp_tool.cli.pull.DistributionClient")
     @patch("pulp_tool.cli.pull.load_and_validate_artifacts")
     @patch("pulp_tool.cli.pull.setup_repositories_if_needed")

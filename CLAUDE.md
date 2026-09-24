@@ -44,15 +44,19 @@ Workspace for RPM-related `upload` input: **`/var/workdir/results`**. Config pat
 pulp-tool --config /pulp-access/cli.toml \
   --build-id "<pipelinerun-id>" \
   --namespace "<taskRun namespace>" \
-  upload \
+  upload-build \
   --parent-package "<package-name>" \
   --rpm-path "/var/workdir/results" \
   --sbom-path "/var/workdir/results/oras-staging/sbom-merged.json" \
-  --artifact-results "<PULP-IMAGE_URL result path>,<PULP-IMAGE_DIGEST result path>"
+  --artifact-results "<PULP-IMAGE_URL result path>,<PULP-IMAGE_DIGEST result path>" \
+  --oci-storage "$(params.ociStorage)"
 ```
+
+(`upload` remains an alias for `upload-build`. Pass **`--oci-storage`** from the pipeline `ociStorage` param—same pattern as [build-rpm-package](https://github.com/konflux-ci/rpmbuild-pipeline/blob/main/pipeline/build-rpm-package.yaml)—when ORAS publish of `pulp_results.json` is enabled; optional fallback: `cli.oci_storage` in config.)
 
 - Optional secret **`pulp-access`** → `/pulp-access/cli.toml`. **Missing file:** step skips Pulp upload, writes **empty** Tekton result files for URL/digest.
 - **`/var/workdir/results`** and **`oras-staging/`** (e.g. merged SBOM) are populated by earlier steps; layout changes break the task.
+- **ORAS / Quay auth (when `--oci-storage` is set):** Same model as step **`push-to-quay-select-auth`** in the same task — Tekton merges registry `dockerconfigjson` / `dockercfg` secrets linked to the **PipelineRun service account** into **`~/.docker/config.json`** (see [Konflux registry troubleshooting](https://konflux-ci.dev/docs/troubleshooting/registries/)). **`pulp-tool-container`** ships **`oras`**, **`jq`**, and **`select-oci-auth`** ([build-trusted-artifacts](https://github.com/konflux-ci/build-trusted-artifacts/blob/main/select-oci-auth.sh)); pulp-tool runs `select-oci-auth "$(params.ociStorage)"` internally and passes **`oras --registry-config`** on push/resolve. No extra secret volume is required beyond the SA-linked registry credentials already used for the Quay ORAS push; mount **`/pulp-access`** read-only for Pulp config only.
 
 ### 2. `push-artifacts-to-storage` (release-service-catalog)
 

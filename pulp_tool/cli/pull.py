@@ -20,9 +20,12 @@ from ..pull import (
     setup_repositories_if_needed,
     upload_downloaded_files_to_pulp,
 )
+from ..pull.publish import publish_side_tag_results
+from ..pull.side_tag import upload_rpms_to_side_tag_repository
 from ..utils import setup_logging
 from ..utils.config_manager import ConfigManager
 from ..utils.error_handling import handle_generic_error, handle_http_error
+from ..utils.oci_storage_resolve import resolve_oci_storage
 
 
 @click.command()
@@ -68,6 +71,32 @@ from ..utils.error_handling import handle_generic_error, handle_http_error
         "If not set, auth is loaded from --transfer-dest or --config."
     ),
 )
+@click.option(
+    "--side-tag",
+    help=(
+        "Side-tag name for an extra ROK RPM repository/distribution during transfer. "
+        "Requires --transfer-dest and --oci-storage or cli.oci_storage."
+    ),
+)
+@click.option(
+    "--oci-storage",
+    help="OCI registry for ORAS publish (Konflux ociStorage); overrides cli.oci_storage in --transfer-dest.",
+)
+@click.option(
+    "--artifact-results",
+    help=(
+        "Konflux comma-separated paths (url_path,digest_path) for OCI manifest Tekton results after side-tag transfer."
+    ),
+)
+@click.option(
+    "--snapshot-path",
+    type=click.Path(),
+    help=(
+        "Path to Konflux release snapshot JSON in the trusted-artifact workspace. "
+        "After ORAS publish, sets pulpResultsOciManifest for a following "
+        "create-trusted-artifact step."
+    ),
+)
 @click.pass_context
 def pull(  # pylint: disable=too-many-positional-arguments
     ctx: click.Context,
@@ -78,6 +107,10 @@ def pull(  # pylint: disable=too-many-positional-arguments
     key_path: str | None,
     transfer_dest: str | None,
     distribution_config: str | None,
+    side_tag: str | None,
+    artifact_results: str | None,
+    snapshot_path: str | None,
+    oci_storage: str | None,
 ) -> None:
     """Download artifacts and optionally re-upload to Pulp repositories."""
     # Get shared options from context
@@ -89,8 +122,30 @@ def pull(  # pylint: disable=too-many-positional-arguments
 
     setup_logging(debug)
 
+    side_tag_value = (side_tag or "").strip() or None
+    if side_tag_value and not (transfer_dest and transfer_dest.strip()):
+        click.echo("Error: --side-tag requires --transfer-dest", err=True)
+        sys.exit(1)
     # Config can come from --transfer-dest or group-level --config (--transfer-dest takes precedence)
     config_path = transfer_dest or config
+
+    resolved_oci_storage: str | None = None
+    cluster: str | None = None
+    if side_tag_value and transfer_dest:
+        resolved_oci_storage = resolve_oci_storage(oci_storage, transfer_dest)
+        try:
+            transfer_cfg = ConfigManager(transfer_dest)
+            transfer_cfg.load()
+            raw_cluster = transfer_cfg.get("cli.cluster")
+            cluster = str(raw_cluster).strip() if raw_cluster else None
+        except Exception as e:
+            logging.debug("Could not load transfer-dest config for side-tag: %s", e)
+        if not resolved_oci_storage:
+            click.echo(
+                "Error: --oci-storage or cli.oci_storage in --transfer-dest config is required when using --side-tag",
+                err=True,
+            )
+            sys.exit(1)
 
     # Validate mutually exclusive options
     if artifact_location and (namespace or build_id):
@@ -178,6 +233,11 @@ def pull(  # pylint: disable=too-many-positional-arguments
         config=config_path,
         transfer_dest=transfer_dest,
         build_id=build_id,
+        side_tag=side_tag_value,
+        artifact_results=artifact_results,
+        oci_storage=resolved_oci_storage,
+        snapshot_path=(snapshot_path or "").strip() or None,
+        cluster=cluster,
         debug=debug,
         max_workers=max_workers,
         content_types=content_types_list,
@@ -218,6 +278,14 @@ def pull(  # pylint: disable=too-many-positional-arguments
         if pulp_client:
             logging.info("Uploading downloaded files to Pulp repositories...")
             upload_info = upload_downloaded_files_to_pulp(pulp_client, download_result.pulled_artifacts, args)
+            if args.side_tag and upload_info:
+                side_transfers = upload_rpms_to_side_tag_repository(
+                    pulp_client,
+                    download_result.pulled_artifacts,
+                    artifact_data,
+                    args,
+                )
+                publish_side_tag_results(pulp_client, artifact_data, args, upload_info, side_transfers)
         else:
             logging.info("No Pulp client available, skipping upload to repositories")
 

@@ -385,3 +385,102 @@ class TestPullCommandFiltersAndTransfer:
             assert call_args.args[5] == ["x86_64"]
         finally:
             os.unlink(artifact_path)
+
+    def test_pull_side_tag_without_transfer_dest(self) -> None:
+        runner = CliRunner()
+        result = runner.invoke(cli, ["pull", "--side-tag", "mytest", "--artifact-results", "/u,/d"])
+        assert result.exit_code == 1
+        assert "--side-tag requires --transfer-dest" in result.output
+
+    def test_pull_side_tag_without_oci_storage(self) -> None:
+        runner = CliRunner()
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as cfg:
+            cfg.write("[cli]\nbase_url = 'https://pulp.example'\n")
+            cfg_path = cfg.name
+        try:
+            result = runner.invoke(
+                cli,
+                ["pull", "--transfer-dest", cfg_path, "--side-tag", "mytest"],
+            )
+            assert result.exit_code == 1
+            assert "oci_storage" in result.output
+        finally:
+            os.unlink(cfg_path)
+
+    @patch("pulp_tool.cli.pull.ConfigManager")
+    def test_pull_side_tag_config_load_exception(self, mock_config_manager) -> None:
+        runner = CliRunner()
+        mock_config_manager.side_effect = OSError("cannot read config")
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as cfg:
+            cfg.write("[cli]\n")
+            cfg_path = cfg.name
+        try:
+            result = runner.invoke(
+                cli,
+                [
+                    "pull",
+                    "--transfer-dest",
+                    cfg_path,
+                    "--side-tag",
+                    "mytest",
+                    "--artifact-results",
+                    "/tmp/url,/tmp/digest",
+                ],
+            )
+            assert result.exit_code == 1
+            assert "oci_storage" in result.output
+        finally:
+            os.unlink(cfg_path)
+
+    def test_pull_side_tag_without_oci_storage_in_config(self) -> None:
+        runner = CliRunner()
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as cfg:
+            cfg.write("[cli]\nbase_url = 'https://pulp.example'\n")
+            cfg_path = cfg.name
+        try:
+            result = runner.invoke(
+                cli,
+                [
+                    "pull",
+                    "--transfer-dest",
+                    cfg_path,
+                    "--side-tag",
+                    "mytest",
+                    "--artifact-results",
+                    "/tmp/url,/tmp/digest",
+                ],
+            )
+            assert result.exit_code == 1
+            assert "oci_storage" in result.output
+        finally:
+            os.unlink(cfg_path)
+
+    def test_pull_side_tag_oci_storage_flag_without_config_key(self) -> None:
+        """Konflux passes ociStorage as --oci-storage; config need not define cli.oci_storage."""
+        runner = CliRunner()
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as cfg:
+            cfg.write("[cli]\nbase_url = 'https://pulp.example'\n")
+            cfg_path = cfg.name
+        try:
+            result = runner.invoke(
+                cli,
+                [
+                    "--build-id",
+                    "b1",
+                    "--namespace",
+                    "ns",
+                    "--config",
+                    cfg_path,
+                    "pull",
+                    "--transfer-dest",
+                    cfg_path,
+                    "--side-tag",
+                    "mytest",
+                    "--oci-storage",
+                    "quay.io/ns/repo:latest",
+                ],
+            )
+            assert "cli.oci_storage is required" not in result.output
+            assert "--oci-storage or cli.oci_storage" not in result.output
+        finally:
+            os.unlink(cfg_path)

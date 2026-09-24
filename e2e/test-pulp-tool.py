@@ -46,10 +46,13 @@ from names import (
     BUILD_ID_UPLOAD_FULL,
     BUILD_ID_UPLOAD_LARGE,
     BUILD_ID_UPLOAD_MINIMAL,
+    BUILD_ID_PULL_SIDE_TAG,
+    BUILD_ID_UPLOAD_ORAS,
     BUILD_ID_UPLOAD_RESULTS,
     BUILD_ID_UPLOAD_TARGET_ARCH,
     REPO_CREATE_REPOSITORY,
     REPO_CREATE_REPOSITORY_JSON,
+    SIDE_TAG_E2E_NAME,
     resolve_run_id,
     scoped_base_path,
     scoped_build_id,
@@ -102,6 +105,8 @@ class E2ETestSuite:
         self.current_rpm_index = 0
         self._test_case_index = 0
         self._current_case_id: str | None = None
+        self.last_oci_pulp_results_ref: str | None = None
+        self.last_oci_build_id: str | None = None
 
         with open(self.config_file, "rb") as f:
             config = tomllib.load(f)
@@ -550,6 +555,15 @@ class E2ETestSuite:
         self.assert_output_contains(output, "--rpm-path", "Help shows --rpm-path option")
         self.assert_output_contains(output, "--sbom-path", "Help shows --sbom-path option")
 
+    def test_upload_build_help(self):
+        self.run_test("pulp-tool upload-build --help")
+        exit_code, output = self.run_command(["pulp-tool", "upload-build", "--help"])
+        self.assert_exit_code(0, exit_code, "Upload-build help command")
+        if exit_code > 0:
+            self.log_error(output)
+        self.assert_output_contains(output, "--rpm-path", "Upload-build help shows --rpm-path option")
+        self.assert_output_contains(output, "--oci-storage", "Upload-build help shows --oci-storage option")
+
     # Test: upload-files command help
     def test_upload_files_help(self):
         self.run_test("pulp-tool upload-files --help")
@@ -570,6 +584,283 @@ class E2ETestSuite:
             self.log_error(output)
         self.assert_output_contains(output, "--artifact-location", "Help shows --artifact-location option")
         self.assert_output_contains(output, "--content-types", "Help shows --content-types option")
+        self.assert_output_contains(output, "--side-tag", "Help shows --side-tag option")
+        self.assert_output_contains(output, "--artifact-results", "Help shows --artifact-results option")
+        self.assert_output_contains(output, "--snapshot-path", "Help shows --snapshot-path option")
+        self.assert_output_contains(output, "--oci-storage", "Help shows --oci-storage option")
+
+    def _oci_oras_prereqs(self, test_name: str) -> str | None:
+        """Return ``E2E_OCI_STORAGE`` when ORAS e2e prerequisites are met; else skip."""
+        if not self.real_server:
+            self.skip_test(test_name, "DRY RUN")
+            return None
+        oci_storage = (os.environ.get("E2E_OCI_STORAGE") or "").strip()
+        if not oci_storage:
+            self.skip_test(test_name, "E2E_OCI_STORAGE not set")
+            return None
+        if shutil.which("oras") is None:
+            self.skip_test(test_name, "oras CLI not in PATH")
+            return None
+        if shutil.which("select-oci-auth") is None:
+            self.skip_test(test_name, "select-oci-auth not in PATH (needed for ORAS registry auth)")
+            return None
+        return oci_storage
+
+    def _write_config_with_oci_storage(self, oci_storage: str, *, filename: str = "oci-cli.toml") -> Path:
+        """Copy cli.toml and add ``oci_storage`` (and cluster for transfer tests)."""
+        path = self.test_dir / filename
+        base = self.config_file.read_text(encoding="utf-8")
+        extras = f'oci_storage = "{oci_storage}"\ncluster = "e2e-cluster"\n'
+        if "[cli]" in base:
+            path.write_text(base.rstrip() + "\n" + extras, encoding="utf-8")
+        else:
+            path.write_text("[cli]\n" + extras + base, encoding="utf-8")
+        return path
+
+    def _write_transfer_dest_config(self, oci_storage: str) -> Path:
+        """Copy cli.toml and add oci_storage/cluster for pull --side-tag transfer."""
+        return self._write_config_with_oci_storage(oci_storage, filename="transfer-cli.toml")
+
+    def _oras_registry_config_file(self, oci_ref: str) -> Path:
+        """Write Konflux-style registry config for ``oci_ref`` (import-to-quay pattern)."""
+        auth_path = self.test_dir / "oras-registry-config.json"
+        result = subprocess.run(
+            ["select-oci-auth", oci_ref],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"select-oci-auth failed (exit {result.returncode}): {result.stderr or result.stdout or ''}"
+            )
+        auth_path.write_text(result.stdout or "", encoding="utf-8")
+        return auth_path
+
+    def _fetch_pulp_results_json_from_oci(self, oci_ref: str, dest_dir: Path) -> Path:
+        """ORAS-pull ``pulp_results.json`` blob (update-build style OCI artifact input)."""
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        for existing in dest_dir.iterdir():
+            if existing.is_file():
+                existing.unlink()
+        registry_config = self._oras_registry_config_file(oci_ref)
+        result = subprocess.run(
+            ["oras", "--registry-config", str(registry_config), "pull", oci_ref, "-o", str(dest_dir)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"oras pull failed (exit {result.returncode}): {result.stderr or result.stdout or ''}"
+            )
+        json_files = sorted(dest_dir.glob("*.json"))
+        if not json_files:
+            raise RuntimeError(f"No .json file under {dest_dir} after oras pull of {oci_ref}")
+        return json_files[0]
+
+    def _oci_ref_from_pulp_results(self, build_id: str) -> str:
+        """Read ``oci_manifest`` from Pulp ``pulp_results.json`` after ORAS publish."""
+        client = distribution_client_from_config(self.config_file)
+        pulp_results_url = (
+            f"{self.base_url}/api/pulp-content/{self.namespace}/{build_id}/artifacts/pulp_results.json"
+        )
+        pulp_results_content = json.loads(fetch_bytes(client, pulp_results_url, label="pulp_results.json").decode("utf-8"))
+        oci_manifest = (pulp_results_content.get("oci_manifest") or "").strip()
+        if not oci_manifest or "sha256:" not in oci_manifest:
+            raise RuntimeError(f"Expected oci_manifest on pulp_results.json, got {oci_manifest!r}")
+        return oci_manifest
+
+    def _run_upload_build_oras(
+        self,
+        oci_storage: str,
+        build_id: str,
+        rpm_dir: Path,
+        *,
+        image_url_path: Path | None = None,
+        image_digest_path: Path | None = None,
+    ) -> str:
+        """Run ``upload-build`` with ORAS publish; return ``oci_manifest`` from Pulp."""
+        upload_cmd = [
+            "pulp-tool",
+            "--config",
+            str(self.config_file),
+            "--build-id",
+            build_id,
+            "--namespace",
+            self.namespace,
+            "upload-build",
+            "--rpm-path",
+            str(rpm_dir),
+            "--oci-storage",
+            oci_storage,
+        ]
+        if image_url_path is not None and image_digest_path is not None:
+            upload_cmd.extend(
+                [
+                    "--artifact-results",
+                    f"{image_url_path},{image_digest_path}",
+                ]
+            )
+        exit_code, output = self.run_command(upload_cmd)
+        if not self.assert_exit_code(0, exit_code, "upload-build with ORAS completes successfully"):
+            self.log_error(output)
+            raise RuntimeError("upload-build ORAS failed")
+        return self._oci_ref_from_pulp_results(build_id)
+
+    def _assert_konflux_oci_results_match_manifest(
+        self,
+        oci_manifest: str,
+        image_url_path: Path,
+        image_digest_path: Path,
+        *,
+        test_label: str,
+    ) -> bool:
+        """Assert Tekton-style result files match ``oci_manifest`` (``repo@sha256:…``)."""
+        if not self.assert_file_exists(image_url_path, f"{test_label} Konflux OCI URL file"):
+            return False
+        if not self.assert_file_exists(image_digest_path, f"{test_label} Konflux OCI digest file"):
+            return False
+        konflux_url = image_url_path.read_text(encoding="utf-8").strip()
+        konflux_digest = image_digest_path.read_text(encoding="utf-8").strip()
+        expected_url, expected_digest = oci_manifest.rsplit("@", 1)
+        if konflux_url != expected_url:
+            self.stats.failed += 1
+            self.log_error(f"Konflux OCI URL {konflux_url!r} != expected {expected_url!r}")
+            return False
+        if not konflux_digest.startswith("sha256:"):
+            konflux_digest = f"sha256:{konflux_digest}"
+        if expected_digest.startswith("sha256:"):
+            expected_digest_norm = expected_digest
+        else:
+            expected_digest_norm = f"sha256:{expected_digest}"
+        if konflux_digest != expected_digest_norm:
+            self.stats.failed += 1
+            self.log_error(f"Konflux OCI digest {konflux_digest!r} != expected {expected_digest_norm!r}")
+            return False
+        self.stats.passed += 1
+        self.log_success(f"Konflux OCI results match manifest ({test_label})")
+        return True
+
+    def test_upload_build_oras_publish(self):
+        """upload-build ORAS publish of pulp_results.json (requires E2E_OCI_STORAGE)."""
+        oci_storage = self._oci_oras_prereqs("upload-build ORAS publish")
+        if not oci_storage:
+            return
+
+        build_id = self.bid(BUILD_ID_UPLOAD_ORAS)
+        rpm_dir = self.rpm_dirs[2] / "noarch"
+        image_url_path = self.output_dir / "oras_image_url"
+        image_digest_path = self.output_dir / "oras_image_digest"
+
+        self.run_test(
+            "pulp-tool upload-build ORAS publish",
+            detail=f"build_id={build_id} oci_storage={oci_storage}",
+        )
+        try:
+            oci_ref = self._run_upload_build_oras(
+                oci_storage,
+                build_id,
+                rpm_dir,
+                image_url_path=image_url_path,
+                image_digest_path=image_digest_path,
+            )
+        except RuntimeError as exc:
+            self.stats.failed += 1
+            self.log_error(str(exc))
+            return
+
+        self.last_oci_pulp_results_ref = oci_ref
+        self.last_oci_build_id = build_id
+        self.log_success(f"ORAS-published pulp_results oci_manifest: {oci_ref}")
+
+        client = distribution_client_from_config(self.config_file)
+        pulp_results_url = (
+            f"{self.base_url}/api/pulp-content/{self.namespace}/{build_id}/artifacts/pulp_results.json"
+        )
+        pulp_results_content = json.loads(fetch_bytes(client, pulp_results_url, label="pulp_results.json").decode("utf-8"))
+        oci_manifest = (pulp_results_content.get("oci_manifest") or "").strip()
+        version = pulp_results_content.get("version")
+        if not version or int(version) < 1:
+            self.stats.failed += 1
+            self.log_error(f"Expected version on pulp_results.json, got {version!r}")
+            return
+        if oci_ref.split("@", 1)[0] not in oci_manifest:
+            self.stats.failed += 1
+            self.log_error(f"Pulp oci_manifest {oci_manifest!r} does not match Konflux ref {oci_ref!r}")
+            return
+        self.stats.passed += 1
+        self.log_success("Pulp pulp_results.json includes oci_manifest aligned with ORAS publish")
+
+        self.run_test("Konflux OCI artifact-results files", detail=f"url={image_url_path} digest={image_digest_path}")
+        self._assert_konflux_oci_results_match_manifest(
+            oci_ref,
+            image_url_path,
+            image_digest_path,
+            test_label="upload-build ORAS",
+        )
+
+    def test_update_build_pull_from_oras_target(self):
+        """
+        Stand-in for update-build: pull using pulp_results.json ORAS-pulled from upload-build target.
+
+        Reuses ``last_oci_pulp_results_ref`` when ``test_upload_build_oras_publish`` ran first; otherwise
+        runs upload-build in this case.
+        """
+        oci_storage = self._oci_oras_prereqs("update-build pull from OCI target")
+        if not oci_storage:
+            return
+
+        build_id = getattr(self, "last_oci_build_id", None) or self.bid(BUILD_ID_UPLOAD_ORAS)
+        oci_ref = getattr(self, "last_oci_pulp_results_ref", None)
+        if not oci_ref:
+            rpm_dir = self.rpm_dirs[2] / "noarch"
+            self.run_test("upload-build (setup OCI target for update-build e2e)", detail=f"build_id={build_id}")
+            try:
+                oci_ref = self._run_upload_build_oras(oci_storage, build_id, rpm_dir)
+            except RuntimeError as exc:
+                self.stats.failed += 1
+                self.log_error(str(exc))
+                return
+
+        oci_pull_dir = self.output_dir / "oci-pulp-results"
+        self.run_test("oras pull pulp_results OCI manifest", detail=f"ref={oci_ref}")
+        try:
+            local_results = self._fetch_pulp_results_json_from_oci(oci_ref, oci_pull_dir)
+        except RuntimeError as exc:
+            self.stats.failed += 1
+            self.log_error(str(exc))
+            return
+        self.stats.passed += 1
+        self.log_success(f"Fetched pulp_results.json from OCI: {local_results}")
+
+        pull_dir = self.output_dir / "update-build-pull-output"
+        pull_dir.mkdir(parents=True, exist_ok=True)
+        self.run_test(
+            "pulp-tool pull --artifact-location (OCI-sourced pulp_results)",
+            detail=f"build_id={build_id} local_json={local_results}",
+        )
+        pull_cmd = [
+            "pulp-tool",
+            "--config",
+            str(self.config_file),
+            "pull",
+            "--artifact-location",
+            str(local_results),
+            "--content-types",
+            "rpm",
+            "--archs",
+            "noarch",
+        ]
+        exit_code, output = self.run_command(pull_cmd, cwd=pull_dir)
+        if not self.assert_exit_code(0, exit_code, "Pull from OCI-sourced pulp_results completes"):
+            self.log_error(output)
+            return
+        expected_rpm = "test.2-1.0.0-1.noarch.rpm"
+        if not self.assert_file_exists(pull_dir / expected_rpm, f"Pull directory contains {expected_rpm}"):
+            self.log_error(output)
+            return
+        self.log_success("update-build e2e: pull consumed ORAS-published pulp_results target")
 
     # Test: search-by command help
     def test_search_by_help(self):
@@ -1066,6 +1357,103 @@ class E2ETestSuite:
             self.assert_file_exists(pull_dir / "sbom.json", "Pull directory contains sbom.json")
             self.assert_file_exists(pull_dir / "wolf-9.4-2.noarch.rpm", "Pull directory contains wolf-9.4-2.noarch.rpm")
 
+    def test_pull_side_tag_transfer(self):
+        """Upload, then pull --transfer-dest --side-tag with ORAS manifest push (requires E2E_OCI_STORAGE)."""
+        if not self.real_server:
+            self.skip_test("pull side-tag transfer", "DRY RUN")
+            return
+
+        oci_storage = (os.environ.get("E2E_OCI_STORAGE") or "").strip()
+        if not oci_storage:
+            self.skip_test("pull side-tag transfer", "E2E_OCI_STORAGE not set")
+            return
+
+        if shutil.which("oras") is None:
+            self.skip_test("pull side-tag transfer", "oras CLI not in PATH")
+            return
+        if shutil.which("select-oci-auth") is None:
+            self.skip_test("pull side-tag transfer", "select-oci-auth not in PATH")
+            return
+
+        build_id = self.bid(BUILD_ID_PULL_SIDE_TAG)
+        rpm_dir = self.rpm_dirs[0]
+        self.run_test(
+            "pulp-tool upload (side-tag transfer setup)",
+            detail=f"build_id={build_id} rpm_dir={rpm_dir}",
+        )
+        upload_cmd = [
+            "pulp-tool",
+            "--config",
+            str(self.config_file),
+            "--build-id",
+            build_id,
+            "--namespace",
+            self.namespace,
+            "upload",
+            "--rpm-path",
+            str(rpm_dir / "noarch"),
+        ]
+        exit_code, output = self.run_command(upload_cmd)
+        if not self.assert_exit_code(0, exit_code, "Upload before side-tag pull"):
+            self.log_error(output)
+            return
+
+        transfer_config = self._write_transfer_dest_config(oci_storage)
+        pull_dir = self.output_dir / "pull-side-tag-output"
+        pull_dir.mkdir(parents=True, exist_ok=True)
+
+        self.run_test(
+            "pulp-tool pull --transfer-dest --side-tag",
+            detail=f"side_tag={SIDE_TAG_E2E_NAME} oci_storage={oci_storage}",
+        )
+        pull_cmd = [
+            "pulp-tool",
+            "--config",
+            str(self.config_file),
+            "--build-id",
+            build_id,
+            "--namespace",
+            self.namespace,
+            "pull",
+            "--transfer-dest",
+            str(transfer_config),
+            "--side-tag",
+            SIDE_TAG_E2E_NAME,
+            "--oci-storage",
+            oci_storage,
+            "--content-types",
+            "rpm",
+            "--archs",
+            "noarch",
+        ]
+        exit_code, output = self.run_command(pull_cmd, cwd=pull_dir)
+        if not self.assert_exit_code(0, exit_code, "Pull side-tag transfer completes successfully"):
+            self.log_error(output)
+            return
+
+        client = distribution_client_from_config(self.config_file)
+        pulp_results_url = (
+            f"{self.base_url}/api/pulp-content/{self.namespace}/{build_id}/artifacts/pulp_results.json"
+        )
+        pulp_results_content = json.loads(fetch_bytes(client, pulp_results_url, label="pulp_results.json").decode("utf-8"))
+        version = pulp_results_content.get("version")
+        distributions = pulp_results_content.get("distributions") or {}
+        if not version or int(version) < 2:
+            self.stats.failed += 1
+            self.log_error(f"Expected version >= 2 after side-tag transfer, got {version!r}")
+            return
+        if SIDE_TAG_E2E_NAME not in distributions:
+            self.stats.failed += 1
+            self.log_error(f"Expected distributions[{SIDE_TAG_E2E_NAME!r}], got {list(distributions.keys())}")
+            return
+        oci_manifest = (pulp_results_content.get("oci_manifest") or "").strip()
+        if not oci_manifest or "sha256:" not in oci_manifest:
+            self.stats.failed += 1
+            self.log_error(f"Expected oci_manifest after side-tag ORAS publish, got {oci_manifest!r}")
+            return
+        self.stats.passed += 1
+        self.log_success("pulp_results.json version bumped, side-tag distribution, and oci_manifest present")
+
     # Test: search-by command with checksums
     def test_search_by_checksums(self):
         if not self.real_server:
@@ -1382,6 +1770,11 @@ class E2ETestSuite:
         self.invoke_test_case(self.test_help_commands, "test_help_commands", "Verify pulp-tool --help and --version.")
         self.invoke_test_case(self.test_upload_help, "test_upload_help", "Verify pulp-tool upload --help.")
         self.invoke_test_case(
+            self.test_upload_build_help,
+            "test_upload_build_help",
+            "Verify pulp-tool upload-build --help.",
+        )
+        self.invoke_test_case(
             self.test_upload_files_help,
             "test_upload_files_help",
             "Verify pulp-tool upload-files --help.",
@@ -1432,6 +1825,18 @@ class E2ETestSuite:
             f"Large RPM upload (>300 MiB) and search-by checksum; build_id={self.bid(BUILD_ID_UPLOAD_LARGE)}.",
             requires_real_server=True,
         )
+        self.invoke_test_case(
+            self.test_upload_build_oras_publish,
+            "test_upload_build_oras_publish",
+            f"upload-build ORAS publish (build_id={self.bid(BUILD_ID_UPLOAD_ORAS)}; requires E2E_OCI_STORAGE and oras).",
+            requires_real_server=True,
+        )
+        self.invoke_test_case(
+            self.test_update_build_pull_from_oras_target,
+            "test_update_build_pull_from_oras_target",
+            "Pull from ORAS-published pulp_results (update-build OCI target; requires E2E_OCI_STORAGE and oras).",
+            requires_real_server=True,
+        )
 
         self.begin_section("Upload files (pulp-tool upload-files)")
         self.invoke_test_case(
@@ -1446,6 +1851,13 @@ class E2ETestSuite:
             self.test_pull_by_build_id,
             "test_pull_by_build_id",
             "Pull by --build-id test-fixture (fixture content in shared Pulp domain).",
+            requires_real_server=True,
+        )
+        self.invoke_test_case(
+            self.test_pull_side_tag_transfer,
+            "test_pull_side_tag_transfer",
+            f"Pull --transfer-dest --side-tag with ORAS (build_id={self.bid(BUILD_ID_PULL_SIDE_TAG)}; "
+            "requires E2E_OCI_STORAGE and oras in PATH).",
             requires_real_server=True,
         )
         self.invoke_test_case(
