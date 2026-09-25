@@ -29,6 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `pull --oci-storage` for side-tag ORAS publish (flag overrides transfer config) ([2a3f5c8](https://github.com/konflux-ci/pulp-tool/commit/2a3f5c8))
 - `pull --side-tag` (with `--transfer-dest`): extra ROK RPM repo/distribution, versioned `pulp_results.json` merge, ORAS push, `--artifact-results` Tekton outputs, and optional `--snapshot-path` (`pulpResultsOciManifest`) for trusted-artifact release workspaces ([2a3f5c8](https://github.com/konflux-ci/pulp-tool/commit/2a3f5c8))
 - `pulp-tool-container` image: ORAS CLI, `jq`, and Konflux `select-oci-auth` for registry auth (`oras --registry-config`); e2e ORAS tests when e2e **`--oci-storage`** is set (Konflux `ociStorage` param) ([2a3f5c8](https://github.com/konflux-ci/pulp-tool/commit/2a3f5c8))
+- `pull --artifact-location` accepts an OCI manifest reference (`registry/repo@sha256:…` or `oci:…`); `pulp_results.json` is fetched with ORAS (`select-oci-auth`) before artifact download ([6e0cb3f](https://github.com/konflux-ci/pulp-tool/commit/6e0cb3f))
+- Konflux e2e: side-tag pull transfer from HTTPS `pulp_results.json` or OCI manifest ref, with run-scoped `--side-tag` names and Tekton-style `--artifact-results` ([6e0cb3f](https://github.com/konflux-ci/pulp-tool/commit/6e0cb3f))
 - E2e distribution URL verification: after `test_upload_full`, HTTP GET of RPM, SBOM, and `pulp_results.json` distribution URLs with Basic Auth from `pulp-access` `cli.toml` and SHA256 checks against upload metadata (`e2e/distribution_fetch.py`)
 - E2e distribution fetch: wall-clock polling via `E2E_DISTRIBUTION_FETCH_MAX_WAIT_S` (default 300s) for pulp-content propagation; optional `E2E_DISTRIBUTION_FETCH_ATTEMPTS` cap; SBOM vs `pulp_results.json` probe logging on failure ([34d2254](https://github.com/konflux-ci/pulp-tool/commit/34d2254))
 - E2e large RPM upload: `pre-test.py` builds a **> 300 MiB** RPM (`--large-rpm-size-mb`, default 301 MiB incompressible payload); e2e uploads to Pulp and verifies via `search-by --checksums` ([b4cb414](https://github.com/konflux-ci/pulp-tool/commit/b4cb414))
@@ -49,6 +51,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Pytest configuration consolidated in `pyproject.toml` only (removed duplicate `.pytest.ini`; 85% coverage threshold unified)
 - CHANGELOG entries link to implementing commits; `docs/releasing.md` and PR-drafting templates document link preservation when curating releases
 - **fixing-diff-cover-failures** skill removed; diff-cover loop merged into **troubleshooting-pulp-tool-ci**
+- Side-tag RPM repository and distribution use build-scoped names `{build_id}/side-tag-{tag}` (not a global `side-tag-{tag}` base path) ([6e0cb3f](https://github.com/konflux-ci/pulp-tool/commit/6e0cb3f))
+- Bare Konflux `ociStorage` repository strings (no `:tag` or `@digest`) resolve with `:latest` for ORAS push and resolve ([6e0cb3f](https://github.com/konflux-ci/pulp-tool/commit/6e0cb3f))
 
 ### Fixed
 
@@ -56,6 +60,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Release `push-snapshot` failure resolving `{digest}.src` source container: PipelineRuns set `build-source-image=true` so `source-build-oci-ta` publishes the source image expected when release mapping defaults `pushSourceContainer` to true
 - `upload --signed-by` now stores RPMs in the `rpms-signed` repository (matching `pulp_results.json` distribution URLs and CLI docs); previously RPMs were added to `rpms` while URLs pointed at `rpms-signed`
 - Large RPM uploads no longer fail with `httpx.WriteTimeout` at the previous 120-second write limit (e.g. large debuginfo packages in sign-and-verify pipelines) ([b4cb414](https://github.com/konflux-ci/pulp-tool/commit/b4cb414))
+- `pull --transfer-dest` reuses destination `RepositoryRefs` from the initial setup instead of calling `setup_repositories` again during upload (fixes Pulp HTTP 400 unique repository name on side-tag transfer) ([6e0cb3f](https://github.com/konflux-ci/pulp-tool/commit/6e0cb3f))
+- Side-tag ORAS publish reuses the side-tag distribution URL from the upload step instead of creating the side-tag RPM repository twice ([6e0cb3f](https://github.com/konflux-ci/pulp-tool/commit/6e0cb3f))
+- Repository create treats HTTP 400 “name must be unique” as idempotent get-existing, consistent with distribution create ([6e0cb3f](https://github.com/konflux-ci/pulp-tool/commit/6e0cb3f))
 
 ## [1.1.0] - 2026-08-25
 
