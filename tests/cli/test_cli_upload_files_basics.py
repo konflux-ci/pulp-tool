@@ -102,6 +102,42 @@ class TestUploadFilesCommandBasics:
 
     @patch("pulp_tool.cli.upload_files.PulpClient")
     @patch("pulp_tool.cli.upload_files.PulpHelper")
+    def test_upload_files_passes_oci_storage_flag(self, mock_helper_class, mock_client_class, tmp_path: Path) -> None:
+        mock_client = Mock()
+        mock_client_class.create_from_config_file.return_value = mock_client
+        mock_helper = Mock()
+        mock_helper_class.return_value = mock_helper
+        mock_helper.setup_repositories.return_value = Mock()
+        mock_helper.process_file_uploads.return_value = "https://example.com/results.json"
+        rpm = tmp_path / "test.rpm"
+        rpm.write_bytes(b"rpm")
+        config = tmp_path / "cli.toml"
+        config.write_text("[cli]\nbase_url = 'https://pulp.example.com'\n")
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            [
+                "--build-id",
+                "b",
+                "--namespace",
+                "ns",
+                "--config",
+                str(config),
+                "upload-files",
+                "--parent-package",
+                "pkg",
+                "--rpm",
+                str(rpm),
+                "--oci-storage",
+                "quay.io/ns/repo:latest",
+            ],
+        )
+        assert result.exit_code == 0
+        context = mock_helper.process_file_uploads.call_args[0][1]
+        assert context.oci_storage == "quay.io/ns/repo:latest"
+
+    @patch("pulp_tool.cli.upload_files.PulpClient")
+    @patch("pulp_tool.cli.upload_files.PulpHelper")
     def test_upload_files_success(self, mock_helper_class, mock_client_class) -> None:
         """Test successful upload-files flow with all file types."""
         runner = CliRunner()

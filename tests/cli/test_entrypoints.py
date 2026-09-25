@@ -14,14 +14,14 @@ def test_pulp_tool_commands_entrypoints_resolve() -> None:
     if not eps:
         pytest.skip("package metadata not installed; CLI uses built-in command fallback")
     names = {ep.name for ep in eps}
-    assert names == {"upload", "upload_files", "pull", "search_by", "create_repository"}
+    assert names == {"upload-build", "upload", "upload_files", "pull", "search_by", "create_repository"}
     for ep in eps:
         cmd = ep.load()
         assert cmd.name is not None
 
 
 def test_cli_has_all_subcommands() -> None:
-    expected = {"upload", "upload-files", "pull", "search-by", "create-repository"}
+    expected = {"upload-build", "upload", "upload-files", "pull", "search-by", "create-repository"}
     assert set(cli.commands.keys()) == expected
 
 
@@ -50,4 +50,11 @@ def test_register_entrypoint_commands_builtin_fallback_when_no_eps() -> None:
     g = click.Group()
     with patch("pulp_tool.cli.entry_points", return_value=[]):
         _register_entrypoint_commands(g)
-    assert set(g.commands.keys()) == {"upload", "upload-files", "pull", "search-by", "create-repository"}
+    assert set(g.commands.keys()) == {
+        "upload-build",
+        "upload",
+        "upload-files",
+        "pull",
+        "search-by",
+        "create-repository",
+    }

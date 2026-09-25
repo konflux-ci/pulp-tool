@@ -100,13 +100,13 @@ class TestUploadRpms:
                 date="2024-01-01 00:00:00",
                 results_model=results_model,
             )
-            assert result == ["/resource/1", "/resource/2"]
+            assert result == ["/rpm/artifact/1", "/rpm/artifact/2"]
             assert results_model.uploaded_counts.rpms == 2
             mock_pulp_client.add_content.assert_called_once_with(
                 "/test/rpm-href", ["/rpm/artifact/1", "/rpm/artifact/2"]
             )
             mock_logging.debug.assert_any_call("Adding %s RPM artifacts to repository", 2)
-            mock_logging.debug.assert_any_call("Captured %d created resources from RPM add_content", 2)
+            mock_logging.debug.assert_any_call("Recorded %d RPM content href(s) for results gather fallback", 2)
 
     def test_upload_rpms_with_distribution_urls_adds_each_to_results(self, mock_pulp_client) -> None:
         """Passing distribution_urls records each uploaded RPM in results (incremental JSON)."""
@@ -254,7 +254,7 @@ class TestUploadRpms:
         mock_remove.assert_called_once_with(mock_pulp_client, ["/path/to/package.rpm"], "/test/rpm-href", "sig-1")
 
     def test_upload_rpms_no_created_resources(self, mock_pulp_client) -> None:
-        """Test upload_rpms without created resources (lines 225-227, but not 229-231)."""
+        """RPM content hrefs are returned even when add_content task reports no created_resources."""
         from pulp_tool.models.context import UploadRpmContext
         from pulp_tool.models.pulp_api import TaskResponse
         from pulp_tool.models.results import PulpResultsModel, RepositoryRefs
@@ -296,11 +296,10 @@ class TestUploadRpms:
                 date="2024-01-01 00:00:00",
                 results_model=results_model,
             )
-            assert result == []
+            assert result == ["/rpm/artifact/1"]
             assert results_model.uploaded_counts.rpms == 1
             mock_pulp_client.add_content.assert_called_once_with("/test/rpm-href", ["/rpm/artifact/1"])
-            debug_calls = [str(call) for call in mock_logging.debug.call_args_list]
-            assert not any("Captured" in call for call in debug_calls)
+            mock_logging.debug.assert_any_call("Recorded %d RPM content href(s) for results gather fallback", 1)
 
     def test_upload_rpms_empty_artifacts(self, mock_pulp_client) -> None:
         """Test upload_rpms with empty rpm_results_artifacts (not hitting lines 225-227)."""

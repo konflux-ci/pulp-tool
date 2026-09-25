@@ -8,6 +8,7 @@ from unittest.mock import Mock, patch
 import httpx
 import pytest
 
+from pulp_tool.exceptions import PulpToolHTTPError
 from pulp_tool.models.pulp_api import RpmRepositoryRequest, TaskResponse
 from pulp_tool.utils.repository_manager import RepositoryApiOps, RepositoryManager, _resource_log_label
 
@@ -68,6 +69,64 @@ class TestRepositoryManagerCreateNewRepository:
         with pytest.raises(ValueError) as exc_info:
             manager._create_new_repository(methods, new_repo, "rpms")
         assert "No rpms repository found after creation" in str(exc_info.value)
+
+    def test_create_new_repository_uniqueness_conflict(self) -> None:
+        """Test _create_new_repository uses existing repo when create returns HTTP 400 unique name."""
+        mock_client = Mock()
+        mock_client.namespace = "test-namespace"
+        manager = RepositoryManager(mock_client)
+        conflict_response = Mock()
+        conflict_response.status_code = 400
+        conflict_response.text = '{"name":["This field must be unique."]}'
+
+        def check_response(_response: object, msg: str) -> None:
+            if "create" in msg:
+                raise PulpToolHTTPError("Failed to create resource", response=conflict_response)
+
+        mock_client.check_response = check_response
+        existing_response = Mock()
+        existing_response.status_code = 200
+        existing_response.json.return_value = {
+            "results": [{"prn": "existing-prn", "pulp_href": "existing-href"}],
+        }
+        methods = cast(
+            RepositoryApiOps,
+            SimpleNamespace(
+                create=Mock(return_value=Mock()),
+                get=Mock(return_value=existing_response),
+            ),
+        )
+        new_repo = RpmRepositoryRequest(name="test-build/logs")
+        prn, href = manager._create_new_repository(methods, new_repo, "logs")
+        assert prn == "existing-prn"
+        assert href == "existing-href"
+
+    def test_create_new_repository_uniqueness_conflict_reraises_when_not_found(self) -> None:
+        """HTTP 400 unique name with no matching repo re-raises the create error."""
+        mock_client = Mock()
+        mock_client.namespace = "test-namespace"
+        manager = RepositoryManager(mock_client)
+        conflict_response = Mock()
+        conflict_response.status_code = 400
+        conflict_response.text = '{"name":["This field must be unique."]}'
+
+        def check_response(_response: object, msg: str) -> None:
+            if "create" in msg:
+                raise PulpToolHTTPError("Failed to create resource", response=conflict_response)
+
+        mock_client.check_response = check_response
+        missing_response = Mock()
+        missing_response.status_code = 404
+        methods = cast(
+            RepositoryApiOps,
+            SimpleNamespace(
+                create=Mock(return_value=Mock()),
+                get=Mock(return_value=missing_response),
+            ),
+        )
+        new_repo = RpmRepositoryRequest(name="test-build/logs")
+        with pytest.raises(PulpToolHTTPError, match="Failed to create resource"):
+            manager._create_new_repository(methods, new_repo, "logs")
 
     def test_create_new_repository_unexpected_format(self) -> None:
         """Test _create_new_repository with unexpected response format (line 212)."""

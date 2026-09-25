@@ -7,7 +7,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from names import file_repos_for_run, resolve_run_id, rpm_repos_for_run
+from names import file_repos_for_run, normalize_oci_storage, resolve_run_id, rpm_repos_for_run
 
 
 def verify_content(config_path: Path, repo_type: str, name: str, expected_content: list[str]) -> bool:
@@ -95,7 +95,7 @@ def verify_content(config_path: Path, repo_type: str, name: str, expected_conten
         return False
 
 
-def verify_repos(config_path: Path, run_id: str | None) -> int:
+def verify_repos(config_path: Path, run_id: str | None, oci_storage: str | None) -> int:
     """Verify all test repositories contain expected content.
 
     Args:
@@ -105,8 +105,8 @@ def verify_repos(config_path: Path, run_id: str | None) -> int:
     Returns:
         Exit code (0 for success, 1 if any failures occurred)
     """
-    rpm_repos = rpm_repos_for_run(run_id)
-    file_repos = file_repos_for_run(run_id)
+    rpm_repos = rpm_repos_for_run(run_id, oci_storage)
+    file_repos = file_repos_for_run(run_id, oci_storage)
 
     if run_id:
         print(f"=== Verifying repository content (run id: {run_id}) ===\n")
@@ -148,6 +148,11 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Run suffix used during e2e tests (default: E2E_RUN_ID env var)",
     )
+    parser.add_argument(
+        "--oci-storage",
+        default=None,
+        help="OCI registry for ORAS e2e (must match test-pulp-tool.py; Konflux ociStorage)",
+    )
     return parser.parse_args()
 
 
@@ -161,7 +166,8 @@ def main() -> int:
 
     config_path = args.config.resolve()
     run_id = resolve_run_id(args.run_id)
-    return verify_repos(config_path, run_id)
+    oci_storage = normalize_oci_storage(args.oci_storage)
+    return verify_repos(config_path, run_id, oci_storage or None)
 
 
 if __name__ == "__main__":

@@ -17,6 +17,7 @@ from ..utils import PulpHelper, determine_build_id, extract_metadata_from_artifa
 from ..utils.error_handling import handle_generic_error
 from ..utils.pulp_tasks import create_file_content_and_wait, wait_for_successful_task
 from ..utils.rpm_operations import upload_rpms_parallel
+from .reporting import _log_upload_summary
 
 
 def _upload_sboms_and_logs(
@@ -134,7 +135,11 @@ def _upload_rpms_to_repository(
 
 
 def upload_downloaded_files_to_pulp(
-    pulp_client: PulpClient, pulled_artifacts: PulledArtifacts, args: PullContext
+    pulp_client: PulpClient,
+    pulled_artifacts: PulledArtifacts,
+    args: PullContext,
+    *,
+    repositories: RepositoryRefs | None = None,
 ) -> PulpResultsModel:
     """
     Upload downloaded files to the appropriate Pulp repositories.
@@ -143,6 +148,7 @@ def upload_downloaded_files_to_pulp(
         pulp_client: PulpClient instance for API interactions
         pulled_artifacts: Dictionary containing downloaded artifacts organized by type
         args: Pull context with command arguments
+        repositories: Optional pre-created destination repositories (avoids duplicate setup)
 
     Returns:
         PulpResultsModel containing upload information including repository details
@@ -154,9 +160,9 @@ def upload_downloaded_files_to_pulp(
     # Initialize PulpHelper to get repository information
     helper = PulpHelper(pulp_client, parent_package=parent_package)
 
-    # Determine build ID and setup repositories
     build_id = determine_build_id(args, pulled_artifacts=pulled_artifacts)  # type: ignore[arg-type]
-    repositories = helper.setup_repositories(build_id)
+    if repositories is None:
+        repositories = helper.setup_repositories(build_id)
 
     # Initialize upload tracking with unified model
     upload_info = PulpResultsModel(build_id=build_id, repositories=repositories)
@@ -164,9 +170,6 @@ def upload_downloaded_files_to_pulp(
     # Upload different artifact types
     _upload_sboms_and_logs(pulp_client, pulled_artifacts, repositories, upload_info)
     _upload_rpms_to_repository(pulp_client, pulled_artifacts, repositories, upload_info)
-
-    # Log upload summary at WARNING level so it's always visible
-    from .reporting import _log_upload_summary
 
     _log_upload_summary(upload_info)
 

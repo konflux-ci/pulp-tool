@@ -24,6 +24,7 @@ class UploadContext(KonfluxBaseModel):
         debug: Verbosity level (0=WARNING, 1=INFO, 2=DEBUG, 3+=DEBUG with HTTP logs)
         artifact_results: Konflux ``url_path,digest_path``, or a single folder path to write ``pulp_results.json``
             locally (no comma); local folder also skips artifacts repo and ``artifacts`` distribution URLs in JSON
+        oci_storage: OCI registry (``--oci-storage`` or ``cli.oci_storage``) for ORAS ``pulp_results.json`` publish
         sbom_results: Optional path to write SBOM results
         skip_logs_repo: When True, logs repo was not created; omit logs distribution URLs
         skip_sbom_repo: When True, SBOM repo was not created; omit sbom distribution URLs
@@ -36,6 +37,7 @@ class UploadContext(KonfluxBaseModel):
     config: str | None = None
     debug: int = 0
     artifact_results: str | None = None
+    oci_storage: str | None = None
     sbom_results: str | None = None
     skip_logs_repo: bool = False
     skip_sbom_repo: bool = False
@@ -93,6 +95,11 @@ class PullContext(KonfluxBaseModel):
         transfer_dest: If set, path from ``--transfer-dest``; repository/distribution setup and upload use this
                             (``--config`` alone supplies auth/URL without creating destination repos)
         build_id: Optional build identifier (can be used for override or with namespace for URL generation)
+        side_tag: Optional side-tag name for extra ROK RPM promotion (requires transfer_dest)
+        artifact_results: Konflux ``url_path,digest_path`` for OCI manifest Tekton results after side-tag transfer
+        oci_storage: OCI registry target (--oci-storage or cli.oci_storage) for ORAS push
+        snapshot_path: Optional Konflux release snapshot JSON to update with pulpResultsOciManifest
+        cluster: Cluster identity from config (cli.cluster) for origin_cluster labels
         debug: Verbosity level (0=WARNING, 1=INFO, 2=DEBUG, 3+=DEBUG with HTTP logs)
         max_workers: Maximum number of concurrent workers
         content_types: Optional list of content types to filter (rpm, log, sbom)
@@ -105,6 +112,11 @@ class PullContext(KonfluxBaseModel):
     config: str | None = None
     transfer_dest: str | None = None
     build_id: str | None = None
+    side_tag: str | None = None
+    artifact_results: str | None = None
+    oci_storage: str | None = None
+    snapshot_path: str | None = None
+    cluster: str | None = None
     debug: int = 0
     max_workers: int = Field(default=10, ge=1, le=100)
     content_types: list[str] | None = None

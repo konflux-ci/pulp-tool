@@ -7,6 +7,8 @@ This module provides the pull command for downloading artifacts and optionally r
 import logging
 import os
 import sys
+import tempfile
+from pathlib import Path
 
 import click
 import httpx
@@ -20,15 +22,24 @@ from ..pull import (
     setup_repositories_if_needed,
     upload_downloaded_files_to_pulp,
 )
+from ..pull.publish import publish_side_tag_results
+from ..pull.side_tag import upload_rpms_to_side_tag_repository
 from ..utils import setup_logging
 from ..utils.config_manager import ConfigManager
 from ..utils.error_handling import handle_generic_error, handle_http_error
+from ..utils.oci_pull import is_oci_artifact_reference, pull_pulp_results_json
+from ..utils.oci_storage_resolve import resolve_oci_storage
+from ..utils.oras_publish import OrasPublishError
+from ..utils.validation.build_id import sanitize_build_id_for_repository, strip_namespace_from_build_id
 
 
 @click.command()
 @click.option(
     "--artifact-location",
-    help="Path to local artifact metadata JSON file or HTTP URL. Mutually exclusive with --build-id + --namespace.",
+    help=(
+        "Path to pulp_results.json, Pulp content HTTPS URL, or OCI manifest ref (repo@sha256:… or oci:…). "
+        "Mutually exclusive with --build-id + --namespace."
+    ),
 )
 @click.option(
     "--content-types",
@@ -68,6 +79,32 @@ from ..utils.error_handling import handle_generic_error, handle_http_error
         "If not set, auth is loaded from --transfer-dest or --config."
     ),
 )
+@click.option(
+    "--side-tag",
+    help=(
+        "Side-tag name for an extra ROK RPM repository/distribution during transfer. "
+        "Requires --transfer-dest and --oci-storage or cli.oci_storage."
+    ),
+)
+@click.option(
+    "--oci-storage",
+    help="OCI registry for ORAS publish (Konflux ociStorage); overrides cli.oci_storage in --transfer-dest.",
+)
+@click.option(
+    "--artifact-results",
+    help=(
+        "Konflux comma-separated paths (url_path,digest_path) for OCI manifest Tekton results after side-tag transfer."
+    ),
+)
+@click.option(
+    "--snapshot-path",
+    type=click.Path(),
+    help=(
+        "Path to Konflux release snapshot JSON in the trusted-artifact workspace. "
+        "After ORAS publish, sets pulpResultsOciManifest for a following "
+        "create-trusted-artifact step."
+    ),
+)
 @click.pass_context
 def pull(  # pylint: disable=too-many-positional-arguments
     ctx: click.Context,
@@ -78,6 +115,10 @@ def pull(  # pylint: disable=too-many-positional-arguments
     key_path: str | None,
     transfer_dest: str | None,
     distribution_config: str | None,
+    side_tag: str | None,
+    artifact_results: str | None,
+    snapshot_path: str | None,
+    oci_storage: str | None,
 ) -> None:
     """Download artifacts and optionally re-upload to Pulp repositories."""
     # Get shared options from context
@@ -89,8 +130,32 @@ def pull(  # pylint: disable=too-many-positional-arguments
 
     setup_logging(debug)
 
-    # Config can come from --transfer-dest or group-level --config (--transfer-dest takes precedence)
-    config_path = transfer_dest or config
+    side_tag_value = (side_tag or "").strip() or None
+    if side_tag_value and not (transfer_dest and transfer_dest.strip()):
+        click.echo("Error: --side-tag requires --transfer-dest", err=True)
+        sys.exit(1)
+    # Destination Pulp API config (--transfer-dest); source metadata/auth uses group-level --config.
+    source_config_path = (config or "").strip() or None
+    dest_config_path = (transfer_dest or "").strip() or None
+    pulp_client_config_path = dest_config_path or source_config_path
+
+    resolved_oci_storage: str | None = None
+    cluster: str | None = None
+    if side_tag_value and transfer_dest:
+        resolved_oci_storage = resolve_oci_storage(oci_storage, transfer_dest)
+        try:
+            transfer_cfg = ConfigManager(transfer_dest)
+            transfer_cfg.load()
+            raw_cluster = transfer_cfg.get("cli.cluster")
+            cluster = str(raw_cluster).strip() if raw_cluster else None
+        except Exception as e:
+            logging.debug("Could not load transfer-dest config for side-tag: %s", e)
+        if not resolved_oci_storage:
+            click.echo(
+                "Error: --oci-storage or cli.oci_storage in --transfer-dest config is required when using --side-tag",
+                err=True,
+            )
+            sys.exit(1)
 
     # Validate mutually exclusive options
     if artifact_location and (namespace or build_id):
@@ -104,32 +169,44 @@ def pull(  # pylint: disable=too-many-positional-arguments
             click.echo("Error: Both --build-id and --namespace must be provided together", err=True)
             sys.exit(1)
 
-        if not config_path:
-            click.echo("Error: --transfer-dest or --config is required when using --build-id and --namespace", err=True)
+        metadata_config_path = source_config_path or dest_config_path
+        if not metadata_config_path:
+            click.echo("Error: --config is required when using --build-id and --namespace", err=True)
             sys.exit(1)
 
-        # Load config to get base_url
-        config_manager = ConfigManager(config_path)
+        # Load source config for content base_url (see cli-reference: --config supplies base_url for auto URL)
+        config_manager = ConfigManager(metadata_config_path)
         config_manager.load()
         base_url = config_manager.get("cli.base_url")
 
         # Construct artifact_location URL
-        artifact_location = f"{base_url}/api/pulp-content/{namespace}/{build_id}/artifacts/pulp_results.json"
+        content_build_id = sanitize_build_id_for_repository(strip_namespace_from_build_id(build_id))
+        artifact_location = f"{base_url}/api/pulp-content/{namespace}/{content_build_id}/artifacts/pulp_results.json"
         logging.info("Auto-generated artifact location: %s", artifact_location)
 
     elif not artifact_location:
         click.echo("Error: Either --artifact-location OR (--build-id AND --namespace) must be provided", err=True)
         sys.exit(1)
 
+    oci_pull_temp: tempfile.TemporaryDirectory[str] | None = None
+    if artifact_location and is_oci_artifact_reference(artifact_location):
+        try:
+            oci_pull_temp = tempfile.TemporaryDirectory(prefix="pulp-tool-oras-pull-")
+            local_json = pull_pulp_results_json(artifact_location, Path(oci_pull_temp.name))
+            logging.info("ORAS-pulled pulp_results.json to %s", local_json)
+            artifact_location = str(local_json)
+        except OrasPublishError as e:
+            click.echo(f"Error: {e}", err=True)
+            sys.exit(1)
+
     # Parse comma-separated filters
     content_types_list = [ct.strip() for ct in content_types.split(",")] if content_types else None
     archs_list = [arch.strip() for arch in archs.split(",")] if archs else None
 
-    # Get auth from --distribution-config, or fall back to --transfer-dest/--config
-    # Source: --distribution-config if set, else config_path
+    # Auth for fetching source pulp_results (distribution); destination creds live in --transfer-dest.
     username: str | None = None
     password: str | None = None
-    auth_config_path = distribution_config or config_path
+    auth_config_path = distribution_config or source_config_path or dest_config_path
     if auth_config_path:
         try:
             config_manager = ConfigManager(auth_config_path)
@@ -175,9 +252,14 @@ def pull(  # pylint: disable=too-many-positional-arguments
         artifact_location=artifact_location,
         namespace=namespace,
         key_path=key_path,
-        config=config_path,
+        config=pulp_client_config_path,
         transfer_dest=transfer_dest,
         build_id=build_id,
+        side_tag=side_tag_value,
+        artifact_results=artifact_results,
+        oci_storage=resolved_oci_storage,
+        snapshot_path=(snapshot_path or "").strip() or None,
+        cluster=cluster,
         debug=debug,
         max_workers=max_workers,
         content_types=content_types_list,
@@ -198,7 +280,8 @@ def pull(  # pylint: disable=too-many-positional-arguments
         artifact_data = load_and_validate_artifacts(args, distribution_client)
 
         # Set up repositories if configuration is provided
-        pulp_client = setup_repositories_if_needed(args, artifact_data.artifact_json)
+        destination_setup = setup_repositories_if_needed(args, artifact_data.artifact_json)
+        pulp_client = destination_setup.client if destination_setup else None
 
         # Process artifacts by type
         distros = artifact_data.get_distributions()
@@ -217,7 +300,27 @@ def pull(  # pylint: disable=too-many-positional-arguments
         upload_info = None
         if pulp_client:
             logging.info("Uploading downloaded files to Pulp repositories...")
-            upload_info = upload_downloaded_files_to_pulp(pulp_client, download_result.pulled_artifacts, args)
+            upload_info = upload_downloaded_files_to_pulp(
+                pulp_client,
+                download_result.pulled_artifacts,
+                args,
+                repositories=destination_setup.repositories if destination_setup else None,
+            )
+            if args.side_tag and upload_info:
+                side_tag_upload = upload_rpms_to_side_tag_repository(
+                    pulp_client,
+                    download_result.pulled_artifacts,
+                    artifact_data,
+                    args,
+                )
+                publish_side_tag_results(
+                    pulp_client,
+                    artifact_data,
+                    args,
+                    upload_info,
+                    side_tag_upload.transfers,
+                    side_tag_distribution_base=side_tag_upload.distribution_base_url,
+                )
         else:
             logging.info("No Pulp client available, skipping upload to repositories")
 
@@ -256,6 +359,8 @@ def pull(  # pylint: disable=too-many-positional-arguments
         handle_generic_error(e, "pull operation")
         sys.exit(1)
     finally:
+        if oci_pull_temp is not None:
+            oci_pull_temp.cleanup()
         # Ensure pulp client session is properly closed if it was created
         if "pulp_client" in locals() and pulp_client:
             pulp_client.close()

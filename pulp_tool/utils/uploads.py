@@ -302,13 +302,13 @@ def upload_rpms(
     if rpm_results_artifacts:
         logging.debug("Adding %s RPM artifacts to repository", len(rpm_results_artifacts))
         rpm_repo_task = client.add_content(rpm_repository_href, rpm_results_artifacts)
-        final_task = wait_for_successful_task(
-            client, rpm_repo_task.pulp_href, f"add RPM content to repository ({arch})"
+        wait_for_successful_task(client, rpm_repo_task.pulp_href, f"add RPM content to repository ({arch})")
+        # Content unit hrefs for gather-by-href fallback (add_content task resources are often repo versions).
+        created_resources.extend(rpm_results_artifacts)
+        logging.debug(
+            "Recorded %d RPM content href(s) for results gather fallback",
+            len(rpm_results_artifacts),
         )
-        # Capture created resources from the task
-        if final_task.created_resources:
-            created_resources.extend(final_task.created_resources)
-            logging.debug("Captured %d created resources from RPM add_content", len(final_task.created_resources))
 
     return created_resources
 

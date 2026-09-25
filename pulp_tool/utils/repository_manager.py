@@ -422,8 +422,20 @@ class RepositoryManager:
             _resource_log_label(new_repository.name),
             new_repository.name,
         )
-        repository_response = methods.create(new_repository)
-        self.client.check_response(repository_response, f"create {repo_type} repository")
+        try:
+            repository_response = methods.create(new_repository)
+            self.client.check_response(repository_response, f"create {repo_type} repository")
+        except PulpToolHTTPError as exc:
+            if exc.response is not None and exc.response.status_code == 400:
+                if _is_distribution_uniqueness_error(exc.response.text):
+                    existing = self._get_existing_repository(methods, new_repository.name, repo_type)
+                    if existing:
+                        logging.warning(
+                            "Repository %s already exists (HTTP 400); using existing",
+                            new_repository.name,
+                        )
+                        return existing
+            raise
 
         # The create response contains the repository details directly
         response_data = self._parse_repository_response(repository_response, repo_type, "create")

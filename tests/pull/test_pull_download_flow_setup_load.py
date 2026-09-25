@@ -96,7 +96,8 @@ class TestSetupRepositories:
             )
             mock_helper_instance.setup_repositories.return_value = mock_repos
             result = setup_repositories_if_needed(args, artifact_json=artifact_json)
-            assert result == mock_client
+            assert result is not None
+            assert result.client == mock_client
             mock_extract.assert_called_once_with(artifact_json, "parent_package")
             mock_helper.assert_called_once_with(mock_client, parent_package="test-package")
 

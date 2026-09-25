@@ -385,3 +385,174 @@ class TestPullCommandFiltersAndTransfer:
             assert call_args.args[5] == ["x86_64"]
         finally:
             os.unlink(artifact_path)
+
+    @patch("pulp_tool.cli.pull.DistributionClient")
+    @patch("pulp_tool.cli.pull.load_and_validate_artifacts")
+    @patch("pulp_tool.cli.pull.setup_repositories_if_needed")
+    @patch("pulp_tool.cli.pull.download_artifacts_concurrently")
+    @patch("pulp_tool.cli.pull.generate_pull_report")
+    def test_pull_artifact_location_oci_manifest_ref(
+        self, mock_report, mock_download, mock_setup, mock_load, mock_dist_client
+    ) -> None:
+        """``--artifact-location`` with OCI manifest ref ORAS-pulls JSON before load."""
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cert_path = Path(tmpdir) / "cert.pem"
+            cert_path.write_text("cert")
+            key_path = Path(tmpdir) / "key.pem"
+            key_path.write_text("key")
+            cfg = Path(tmpdir) / "cfg.toml"
+            cfg.write_text(f'[cli]\nbase_url = "https://pulp.example"\ncert = "{cert_path}"\nkey = "{key_path}"')
+            mock_dist_client_instance = Mock()
+            mock_dist_client_instance.session = Mock()
+            mock_dist_client_instance.session.close = Mock()
+            mock_dist_client.return_value = mock_dist_client_instance
+            local_json = Path(tmpdir) / "pulp_results.json"
+            local_json.write_text('{"artifacts": {}, "distributions": {}}', encoding="utf-8")
+            from pulp_tool.models.artifacts import ArtifactData, ArtifactJsonResponse
+
+            mock_load.return_value = ArtifactData(
+                artifact_json=ArtifactJsonResponse(artifacts={}, distributions={}),
+                artifacts={},
+            )
+            mock_setup.return_value = None
+            mock_result = Mock()
+            mock_result.pulled_artifacts = Mock()
+            mock_result.completed = 0
+            mock_result.failed = 0
+            mock_download.return_value = mock_result
+            oci_ref = "quay.io/ns/repo@sha256:abc123"
+            with patch("pulp_tool.cli.pull.pull_pulp_results_json", return_value=local_json) as mock_oras_pull:
+                result = runner.invoke(
+                    cli,
+                    [
+                        "--config",
+                        str(cfg),
+                        "pull",
+                        "--artifact-location",
+                        oci_ref,
+                    ],
+                )
+            assert result.exit_code == 0
+            mock_oras_pull.assert_called_once()
+            pull_ctx = mock_load.call_args.args[0]
+            assert pull_ctx.artifact_location == str(local_json)
+
+    def test_pull_artifact_location_oci_ref_oras_failure_exits(self) -> None:
+        """ORAS pull errors on OCI ``--artifact-location`` are reported and exit non-zero."""
+        from pulp_tool.utils.oras_publish import OrasPublishError
+
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cfg = Path(tmpdir) / "cfg.toml"
+            cfg.write_text('[cli]\nbase_url = "https://pulp.example"\n')
+            oci_ref = "quay.io/ns/repo@sha256:abc123"
+            with patch(
+                "pulp_tool.cli.pull.pull_pulp_results_json",
+                side_effect=OrasPublishError("oras pull failed (exit 1): denied"),
+            ):
+                result = runner.invoke(
+                    cli,
+                    ["--config", str(cfg), "pull", "--artifact-location", oci_ref],
+                )
+            assert result.exit_code == 1
+            assert "oras pull failed" in result.output
+
+    def test_pull_side_tag_without_transfer_dest(self) -> None:
+        runner = CliRunner()
+        result = runner.invoke(cli, ["pull", "--side-tag", "mytest", "--artifact-results", "/u,/d"])
+        assert result.exit_code == 1
+        assert "--side-tag requires --transfer-dest" in result.output
+
+    def test_pull_side_tag_without_oci_storage(self) -> None:
+        runner = CliRunner()
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as cfg:
+            cfg.write("[cli]\nbase_url = 'https://pulp.example'\n")
+            cfg_path = cfg.name
+        try:
+            result = runner.invoke(
+                cli,
+                ["pull", "--transfer-dest", cfg_path, "--side-tag", "mytest"],
+            )
+            assert result.exit_code == 1
+            assert "oci_storage" in result.output
+        finally:
+            os.unlink(cfg_path)
+
+    @patch("pulp_tool.cli.pull.ConfigManager")
+    def test_pull_side_tag_config_load_exception(self, mock_config_manager) -> None:
+        runner = CliRunner()
+        mock_config_manager.side_effect = OSError("cannot read config")
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as cfg:
+            cfg.write("[cli]\n")
+            cfg_path = cfg.name
+        try:
+            result = runner.invoke(
+                cli,
+                [
+                    "pull",
+                    "--transfer-dest",
+                    cfg_path,
+                    "--side-tag",
+                    "mytest",
+                    "--artifact-results",
+                    "/tmp/url,/tmp/digest",
+                ],
+            )
+            assert result.exit_code == 1
+            assert "oci_storage" in result.output
+        finally:
+            os.unlink(cfg_path)
+
+    def test_pull_side_tag_without_oci_storage_in_config(self) -> None:
+        runner = CliRunner()
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as cfg:
+            cfg.write("[cli]\nbase_url = 'https://pulp.example'\n")
+            cfg_path = cfg.name
+        try:
+            result = runner.invoke(
+                cli,
+                [
+                    "pull",
+                    "--transfer-dest",
+                    cfg_path,
+                    "--side-tag",
+                    "mytest",
+                    "--artifact-results",
+                    "/tmp/url,/tmp/digest",
+                ],
+            )
+            assert result.exit_code == 1
+            assert "oci_storage" in result.output
+        finally:
+            os.unlink(cfg_path)
+
+    def test_pull_side_tag_oci_storage_flag_without_config_key(self) -> None:
+        """Konflux passes ociStorage as --oci-storage; config need not define cli.oci_storage."""
+        runner = CliRunner()
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as cfg:
+            cfg.write("[cli]\nbase_url = 'https://pulp.example'\n")
+            cfg_path = cfg.name
+        try:
+            result = runner.invoke(
+                cli,
+                [
+                    "--build-id",
+                    "b1",
+                    "--namespace",
+                    "ns",
+                    "--config",
+                    cfg_path,
+                    "pull",
+                    "--transfer-dest",
+                    cfg_path,
+                    "--side-tag",
+                    "mytest",
+                    "--oci-storage",
+                    "quay.io/ns/repo:latest",
+                ],
+            )
+            assert "cli.oci_storage is required" not in result.output
+            assert "--oci-storage or cli.oci_storage" not in result.output
+        finally:
+            os.unlink(cfg_path)

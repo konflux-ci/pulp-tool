@@ -63,8 +63,8 @@ class TestUploadCommandPathsAndSuccess:
             )
             assert result.exit_code != 0
 
-    @patch("pulp_tool.cli.upload.PulpClient")
-    @patch("pulp_tool.cli.upload.PulpHelper")
+    @patch("pulp_tool.cli.upload_build.PulpClient")
+    @patch("pulp_tool.cli.upload_build.PulpHelper")
     def test_upload_success(self, mock_helper_class, mock_client_class) -> None:
         """Test successful upload flow."""
         runner = CliRunner()
@@ -117,8 +117,8 @@ class TestUploadCommandPathsAndSuccess:
             assert result.exit_code == 0
             assert "RESULTS JSON:" in result.output
 
-    @patch("pulp_tool.cli.upload.PulpClient")
-    @patch("pulp_tool.cli.upload.PulpHelper")
+    @patch("pulp_tool.cli.upload_build.PulpClient")
+    @patch("pulp_tool.cli.upload_build.PulpHelper")
     def test_upload_target_arch_repo_flag(self, mock_helper_class, mock_client_class) -> None:
         """--target-arch-repo is passed to setup_repositories and UploadRpmContext."""
         runner = CliRunner()
@@ -183,8 +183,8 @@ class TestUploadCommandPathsAndSuccess:
             assert context.skip_logs_repo is True
             assert context.skip_sbom_repo is False
 
-    @patch("pulp_tool.cli.upload.PulpClient")
-    @patch("pulp_tool.cli.upload.PulpHelper")
+    @patch("pulp_tool.cli.upload_build.PulpClient")
+    @patch("pulp_tool.cli.upload_build.PulpHelper")
     def test_upload_with_base64_config(self, mock_helper_class, mock_client_class) -> None:
         """Test upload command with base64-encoded config."""
         runner = CliRunner()
@@ -248,8 +248,8 @@ class TestUploadCommandPathsAndSuccess:
             assert config_path is not None
             assert config_path == base64_config
 
-    @patch("pulp_tool.cli.upload.PulpClient")
-    @patch("pulp_tool.cli.upload.PulpHelper")
+    @patch("pulp_tool.cli.upload_build.PulpClient")
+    @patch("pulp_tool.cli.upload_build.PulpHelper")
     def test_upload_with_artifact_results(self, mock_helper_class, mock_client_class) -> None:
         """Test upload with artifact results output."""
         runner = CliRunner()
@@ -305,8 +305,8 @@ class TestUploadCommandPathsAndSuccess:
             )
             assert result.exit_code == 0
 
-    @patch("pulp_tool.cli.upload.PulpClient")
-    @patch("pulp_tool.cli.upload.PulpHelper")
+    @patch("pulp_tool.cli.upload_build.PulpClient")
+    @patch("pulp_tool.cli.upload_build.PulpHelper")
     def test_upload_with_artifact_results_folder(self, mock_helper_class, mock_client_class) -> None:
         """Test upload with --artifact-results as folder path (saves locally, skips Pulp upload)."""
         runner = CliRunner()
@@ -363,3 +363,126 @@ class TestUploadCommandPathsAndSuccess:
             assert result.exit_code == 0
             assert "RESULTS JSON:" in result.output
             assert expected_path in result.output
+
+    @patch("pulp_tool.cli.upload_build.resolve_oci_storage")
+    @patch("pulp_tool.cli.upload_build.PulpClient")
+    @patch("pulp_tool.cli.upload_build.PulpHelper")
+    def test_upload_build_echoes_konflux_oci_results(
+        self, mock_helper_class, mock_client_class, mock_resolve, tmp_path: Path
+    ) -> None:
+        mock_resolve.return_value = "quay.io/ns/repo:latest"
+        mock_client = Mock()
+        mock_client.close = Mock()
+        mock_client_class.create_from_config_file.return_value = mock_client
+        mock_helper = Mock()
+        mock_helper.setup_repositories.return_value = Mock()
+        mock_helper.process_uploads.return_value = "https://example.com/results.json"
+        mock_helper_class.return_value = mock_helper
+        url_path = tmp_path / "image_url"
+        digest_path = tmp_path / "image_digest"
+        url_path.write_text("quay.io/ns/repo:tag", encoding="utf-8")
+        digest_path.write_text("sha256:abc", encoding="utf-8")
+        rpm = tmp_path / "pkg.rpm"
+        rpm.write_bytes(b"rpm")
+        config = tmp_path / "cli.toml"
+        config.write_text("[cli]\nbase_url = 'https://pulp.example.com'\n", encoding="utf-8")
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            [
+                "--build-id",
+                "b",
+                "--namespace",
+                "ns",
+                "--config",
+                str(config),
+                "upload-build",
+                "--rpm-path",
+                str(tmp_path),
+                "--oci-storage",
+                "quay.io/ns/repo:latest",
+                "--artifact-results",
+                f"{url_path},{digest_path}",
+            ],
+        )
+        assert result.exit_code == 0
+        assert "KONFLUX OCI IMAGE URL: quay.io/ns/repo:tag" in result.output
+        assert "KONFLUX OCI IMAGE DIGEST: sha256:abc" in result.output
+
+    @patch("pulp_tool.cli.upload_build.resolve_oci_storage")
+    @patch("pulp_tool.cli.upload_build.PulpClient")
+    @patch("pulp_tool.cli.upload_build.PulpHelper")
+    def test_upload_build_oras_note_without_artifact_results(
+        self, mock_helper_class, mock_client_class, mock_resolve, tmp_path: Path
+    ) -> None:
+        mock_resolve.return_value = "quay.io/ns/repo:latest"
+        mock_client = Mock()
+        mock_client.close = Mock()
+        mock_client_class.create_from_config_file.return_value = mock_client
+        mock_helper = Mock()
+        mock_helper.setup_repositories.return_value = Mock()
+        mock_helper.process_uploads.return_value = "https://example.com/results.json"
+        mock_helper_class.return_value = mock_helper
+        rpm = tmp_path / "pkg.rpm"
+        rpm.write_bytes(b"rpm")
+        config = tmp_path / "cli.toml"
+        config.write_text("[cli]\nbase_url = 'https://pulp.example.com'\n", encoding="utf-8")
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            [
+                "--build-id",
+                "b",
+                "--namespace",
+                "ns",
+                "--config",
+                str(config),
+                "upload-build",
+                "--rpm-path",
+                str(tmp_path),
+                "--oci-storage",
+                "quay.io/ns/repo:latest",
+            ],
+        )
+        assert result.exit_code == 0
+        assert "PULP-IMAGE_URL / PULP-IMAGE_DIGEST" in result.output
+
+    @patch("pulp_tool.cli.upload_build.resolve_oci_storage")
+    @patch("pulp_tool.cli.upload_build.PulpClient")
+    @patch("pulp_tool.cli.upload_build.PulpHelper")
+    def test_upload_build_skips_konflux_echo_when_result_files_missing(
+        self, mock_helper_class, mock_client_class, mock_resolve, tmp_path: Path
+    ) -> None:
+        mock_resolve.return_value = "quay.io/ns/repo:latest"
+        mock_client = Mock()
+        mock_client.close = Mock()
+        mock_client_class.create_from_config_file.return_value = mock_client
+        mock_helper = Mock()
+        mock_helper.setup_repositories.return_value = Mock()
+        mock_helper.process_uploads.return_value = "https://example.com/results.json"
+        mock_helper_class.return_value = mock_helper
+        rpm = tmp_path / "pkg.rpm"
+        rpm.write_bytes(b"rpm")
+        config = tmp_path / "cli.toml"
+        config.write_text("[cli]\nbase_url = 'https://pulp.example.com'\n", encoding="utf-8")
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            [
+                "--build-id",
+                "b",
+                "--namespace",
+                "ns",
+                "--config",
+                str(config),
+                "upload-build",
+                "--rpm-path",
+                str(tmp_path),
+                "--oci-storage",
+                "quay.io/ns/repo:latest",
+                "--artifact-results",
+                f"{tmp_path / 'missing-url'},{tmp_path / 'missing-digest'}",
+            ],
+        )
+        assert result.exit_code == 0
+        assert "KONFLUX OCI IMAGE URL" not in result.output

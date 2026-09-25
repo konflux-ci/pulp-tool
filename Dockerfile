@@ -4,6 +4,9 @@
 # Multi-stage layout: builder installs deps (network); runtime copies /app/install
 # only so the final image has no uv/pip fetch steps and fewer microdnf packages.
 
+# ORAS CLI + select-oci-auth (Konflux release-service-utils pattern).
+FROM quay.io/konflux-ci/oras:latest@sha256:6cea0b9e142c2e18429f5cd30d716715d932047cbf1631334c5c31f7e47c3a19 AS oras
+
 FROM registry.access.redhat.com/ubi10/ubi-minimal:10.2-1789645153 AS builder
 
 ARG VERSION=1.0.0
@@ -55,6 +58,12 @@ RUN microdnf install -y \
         python3 \
         shadow-utils && \
     microdnf clean all
+
+COPY --from=oras /usr/bin/oras /usr/bin/oras
+COPY --from=oras /usr/bin/yq /usr/bin/yq
+COPY --from=oras /usr/local/bin/select-oci-auth /usr/local/bin/select-oci-auth
+COPY --from=oras /usr/local/bin/get-reference-base /usr/local/bin/get-reference-base
+RUN oras version && yq --version && test -x /usr/local/bin/select-oci-auth && test -x /usr/local/bin/get-reference-base
 
 COPY --from=builder /app/install /app/install
 

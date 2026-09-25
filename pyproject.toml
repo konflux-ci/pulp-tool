@@ -67,6 +67,7 @@ dev = [
 pulp-tool = "pulp_tool.cli:main"
 
 [project.entry-points."pulp_tool.commands"]
+upload-build = "pulp_tool.cli.upload_build:upload_build"
 upload = "pulp_tool.cli.upload:upload"
 upload_files = "pulp_tool.cli.upload_files:upload_files"
 pull = "pulp_tool.cli.pull:pull"

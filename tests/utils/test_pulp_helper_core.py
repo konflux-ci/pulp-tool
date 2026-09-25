@@ -40,6 +40,36 @@ class TestPulpHelperRepositoryMethods:
         assert callable(methods.wait_for_finished_task)
 
 
+class TestPulpHelperSideTagRepository:
+    """Side-tag RPM repository helper."""
+
+    def test_ensure_side_tag_rpm_repository(self, mock_pulp_client) -> None:
+        helper = PulpHelper(mock_pulp_client)
+        captured_distro = None
+
+        def _capture_create(_build_id, _repo_type, new_repository=None, new_distribution=None):
+            nonlocal captured_distro
+            captured_distro = new_distribution
+            return ("prn:rpm", "/pulp/rpm/href/")
+
+        with (
+            patch.object(helper, "create_or_get_repository", side_effect=_capture_create),
+            patch.object(helper, "distribution_url_for_base_path", return_value="https://pulp.example/ns/side-tag-t/"),
+        ):
+            href, url = helper.ensure_side_tag_rpm_repository("build-1", "t")
+        assert href == "/pulp/rpm/href/"
+        assert "side-tag-t" in url
+        assert captured_distro is not None
+        assert captured_distro.base_path == "build-1/side-tag-t"
+        assert captured_distro.name == "build-1/side-tag-t"
+
+    def test_ensure_side_tag_rpm_repository_missing_href(self, mock_pulp_client) -> None:
+        helper = PulpHelper(mock_pulp_client)
+        with patch.object(helper, "create_or_get_repository", return_value=("prn:rpm", None)):
+            with pytest.raises(RuntimeError, match="No repository href"):
+                helper.ensure_side_tag_rpm_repository("build-1", "t")
+
+
 class TestPulpHelperRepositorySetup:
     """Test PulpHelper repository setup methods."""
 

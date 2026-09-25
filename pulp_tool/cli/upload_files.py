@@ -16,6 +16,7 @@ from ..api import PulpClient
 from ..models.context import UploadFilesContext
 from ..utils import PulpHelper, setup_logging
 from ..utils.error_handling import handle_generic_error, handle_http_error
+from ..utils.oci_storage_resolve import resolve_oci_storage
 
 
 @click.command(name="upload-files")
@@ -64,6 +65,10 @@ from ..utils.error_handling import handle_generic_error, handle_http_error
     ),
 )
 @click.option(
+    "--oci-storage",
+    help="OCI registry for ORAS publish (Konflux ociStorage); overrides cli.oci_storage in config.",
+)
+@click.option(
     "--sbom-results",
     type=click.Path(),
     help="Path to write SBOM results",
@@ -78,6 +83,7 @@ def upload_files(  # pylint: disable=too-many-arguments,too-many-positional-argu
     sbom_files: tuple,
     arch: str | None,
     artifact_results: str | None,
+    oci_storage: str | None,
     sbom_results: str | None,
 ) -> None:
     """Upload individual files (RPMs, logs, SBOMs, and generic files) to Pulp repositories."""
@@ -113,6 +119,8 @@ def upload_files(  # pylint: disable=too-many-arguments,too-many-positional-argu
         )
         date_str = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
 
+        resolved_oci_storage = resolve_oci_storage(oci_storage, config)
+
         # Convert tuples to lists
         rpm_files_list = list(rpm_files)
         file_files_list = list(file_files)
@@ -134,6 +142,7 @@ def upload_files(  # pylint: disable=too-many-arguments,too-many-positional-argu
             arch=arch,
             config=config,
             artifact_results=artifact_results,
+            oci_storage=resolved_oci_storage,
             sbom_results=sbom_results,
             debug=debug,
             skip_logs_repo=skip_logs_repo,

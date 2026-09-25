@@ -14,7 +14,7 @@ from pulp_tool.cli import cli
 class TestUploadCommandErrorsAndResultsJson:
     """Upload command: HTTP errors, results JSON extraction."""
 
-    @patch("pulp_tool.cli.upload.PulpClient")
+    @patch("pulp_tool.cli.upload_build.PulpClient")
     def test_upload_http_error(self, mock_client_class) -> None:
         """Test upload with HTTP error."""
         runner = CliRunner()
@@ -48,7 +48,7 @@ class TestUploadCommandErrorsAndResultsJson:
             )
             assert result.exit_code == 1
 
-    @patch("pulp_tool.cli.upload.PulpClient")
+    @patch("pulp_tool.cli.upload_build.PulpClient")
     def test_upload_auth_http_error_exits_one(self, mock_client_class) -> None:
         """Auth-style HTTP errors exit 1 like other HTTP failures."""
         runner = CliRunner()
@@ -82,7 +82,7 @@ class TestUploadCommandErrorsAndResultsJson:
             )
             assert result.exit_code == 1
 
-    @patch("pulp_tool.cli.upload.PulpClient")
+    @patch("pulp_tool.cli.upload_build.PulpClient")
     def test_upload_runtime_error_no_access_token_exits_one(self, mock_client_class) -> None:
         """OAuth token failure (RuntimeError) is a failed upload."""
         runner = CliRunner()
@@ -201,8 +201,8 @@ class TestUploadCommandErrorsAndResultsJson:
             assert result.exit_code == 1
             assert "--files-base-path can only be used with --results-json" in result.output
 
-    @patch("pulp_tool.cli.upload.PulpClient")
-    @patch("pulp_tool.cli.upload.PulpHelper")
+    @patch("pulp_tool.cli.upload_build.PulpClient")
+    @patch("pulp_tool.cli.upload_build.PulpHelper")
     def test_upload_with_results_json(self, mock_helper_class, mock_client_class) -> None:
         """Test upload with --results-json invokes process_uploads with results_json context."""
         runner = CliRunner()
@@ -264,8 +264,8 @@ class TestUploadCommandErrorsAndResultsJson:
             assert context.results_json == str(results_json_path)
             assert context.signed_by == "key-123"
 
-    @patch("pulp_tool.cli.upload.PulpClient")
-    @patch("pulp_tool.cli.upload.PulpHelper")
+    @patch("pulp_tool.cli.upload_build.PulpClient")
+    @patch("pulp_tool.cli.upload_build.PulpHelper")
     def test_upload_results_json_extracts_build_id_namespace(self, mock_helper_class, mock_client_class) -> None:
         """Test upload with --results-json extracts build_id and namespace from artifact labels."""
         runner = CliRunner()
