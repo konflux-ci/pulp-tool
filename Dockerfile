@@ -5,7 +5,7 @@
 # only so the final image has no uv/pip fetch steps and fewer microdnf packages.
 
 # ORAS CLI + select-oci-auth (Konflux release-service-utils pattern).
-FROM quay.io/konflux-ci/oras:latest@sha256:6cea0b9e142c2e18429f5cd30d716715d932047cbf1631334c5c31f7e47c3a19 AS oras
+FROM quay.io/konflux-ci/oras:latest@sha256:1cc659b4d30536ec98300ac551739ef36dee345a7dcfe06129fd78abdc3688ac AS oras
 
 FROM registry.access.redhat.com/ubi10/ubi-minimal:10.2-1789645153 AS builder
 
