@@ -205,7 +205,7 @@ class SearchByResultsJson:
             else:
                 # Checksum/signed_by mode: sha256 match is sufficient
                 if found.signed_by:
-                    labels = info.get("labels") or {}
+                    labels = info.get("pulp_labels") or {}
                     if isinstance(labels, dict):
                         artifact_sb = (labels.get("signed_by") or "").strip()
                         if artifact_sb and (

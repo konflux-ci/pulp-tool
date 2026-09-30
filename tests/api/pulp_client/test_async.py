@@ -12,6 +12,7 @@ import httpx
 import pytest
 
 from pulp_tool.api import OAuth2ClientCredentialsAuth, PulpClient
+from pulp_tool.models.pulp_results import PulpResultsDocument
 
 
 class TestPulpClientAsync:
@@ -334,7 +335,7 @@ class TestPulpClientErrorPaths:
 
     def test_build_results_structure_no_build_id(self, mock_pulp_client) -> None:
         """Test build_results_structure with no build_id in labels."""
-        from pulp_tool.models import PulpResultsModel, RepositoryRefs
+        from pulp_tool.models import RepositoryRefs
 
         repositories = RepositoryRefs(
             rpms_href="/rpms/",
@@ -346,7 +347,7 @@ class TestPulpClientErrorPaths:
             artifacts_href="/artifacts/",
             artifacts_prn="artifacts-prn",
         )
-        results_model = PulpResultsModel(build_id="test-build", repositories=repositories)
+        results_model = PulpResultsDocument(build_id="test-build", repositories=repositories)
         from pulp_tool.models.artifacts import PulpContentRow
 
         content_results = [

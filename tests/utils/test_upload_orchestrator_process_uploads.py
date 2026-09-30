@@ -7,8 +7,9 @@ from unittest.mock import Mock, patch
 import pytest
 
 from pulp_tool.models.context import UploadRpmContext
+from pulp_tool.models.pulp_results import PulpResultsDocument
 from pulp_tool.models.repository import RepositoryRefs
-from pulp_tool.models.results import PulpResultsModel, RpmUploadResult
+from pulp_tool.models.results import RpmUploadResult
 from pulp_tool.utils.upload_orchestrator import (
     UploadOrchestrator,
     _rpm_repository_href_for_upload,
@@ -362,7 +363,7 @@ class TestUploadOrchestratorProcessUploads:
             artifacts_href="",
             artifacts_prn="",
         )
-        results_model = PulpResultsModel(build_id="test-build", repositories=repositories)
+        results_model = PulpResultsDocument(build_id="test-build", repositories=repositories)
         with tempfile.TemporaryDirectory() as tmpdir:
             os.makedirs(os.path.join(tmpdir, "x86_64"))
             args = UploadRpmContext(
@@ -453,7 +454,7 @@ class TestUploadOrchestratorProcessUploads:
         mock_from_json.assert_called_once_with(mock_client, args, repositories, pulp_helper=None)
 
     def test_process_uploads_results_json_model_returns_none(self) -> None:
-        from pulp_tool.models.results import PulpResultsModel
+        from pulp_tool.models.pulp_results import PulpResultsDocument
 
         orchestrator = UploadOrchestrator()
         args = UploadRpmContext(
@@ -472,7 +473,7 @@ class TestUploadOrchestratorProcessUploads:
             artifacts_href="",
             artifacts_prn="",
         )
-        model = PulpResultsModel(build_id="test-build", repositories=repositories)
+        model = PulpResultsDocument(build_id="test-build", repositories=repositories)
         with patch(
             "pulp_tool.services.upload_service.process_uploads_from_results_json",
             return_value=model,

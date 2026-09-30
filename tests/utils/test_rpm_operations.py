@@ -10,6 +10,7 @@ from unittest.mock import Mock, patch
 import httpx
 import pytest
 
+from pulp_tool.models.pulp_results import PulpResultsDocument
 from pulp_tool.utils import upload_rpms_logs
 from pulp_tool.utils.rpm_operations import (
     calculate_sha256_checksum,
@@ -136,7 +137,7 @@ class TestRPMUtilities:
 
     def test_upload_rpms_logs(self, mock_pulp_client, temp_rpm_file, httpx_mock) -> None:
         """Test upload_rpms_logs function."""
-        from pulp_tool.models import PulpResultsModel, RepositoryRefs
+        from pulp_tool.models import RepositoryRefs
 
         httpx_mock.get(
             "https://pulp.example.com/pulp/api/v3/test-domain/api/v3/content/rpm/packages/"
@@ -165,7 +166,7 @@ class TestRPMUtilities:
             artifacts_href="/artifacts/",
             artifacts_prn="artifacts-prn",
         )
-        results_model = PulpResultsModel(build_id="test-build", repositories=repositories)
+        results_model = PulpResultsDocument(build_id="test-build", repositories=repositories)
         with (
             patch("glob.glob", return_value=[temp_rpm_file]),
             patch(
@@ -195,7 +196,7 @@ class TestRPMUtilities:
 
     def test_upload_rpms_logs_no_files(self, mock_pulp_client, temp_dir) -> None:
         """Test upload_rpms_logs with no RPMs or logs."""
-        from pulp_tool.models import PulpResultsModel, RepositoryRefs
+        from pulp_tool.models import RepositoryRefs
 
         args = Mock()
         args.build_id = "test-build"
@@ -211,7 +212,7 @@ class TestRPMUtilities:
             artifacts_href="/artifacts/",
             artifacts_prn="artifacts-prn",
         )
-        results_model = PulpResultsModel(build_id="test-build", repositories=repositories)
+        results_model = PulpResultsDocument(build_id="test-build", repositories=repositories)
         with patch("glob.glob", return_value=[]):
             result = upload_rpms_logs(
                 temp_dir,
@@ -227,7 +228,7 @@ class TestRPMUtilities:
 
     def test_upload_rpms_logs_raises_when_logs_present_but_empty_prn(self, mock_pulp_client, temp_dir) -> None:
         """Log files require a non-empty logs repository PRN."""
-        from pulp_tool.models import PulpResultsModel, RepositoryRefs
+        from pulp_tool.models import RepositoryRefs
 
         args = Mock()
         args.build_id = "test-build"
@@ -243,7 +244,7 @@ class TestRPMUtilities:
             artifacts_href="/artifacts/",
             artifacts_prn="artifacts-prn",
         )
-        results_model = PulpResultsModel(build_id="test-build", repositories=repositories)
+        results_model = PulpResultsDocument(build_id="test-build", repositories=repositories)
         rpm_path = os.path.join(temp_dir, "pkg.rpm")
         log_path = os.path.join(temp_dir, "x.log")
         with patch("glob.glob", side_effect=[[rpm_path], [log_path]]):

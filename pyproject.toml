@@ -264,5 +264,7 @@ markers = [
 fail_under = 85
 
 # Keep transitive pin aligned with closed MintMaker PRs until a deliberate bump.
+# urllib3>=2.8.0: CVE-2026-97687, CVE-2026-97689 (HTTPS proxy TLS / chunked streaming).
+# virtualenv>=21.7.13: PYSEC-2026-4011–4014 (transitive via pre-commit).
 [tool.uv]
-constraint-dependencies = ["markdown-it-py==4.1.0"]
+constraint-dependencies = ["markdown-it-py==4.1.0", "urllib3>=2.8.0", "virtualenv>=21.7.13"]

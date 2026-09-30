@@ -7,6 +7,7 @@ from typing import Any
 from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .base import KonfluxBaseModel
+from .href_history import HrefHistoryEntry
 
 
 class PulpContentRow(BaseModel):
@@ -26,22 +27,6 @@ class ExtraArtifactRef(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     pulp_href: str | None = None
-    file: str | None = None
-
-    @model_validator(mode="before")
-    @classmethod
-    def _legacy_dict_href_keys(cls, data: Any) -> Any:
-        """Support legacy {"pulp_href"} and odd test shapes {"file": href} / {"extra": href}."""
-        if isinstance(data, dict):
-            d = dict(data)
-            if not (d.get("pulp_href") or "").strip():
-                for k in ("file", "extra"):
-                    v = d.get(k)
-                    if isinstance(v, str) and v.strip():
-                        d["pulp_href"] = v.strip()
-                        break
-            return d
-        return data
 
 
 class DownloadTask(KonfluxBaseModel):
@@ -195,7 +180,7 @@ class ArtifactMetadata(KonfluxBaseModel):
     load into :class:`~pulp_tool.models.pulp_results.PulpResultsDocument` and call :meth:`validate_for_pull`.
     Unknown keys on each artifact object are ignored when parsing JSON.
 
-    Serialized JSON uses ``pulp_labels``; legacy ``labels`` is accepted on input.
+    Serialized JSON uses ``pulp_labels`` only.
 
     ``url`` / ``sha256`` may be omitted for in-memory partial records (e.g. tests); pull requires a
     non-empty ``http``/``https`` ``url`` on every artifact.
@@ -208,25 +193,26 @@ class ArtifactMetadata(KonfluxBaseModel):
         populate_by_name=True,
     )
 
-    labels: dict[str, str] = Field(default_factory=dict, serialization_alias="pulp_labels")
-
-    @model_validator(mode="before")
-    @classmethod
-    def _accept_legacy_pulp_labels_key(cls, data: Any) -> Any:
-        if isinstance(data, dict):
-            d = dict(data)
-            if d.get("pulp_labels") and not d.get("labels"):
-                d["labels"] = d.pop("pulp_labels")
-            elif "pulp_labels" in d:
-                d.pop("pulp_labels", None)
-            return d
-        return data
+    pulp_labels: dict[str, str] = Field(default_factory=dict)
 
     url: str | None = None
     sha256: str | None = None
     href: str | None = None
-    href_history: list[dict[str, Any]] = Field(default_factory=list)
+    href_history: list[HrefHistoryEntry] = Field(default_factory=list)
     distributions: dict[str, str] = Field(default_factory=dict)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_href_history(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            d = dict(data)
+            raw = d.get("href_history")
+            if isinstance(raw, list):
+                from .pulp_results.normalize import normalize_href_history_rows
+
+                d["href_history"] = normalize_href_history_rows(raw)
+            return d
+        return data
 
     @field_validator("url")
     @classmethod
@@ -246,23 +232,23 @@ class ArtifactMetadata(KonfluxBaseModel):
 
     @property
     def build_id(self) -> str | None:
-        """Get build ID from labels."""
-        return self.labels.get("build_id")  # pylint: disable=no-member
+        """Get build ID from pulp_labels."""
+        return self.pulp_labels.get("build_id")
 
     @property
     def arch(self) -> str | None:
-        """Get architecture from labels."""
-        return self.labels.get("arch")  # pylint: disable=no-member
+        """Get architecture from pulp_labels."""
+        return self.pulp_labels.get("arch")
 
     @property
     def namespace(self) -> str | None:
-        """Get namespace from labels."""
-        return self.labels.get("namespace")  # pylint: disable=no-member
+        """Get namespace from pulp_labels."""
+        return self.pulp_labels.get("namespace")
 
     @property
     def parent_package(self) -> str | None:
-        """Get parent package from labels."""
-        return self.labels.get("parent_package")  # pylint: disable=no-member
+        """Get parent package from pulp_labels."""
+        return self.pulp_labels.get("parent_package")
 
 
 def _default_artifact_json_document() -> PulpResultsDocument:
@@ -341,14 +327,13 @@ class FileInfoModel(KonfluxBaseModel):
 
 FileInfoMap = dict[str, FileInfoModel]
 
-from .pulp_results import ArtifactJsonResponse, PulpResultsDocument  # noqa: E402
+from .pulp_results import PulpResultsDocument  # noqa: E402
 
 __all__ = [
     "DownloadTask",
     "ArtifactFile",
     "PulledArtifacts",
     "ArtifactMetadata",
-    "ArtifactJsonResponse",
     "ArtifactData",
     "ContentData",
     "ExtraArtifactRef",

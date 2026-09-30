@@ -14,7 +14,7 @@ from tests.support.temp_config import tempfile_config
 class TestSearchByResultsJsonNvrAndExplicit:
     """search-by --results-json NVR and explicit filenames."""
 
-    @patch("pulp_tool.cli.search_by.PulpClient")
+    @patch("pulp_tool.services.search_by_service.PulpClient")
     def test_by_filename_different_nvrs_make_separate_calls(self, mock_client_class, tmp_path) -> None:
         """Test that artifacts with different NVRs still make separate API calls."""
         results_input = tmp_path / "input.json"
@@ -24,17 +24,17 @@ class TestSearchByResultsJsonNvrAndExplicit:
                 {
                     "artifacts": {
                         "pkg-1.0-1.x86_64.rpm": {
-                            "labels": {"arch": "x86_64"},
+                            "pulp_labels": {"arch": "x86_64"},
                             "url": "https://example.com/pkg.rpm",
                             "sha256": VALID_CHECKSUM_1,
                         },
                         "pkg-1.0-1.s390x.rpm": {
-                            "labels": {"arch": "s390x"},
+                            "pulp_labels": {"arch": "s390x"},
                             "url": "https://example.com/pkg-s390x.rpm",
                             "sha256": VALID_CHECKSUM_2,
                         },
                         "other-2.0-1.x86_64.rpm": {
-                            "labels": {"arch": "x86_64"},
+                            "pulp_labels": {"arch": "x86_64"},
                             "url": "https://example.com/other.rpm",
                             "sha256": VALID_CHECKSUM_3,
                         },
@@ -107,7 +107,7 @@ class TestSearchByResultsJsonNvrAndExplicit:
         assert "other-2.0-1.x86_64.rpm" not in out["artifacts"]
         assert mock_client.get_rpm_by_filenames.call_count == 2
 
-    @patch("pulp_tool.cli.search_by.PulpClient")
+    @patch("pulp_tool.services.search_by_service.PulpClient")
     def test_by_filename_many_packages_truncates_msg(self, mock_client_class, tmp_path) -> None:
         """Test results-json with many packages found shows truncated msg (N packages)."""
         results_input = tmp_path / "input.json"
@@ -115,7 +115,7 @@ class TestSearchByResultsJsonNvrAndExplicit:
         arches = ["x86_64", "i686", "aarch64", "s390x", "ppc64le", "src", "noarch"] * 2
         checksums = ["a" * 63 + hex(i)[-1] for i in range(12)]
         artifacts = {
-            f"pkg-1.0-1.{arch}.rpm": {"labels": {}, "url": "x", "sha256": checksums[i]}
+            f"pkg-1.0-1.{arch}.rpm": {"pulp_labels": {}, "url": "x", "sha256": checksums[i]}
             for i, arch in enumerate(arches[:12])
         }
         results_input.write_text(json.dumps({"artifacts": artifacts, "distributions": {}}, indent=2))
@@ -155,7 +155,7 @@ class TestSearchByResultsJsonNvrAndExplicit:
         assert result.exit_code == 0
         assert "(12 packages)" in result.output
 
-    @patch("pulp_tool.cli.search_by.PulpClient")
+    @patch("pulp_tool.services.search_by_service.PulpClient")
     def test_by_signed_by_removes_found_rpms(self, mock_client_class, tmp_path) -> None:
         """Test --signed-by: user specifies signing key(s), searches Pulp, removes found RPMs."""
         results_input = tmp_path / "input.json"
@@ -165,16 +165,16 @@ class TestSearchByResultsJsonNvrAndExplicit:
                 {
                     "artifacts": {
                         "pkg1.rpm": {
-                            "labels": {"arch": "x86_64", "signed_by": "key-id-123"},
+                            "pulp_labels": {"arch": "x86_64", "signed_by": "key-id-123"},
                             "url": "https://example.com/pkg1.rpm",
                             "sha256": VALID_CHECKSUM_1,
                         },
                         "pkg2.rpm": {
-                            "labels": {"arch": "x86_64", "signed_by": "key-id-456"},
+                            "pulp_labels": {"arch": "x86_64", "signed_by": "key-id-456"},
                             "url": "https://example.com/pkg2.rpm",
                             "sha256": VALID_CHECKSUM_2,
                         },
-                        "log.txt": {"labels": {}, "url": "https://example.com/log.txt", "sha256": "f" * 64},
+                        "log.txt": {"pulp_labels": {}, "url": "https://example.com/log.txt", "sha256": "f" * 64},
                     },
                     "distributions": {"rpms": "https://example.com/rpms/"},
                 },
@@ -226,7 +226,7 @@ class TestSearchByResultsJsonNvrAndExplicit:
         assert "pkg2.rpm" in out["artifacts"]
         assert "log.txt" in out["artifacts"]
 
-    @patch("pulp_tool.cli.search_by.PulpClient")
+    @patch("pulp_tool.services.search_by_service.PulpClient")
     def test_results_json_checksums_and_signed_by_single_call(self, mock_client_class, tmp_path) -> None:
         """Test results-json with --checksums + --signed-by uses single API call."""
         results_input = tmp_path / "input.json"
@@ -236,16 +236,16 @@ class TestSearchByResultsJsonNvrAndExplicit:
                 {
                     "artifacts": {
                         "pkg1.rpm": {
-                            "labels": {"arch": "x86_64", "signed_by": "key-123"},
+                            "pulp_labels": {"arch": "x86_64", "signed_by": "key-123"},
                             "url": "https://example.com/pkg1.rpm",
                             "sha256": VALID_CHECKSUM_1,
                         },
                         "pkg2.rpm": {
-                            "labels": {"arch": "x86_64"},
+                            "pulp_labels": {"arch": "x86_64"},
                             "url": "https://example.com/pkg2.rpm",
                             "sha256": VALID_CHECKSUM_2,
                         },
-                        "log.txt": {"labels": {}, "url": "https://example.com/log.txt", "sha256": "f" * 64},
+                        "log.txt": {"pulp_labels": {}, "url": "https://example.com/log.txt", "sha256": "f" * 64},
                     },
                     "distributions": {"rpms": "https://example.com/rpms/"},
                 },
@@ -294,7 +294,7 @@ class TestSearchByResultsJsonNvrAndExplicit:
         assert "log.txt" in out["artifacts"]
         mock_client.get_rpm_by_checksums_and_signed_by.assert_called_once_with([VALID_CHECKSUM_1], "key-123")
 
-    @patch("pulp_tool.cli.search_by.PulpClient")
+    @patch("pulp_tool.services.search_by_service.PulpClient")
     def test_by_filenames_explicit_only(self, mock_client_class, tmp_path) -> None:
         """Test --filenames with explicit values (no flag, no extraction)."""
         results_input = tmp_path / "input.json"

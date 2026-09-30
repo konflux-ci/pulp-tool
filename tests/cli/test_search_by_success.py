@@ -14,7 +14,7 @@ from tests.support.temp_config import tempfile_config
 class TestSearchByChecksumSuccess:
     """Test successful search-by scenarios."""
 
-    @patch("pulp_tool.cli.search_by.PulpClient")
+    @patch("pulp_tool.services.search_by_service.PulpClient")
     def test_single_checksum_json_output(self, mock_client_class) -> None:
         """Test single checksum with JSON output."""
         mock_response = _make_rpm_response(
@@ -45,7 +45,7 @@ class TestSearchByChecksumSuccess:
         assert output[0]["version"] == "1.0.0"
         assert output[0]["arch"] == "x86_64"
 
-    @patch("pulp_tool.cli.search_by.PulpClient")
+    @patch("pulp_tool.services.search_by_service.PulpClient")
     def test_multiple_checksums_repeated_option(self, mock_client_class) -> None:
         """Test multiple checksums via --checksums comma-separated."""
         mock_response = _make_rpm_response(
@@ -86,7 +86,7 @@ class TestSearchByChecksumSuccess:
         assert output[0]["pkgId"] == VALID_CHECKSUM_1
         assert output[1]["pkgId"] == VALID_CHECKSUM_2
 
-    @patch("pulp_tool.cli.search_by.PulpClient")
+    @patch("pulp_tool.services.search_by_service.PulpClient")
     def test_comma_separated_checksums(self, mock_client_class) -> None:
         """Test comma-separated checksums via --checksums option."""
         mock_response = _make_rpm_response(
@@ -116,7 +116,7 @@ class TestSearchByChecksumSuccess:
         assert len(output) == 1
         assert output[0]["pkgId"] == VALID_CHECKSUM_1
 
-    @patch("pulp_tool.cli.search_by.PulpClient")
+    @patch("pulp_tool.services.search_by_service.PulpClient")
     def test_empty_results(self, mock_client_class) -> None:
         """Test empty results (no matching packages)."""
         mock_response = _make_rpm_response([])
@@ -130,7 +130,7 @@ class TestSearchByChecksumSuccess:
         output = json.loads(result.output)
         assert output == []
 
-    @patch("pulp_tool.cli.search_by.PulpClient")
+    @patch("pulp_tool.services.search_by_service.PulpClient")
     def test_skips_invalid_api_response_items(self, mock_client_class) -> None:
         """Test that invalid API response items are skipped (covers except block)."""
         mock_response = _make_rpm_response(
@@ -160,7 +160,7 @@ class TestSearchByChecksumSuccess:
         assert len(output) == 1
         assert output[0]["name"] == "valid-pkg"
 
-    @patch("pulp_tool.cli.search_by.PulpClient")
+    @patch("pulp_tool.services.search_by_service.PulpClient")
     def test_checksums_and_signed_by_single_call(self, mock_client_class) -> None:
         """Test --checksums + --signed-by uses single API call (server-side filter)."""
         pkg1 = {
@@ -187,7 +187,7 @@ class TestSearchByChecksumSuccess:
         assert output[0]["pulp_labels"]["signed_by"] == "me"
         mock_client.get_rpm_by_checksums_and_signed_by.assert_called_once_with([VALID_CHECKSUM_1], "me")
 
-    @patch("pulp_tool.cli.search_by.PulpClient")
+    @patch("pulp_tool.services.search_by_service.PulpClient")
     def test_checksums_and_signed_by_no_match_returns_empty(self, mock_client_class) -> None:
         """Test --checksums + --signed-by returns empty when no match."""
         mock_client = Mock()
@@ -202,7 +202,7 @@ class TestSearchByChecksumSuccess:
         output = json.loads(result.output)
         assert output == []
 
-    @patch("pulp_tool.cli.search_by.PulpClient")
+    @patch("pulp_tool.services.search_by_service.PulpClient")
     def test_filenames_only_has_packages(self, mock_client_class) -> None:
         """Test --filenames only (no signed_by) returns packages (lines 316-318)."""
         mock_client = Mock()
@@ -229,7 +229,7 @@ class TestSearchByChecksumSuccess:
         assert len(output) == 1
         assert output[0]["name"] == "pkg"
 
-    @patch("pulp_tool.cli.search_by.PulpClient")
+    @patch("pulp_tool.services.search_by_service.PulpClient")
     def test_filenames_only_no_match_returns_empty(self, mock_client_class) -> None:
         """Test --filenames only (no signed_by) returns empty when no match (lines 320-322)."""
         mock_client = Mock()
@@ -241,7 +241,7 @@ class TestSearchByChecksumSuccess:
         assert result.exit_code == 0
         assert json.loads(result.output) == []
 
-    @patch("pulp_tool.cli.search_by.PulpClient")
+    @patch("pulp_tool.services.search_by_service.PulpClient")
     def test_signed_by_only_has_packages(self, mock_client_class) -> None:
         """Test --signed-by only (no checksums/filenames) returns packages (lines 319-324)."""
         mock_client = Mock()
@@ -269,7 +269,7 @@ class TestSearchByChecksumSuccess:
         assert output[0]["pulp_labels"]["signed_by"] == "key-123"
         mock_client.get_rpm_by_signed_by.assert_called_once_with(["key-123"])
 
-    @patch("pulp_tool.cli.search_by.PulpClient")
+    @patch("pulp_tool.services.search_by_service.PulpClient")
     def test_signed_by_only_no_match_returns_empty(self, mock_client_class) -> None:
         """Test --signed-by only returns empty when no match (lines 319-324)."""
         mock_client = Mock()
@@ -282,7 +282,7 @@ class TestSearchByChecksumSuccess:
         assert json.loads(result.output) == []
         mock_client.get_rpm_by_signed_by.assert_called_once_with(["key-123"])
 
-    @patch("pulp_tool.cli.search_by.PulpClient")
+    @patch("pulp_tool.services.search_by_service.PulpClient")
     def test_filenames_and_signed_by_single_call(self, mock_client_class) -> None:
         """Test --filenames + --signed-by uses single API call (server-side filter)."""
         pkg_href = "/api/v3/content/rpm/packages/1/"
@@ -312,7 +312,7 @@ class TestSearchByChecksumSuccess:
         assert output[0]["pulp_labels"]["signed_by"] == "me"
         mock_client.get_rpm_by_filenames_and_signed_by.assert_called_once_with(["pkg1-1.0-1.x86_64.rpm"], "me")
 
-    @patch("pulp_tool.cli.search_by.PulpClient")
+    @patch("pulp_tool.services.search_by_service.PulpClient")
     def test_filenames_and_signed_by_no_match_returns_empty(self, mock_client_class) -> None:
         """Test --filenames + --signed-by returns empty when no match (server-side filter)."""
         mock_client = Mock()

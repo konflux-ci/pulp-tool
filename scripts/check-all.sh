@@ -25,7 +25,7 @@ echo ""
 
 # Pylint (errors only)
 echo "2. Running Pylint (errors only)..."
-python3 -m pylint --rcfile=config/pylintrc pulp_tool/ tests/ --errors-only || {
+python3 -m pylint --rcfile=config/pylintrc pulp_tool/ tests/ --errors-only -j 0 || {
     echo "❌ Pylint check failed."
     exit 1
 }

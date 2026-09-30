@@ -84,7 +84,8 @@ class TestUploadUtilities:
 
     def test_upload_log_incremental_uses_task_relative_path(self, mock_pulp_client, temp_file) -> None:
         """results_model + distribution_urls: relative_path from task.result when dict."""
-        from pulp_tool.models.results import PulpResultsModel, RepositoryRefs
+        from pulp_tool.models.pulp_results import PulpResultsDocument
+        from pulp_tool.models.repository import RepositoryRefs
 
         mock_response = Mock()
         mock_response.json.return_value = {"task": "/pulp/api/v3/tasks/1/"}
@@ -104,7 +105,7 @@ class TestUploadUtilities:
             artifacts_href="/a",
             artifacts_prn="",
         )
-        results_model = PulpResultsModel(build_id="test-build", repositories=repos)
+        results_model = PulpResultsDocument(build_id="test-build", repositories=repos)
         labels = {"build_id": "test-build", "arch": "x86_64"}
         with patch.object(mock_pulp_client, "add_uploaded_artifact_to_results_model") as mock_add:
             upload_log(
@@ -122,7 +123,8 @@ class TestUploadUtilities:
 
     def test_upload_log_incremental_falls_back_arch_basename(self, mock_pulp_client, temp_file) -> None:
         """When task.result has no relative_path, use arch/basename."""
-        from pulp_tool.models.results import PulpResultsModel, RepositoryRefs
+        from pulp_tool.models.pulp_results import PulpResultsDocument
+        from pulp_tool.models.repository import RepositoryRefs
 
         mock_response = Mock()
         mock_response.json.return_value = {"task": "/pulp/api/v3/tasks/1/"}
@@ -142,7 +144,7 @@ class TestUploadUtilities:
             artifacts_href="/a",
             artifacts_prn="",
         )
-        results_model = PulpResultsModel(build_id="test-build", repositories=repos)
+        results_model = PulpResultsDocument(build_id="test-build", repositories=repos)
         labels = {"build_id": "test-build", "arch": "s390x"}
         with patch.object(mock_pulp_client, "add_uploaded_artifact_to_results_model") as mock_add:
             upload_log(
@@ -177,7 +179,7 @@ class TestUploadUtilities:
         """Test upload_artifacts_to_repository function with error."""
         mock_pulp_client.create_file_content = Mock()
         mock_pulp_client.create_file_content.side_effect = HTTPError("Upload failed")
-        artifacts = {"test-file": {"file": "/path/to/file", "labels": {"build_id": "test-build"}}}
+        artifacts = {"test-file": {"file": "/path/to/file", "pulp_labels": {"build_id": "test-build"}}}
         upload_count, errors = upload_artifacts_to_repository(mock_pulp_client, artifacts, "test-repo", "File")
         assert upload_count == 0
         assert len(errors) == 1
@@ -189,7 +191,7 @@ class TestUploadUtilities:
         mock_response.json.return_value = {"status": "success"}
         mock_pulp_client.create_file_content = Mock()
         mock_pulp_client.create_file_content.return_value = mock_response
-        artifacts = {"test-file": {"file": "/path/to/file", "labels": {"build_id": "test-build"}}}
+        artifacts = {"test-file": {"file": "/path/to/file", "pulp_labels": {"build_id": "test-build"}}}
         upload_count, errors = upload_artifacts_to_repository(mock_pulp_client, artifacts, "test-repo", "File")
         assert upload_count == 1
         assert len(errors) == 0

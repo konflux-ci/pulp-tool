@@ -13,7 +13,6 @@ from pulp_tool.models.context import UploadContext, UploadRpmContext
 from pulp_tool.models.pulp_api import TaskResponse
 from pulp_tool.models.pulp_results import PulpResultsDocument
 from pulp_tool.models.repository import RepositoryRefs
-from pulp_tool.models.results import PulpResultsModel
 from pulp_tool.services import upload_collect as uc
 
 
@@ -63,16 +62,10 @@ class TestUploadAndExtract:
         assert out == "https://example.com/results.json"
         mock_sbom.assert_called_once()
 
-    def test_upload_and_get_results_url_calls_handle_artifact_results(self, mock_pulp_client: Mock) -> None:
-        tr = TaskResponse(pulp_href="/t/", state="completed", result={"relative_path": "x.json"})
-        ctx = _minimal_context(artifact_results="/u,/d")
-        with (
-            patch.object(uc, "create_file_content_and_wait", return_value=tr),
-            patch.object(uc, "_extract_results_url", return_value="https://u/x.json"),
-            patch.object(uc, "_handle_artifact_results") as mock_h,
-        ):
+    def test_upload_and_get_results_url_requires_oci_for_konflux_results(self, mock_pulp_client: Mock) -> None:
+        ctx = _minimal_context(artifact_results="/u,/d", oci_storage=None)
+        with pytest.raises(ValueError, match="--oci-storage is required"):
             uc._upload_and_get_results_url(mock_pulp_client, ctx, "prn", _empty_results_document(), "2024-01-01")
-        mock_h.assert_called_once_with(mock_pulp_client, ctx, tr)
 
     def test_konflux_artifact_results_paths_invalid_format(self) -> None:
         ctx = _minimal_context(artifact_results="only-one-path")
@@ -105,14 +98,12 @@ class TestUploadAndExtract:
             ) as mock_sync,
             patch.object(uc, "_extract_results_url", return_value="https://u/x.json"),
             patch.object(uc, "_write_konflux_oci_results") as mock_write,
-            patch.object(uc, "_handle_artifact_results") as mock_legacy,
         ):
             doc = _empty_results_document()
             uc._upload_and_get_results_url(mock_pulp_client, ctx, "prn", doc, "2024-01-01")
         mock_sync.assert_called_once()
         assert mock_sync.call_args[0][2] is doc
         mock_write.assert_called_once_with("quay.io/ns/repo@sha256:abc", "/u", "/d")
-        mock_legacy.assert_not_called()
 
     def test_konflux_results_from_oci_ref(self) -> None:
         url, digest = uc._konflux_results_from_oci_ref("quay.io/ns/repo:tag@sha256:abc123")
@@ -213,7 +204,7 @@ class TestCollectResultsBranches:
         """Lines 279-286: no content_data but model already has artifacts."""
         ctx = _minimal_context()
         refs = _minimal_refs()
-        model = PulpResultsModel(build_id="b1", repositories=refs)
+        model = PulpResultsDocument(build_id="b1", repositories=refs)
         model.add_artifact("a.rpm", "https://x", "dead", {"build_id": "b1"})
         with (
             patch.object(uc, "_gather_and_validate_content", return_value=None),
@@ -227,7 +218,7 @@ class TestCollectResultsBranches:
 
     def test_collect_results_returns_none_when_no_content_no_model(self, mock_pulp_client: Mock) -> None:
         ctx = _minimal_context()
-        model = PulpResultsModel(build_id="b1", repositories=_minimal_refs())
+        model = PulpResultsDocument(build_id="b1", repositories=_minimal_refs())
         with patch.object(uc, "_gather_and_validate_content", return_value=None):
             assert uc.collect_results(mock_pulp_client, ctx, "2024-01-01", model) is None
 
@@ -249,38 +240,6 @@ class TestFindArtifactContent:
         log_mock.error.assert_called()
 
 
-class TestHandleArtifactResults:
-    def test_skips_when_no_artifact_results_config(self, mock_pulp_client: Mock) -> None:
-        ctx = _minimal_context(artifact_results=None)
-        tr = TaskResponse(pulp_href="/t/", state="completed", result={"relative_path": "x.json"})
-        with patch.object(uc, "PulpHelper") as PH:
-            PH.return_value.get_distribution_urls.return_value = {"artifacts": "https://a/"}
-            with patch("pulp_tool.services.upload_collect.logging") as log_mock:
-                uc._handle_artifact_results(mock_pulp_client, ctx, tr)
-        log_mock.debug.assert_called()
-
-    def test_invalid_artifact_results_pair(self, mock_pulp_client: Mock) -> None:
-        ctx = _minimal_context(artifact_results="only-one-path")
-        tr = TaskResponse(pulp_href="/t/", state="completed", result={"relative_path": "x.json"})
-        with patch.object(uc, "PulpHelper") as PH:
-            PH.return_value.get_distribution_urls.return_value = {"artifacts": "https://a/"}
-            with patch("pulp_tool.services.upload_collect.logging") as log_mock:
-                uc._handle_artifact_results(mock_pulp_client, ctx, tr)
-        log_mock.error.assert_called()
-
-    def test_find_artifact_content_missing(self, mock_pulp_client: Mock) -> None:
-        ctx = _minimal_context(artifact_results="/u,/d")
-        tr = TaskResponse(pulp_href="/t/", state="completed", result={"relative_path": "x.json"})
-        with (
-            patch.object(uc, "PulpHelper") as PH,
-            patch.object(uc, "_find_artifact_content", return_value=None),
-        ):
-            PH.return_value.get_distribution_urls.return_value = {"artifacts": "https://a/"}
-            with patch("pulp_tool.services.upload_collect.logging") as log_mock:
-                uc._handle_artifact_results(mock_pulp_client, ctx, tr)
-        log_mock.error.assert_called()
-
-
 class TestHandleSbomResults:
     def test_no_sbom_in_json_info_only(self) -> None:
         ctx = _minimal_context(sbom_results="/tmp/s")
@@ -290,7 +249,7 @@ class TestHandleSbomResults:
 
     def test_skip_when_sbom_results_path_missing(self) -> None:
         ctx = _minimal_context(sbom_results=None)
-        body = json.dumps({"artifacts": {"sbom.json": {"labels": {}, "url": "https://sbom"}}})
+        body = json.dumps({"artifacts": {"sbom.json": {"pulp_labels": {}, "url": "https://sbom"}}})
         with patch("pulp_tool.services.upload_collect.logging") as log_mock:
             uc._handle_sbom_results(Mock(), ctx, body)
         log_mock.debug.assert_called()
@@ -298,7 +257,7 @@ class TestHandleSbomResults:
     def test_writes_sbom_url_file(self, tmp_path) -> None:
         out = tmp_path / "sbom.url"
         ctx = _minimal_context(sbom_results=str(out))
-        body = json.dumps({"artifacts": {"sbom.json": {"labels": {}, "url": "https://sbom/x"}}})
+        body = json.dumps({"artifacts": {"sbom.json": {"pulp_labels": {}, "url": "https://sbom/x"}}})
         uc._handle_sbom_results(Mock(), ctx, body)
         assert out.read_text() == "https://sbom/x"
 
@@ -309,7 +268,7 @@ class TestHandleSbomResults:
             {
                 "artifacts": {
                     "test-build-456/run1/sbom.json": {
-                        "labels": {"build_id": "test-build-456/run1", "arch": ""},
+                        "pulp_labels": {"build_id": "test-build-456/run1", "arch": ""},
                         "url": "https://pulp.example/sbom/sbom.json",
                     }
                 }
@@ -332,7 +291,7 @@ class TestHandleSbomResults:
             {
                 "artifacts": {
                     "test-build-456/sbom.json": {
-                        "labels": {"build_id": "test-build-456", "arch": ""},
+                        "pulp_labels": {"build_id": "test-build-456", "arch": ""},
                         "url": None,
                     }
                 },
@@ -351,7 +310,7 @@ class TestHandleSbomResults:
     def test_ioerror_on_write(self, tmp_path) -> None:
         out = tmp_path / "sbom.url"
         ctx = _minimal_context(sbom_results=str(out))
-        body = json.dumps({"artifacts": {"sbom.json": {"labels": {}, "url": "https://u"}}})
+        body = json.dumps({"artifacts": {"sbom.json": {"pulp_labels": {}, "url": "https://u"}}})
         with patch.object(Path, "write_text", side_effect=OSError("denied")):
             with patch("pulp_tool.services.upload_collect.logging") as log_mock:
                 uc._handle_sbom_results(Mock(), ctx, body)
@@ -362,8 +321,8 @@ class TestHandleSbomResults:
         ctx = _minimal_context()
         results = {
             "artifacts": {
-                "build/sbom.json": {"labels": {"arch": "x86_64"}, "url": "https://skip-me"},
-                "cyclonedx.json": {"labels": {}, "url": "https://legacy-sbom"},
+                "build/sbom.json": {"pulp_labels": {"arch": "x86_64"}, "url": "https://skip-me"},
+                "cyclonedx.json": {"pulp_labels": {}, "url": "https://legacy-sbom"},
             }
         }
         artifact_key, url = uc._resolve_sbom_results_url(results, ctx)
@@ -375,8 +334,8 @@ class TestHandleSbomResults:
         ctx = _minimal_context()
         results = {
             "artifacts": {
-                "pkg.json": {"labels": {"arch": "aarch64"}, "url": "https://skip-me"},
-                "results.json": {"labels": {}, "url": "https://picked"},
+                "pkg.json": {"pulp_labels": {"arch": "aarch64"}, "url": "https://skip-me"},
+                "results.json": {"pulp_labels": {}, "url": "https://picked"},
             }
         }
         artifact_key, url = uc._resolve_sbom_results_url(results, ctx)

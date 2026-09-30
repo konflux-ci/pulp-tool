@@ -9,7 +9,8 @@ import tempfile
 
 import pytest
 
-from pulp_tool.models.artifacts import ArtifactJsonResponse, ArtifactMetadata, PulledArtifacts
+from pulp_tool.models.artifacts import ArtifactMetadata, PulledArtifacts
+from pulp_tool.models.pulp_results import PulpResultsDocument
 from pulp_tool.utils import (
     extract_build_id_from_artifact_json,
     extract_build_id_from_artifacts,
@@ -147,15 +148,15 @@ class TestBuildIDExtraction:
     """Test build ID extraction functions."""
 
     def test_extract_build_id_with_artifact_json_response(self) -> None:
-        """Test extract_build_id_from_artifact_json with ArtifactJsonResponse object."""
-        metadata = ArtifactMetadata(labels={"build_id": "test-build-123", "arch": "x86_64"})
-        artifact_json = ArtifactJsonResponse(artifacts={"test.rpm": metadata})
+        """Test extract_build_id_from_artifact_json with PulpResultsDocument object."""
+        metadata = ArtifactMetadata(pulp_labels={"build_id": "test-build-123", "arch": "x86_64"})
+        artifact_json = PulpResultsDocument(artifacts={"test.rpm": metadata})
         build_id = extract_build_id_from_artifact_json(artifact_json)
         assert build_id == "test-build-123"
 
     def test_extract_build_id_with_dict_fallback(self) -> None:
         """Test extract_build_id_from_artifact_json with dict fallback path."""
-        artifact_json = {"artifacts": {"test.rpm": {"labels": {"build_id": "dict-build-456", "arch": "x86_64"}}}}
+        artifact_json = {"artifacts": {"test.rpm": {"pulp_labels": {"build_id": "dict-build-456", "arch": "x86_64"}}}}
         build_id = extract_build_id_from_artifact_json(artifact_json)
         assert build_id == "dict-build-456"
 
@@ -194,7 +195,7 @@ class TestAdditionalValidation:
 
     def test_extract_field_from_artifact(self) -> None:
         """Test _extract_field_from_artifact with both dict and ArtifactMetadata inputs."""
-        artifact_dict = {"labels": {"build_id": "test-build-123", "arch": "x86_64"}}
+        artifact_dict = {"pulp_labels": {"build_id": "test-build-123", "arch": "x86_64"}}
         result = _extract_field_from_artifact(artifact_dict, "build_id")
         assert result == "test-build-123"
         result = _extract_field_from_artifact(artifact_dict, "missing_field")
@@ -202,10 +203,10 @@ class TestAdditionalValidation:
         artifact_dict_no_labels = {"file": "test.rpm"}
         result = _extract_field_from_artifact(artifact_dict_no_labels, "build_id")
         assert result is None
-        metadata = ArtifactMetadata(labels={"build_id": "test-build-456", "arch": "x86_64"})
+        metadata = ArtifactMetadata(pulp_labels={"build_id": "test-build-456", "arch": "x86_64"})
         result = _extract_field_from_artifact(metadata, "build_id")
         assert result == "test-build-456"
-        metadata_no_labels = ArtifactMetadata(labels={})
+        metadata_no_labels = ArtifactMetadata(pulp_labels={})
         result = _extract_field_from_artifact(metadata_no_labels, "build_id")
         assert result is None
 
@@ -217,7 +218,7 @@ class TestAdditionalValidation:
 
     def test_extract_metadata_from_artifact_json_with_non_dict_metadata(self) -> None:
         """Test extract_metadata_from_artifact_json with non-dict metadata (covers line 172)."""
-        metadata = ArtifactMetadata(labels={"build_id": "test-build-789", "arch": "x86_64"})
+        metadata = ArtifactMetadata(pulp_labels={"build_id": "test-build-789", "arch": "x86_64"})
         artifact_json = {"artifacts": {"test.rpm": metadata}}
         result = extract_metadata_from_artifact_json(artifact_json, "build_id", fallback="fallback-value")
         assert result == "test-build-789"

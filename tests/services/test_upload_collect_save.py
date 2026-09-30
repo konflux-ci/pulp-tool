@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch
 import httpx
 import pytest
 
-from pulp_tool.models import PulpResultsModel, RepositoryRefs
+from pulp_tool.models import RepositoryRefs
 from pulp_tool.models.artifacts import ArtifactMetadata
 from pulp_tool.models.context import UploadRpmContext
 from pulp_tool.models.pulp_results import PulpResultsDocument
@@ -63,7 +63,7 @@ class TestCollectResults:
             artifacts_href="/artifacts/",
             artifacts_prn="artifacts-prn",
         )
-        results_model = PulpResultsModel(build_id="test-build", repositories=repositories)
+        results_model = PulpResultsDocument(build_id="test-build", repositories=repositories)
         with patch("pulp_tool.services.upload_collect.PulpHelper") as mock_helper_class:
             mock_helper = Mock()
             mock_helper.get_distribution_urls_for_upload_context.return_value = {
@@ -106,7 +106,7 @@ class TestCollectResults:
             build_id="test-build",
             repositories=None,
             artifacts={
-                "pkg.rpm": ArtifactMetadata(labels={}, url="https://example.com/pkg.rpm", sha256="deadbeef"),
+                "pkg.rpm": ArtifactMetadata(pulp_labels={}, url="https://example.com/pkg.rpm", sha256="deadbeef"),
             },
         )
         with patch("pulp_tool.services.upload_collect._gather_and_validate_content", return_value=None):
@@ -155,7 +155,7 @@ class TestCollectResults:
             artifacts_href="/artifacts/",
             artifacts_prn="artifacts-prn",
         )
-        results_model = PulpResultsModel(build_id="test-build", repositories=repositories)
+        results_model = PulpResultsDocument(build_id="test-build", repositories=repositories)
         results_model.add_artifact("pkg.rpm", "https://example.com/pkg.rpm", "deadbeef", {"build_id": "test-build"})
         with patch("pulp_tool.services.upload_collect.PulpHelper") as mock_helper_class:
             mock_helper = Mock()
@@ -197,7 +197,7 @@ class TestCollectResults:
             artifacts_href="/artifacts/",
             artifacts_prn="artifacts-prn",
         )
-        results_model = PulpResultsModel(build_id="test-build", repositories=repositories)
+        results_model = PulpResultsDocument(build_id="test-build", repositories=repositories)
         with patch("pulp_tool.services.upload_collect._gather_and_validate_content") as mock_gather:
             mock_gather.return_value = Mock(content_results=[], file_results=[], log_results=[], sbom_results=[])
             with patch("pulp_tool.services.upload_collect._build_artifact_map", return_value={}):
@@ -238,7 +238,7 @@ class TestCollectResults:
             artifacts_href="/artifacts/",
             artifacts_prn="artifacts-prn",
         )
-        results_model = PulpResultsModel(build_id="test-build", repositories=repositories)
+        results_model = PulpResultsDocument(build_id="test-build", repositories=repositories)
         with patch("pulp_tool.services.upload_collect._gather_and_validate_content", return_value=None):
             with patch("pulp_tool.services.upload_collect._add_distributions_to_results"):
                 result = collect_results(mock_pulp_client, context, "2024-01-01", results_model)
@@ -304,7 +304,10 @@ class TestSaveResultsToFolder:
             sbom_results=str(sbom_results_file),
         )
         json_content = json.dumps(
-            {"artifacts": {"sbom.json": {"url": "https://pulp.example/sbom.json", "labels": {}}}, "distributions": {}}
+            {
+                "artifacts": {"sbom.json": {"url": "https://pulp.example/sbom.json", "pulp_labels": {}}},
+                "distributions": {},
+            }
         )
         result = _save_results_to_folder(str(output_dir), json_content, context)
         assert result is not None

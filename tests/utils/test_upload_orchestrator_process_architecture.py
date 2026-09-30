@@ -6,8 +6,9 @@ from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import Mock, patch
 
 from pulp_tool.models.context import UploadRpmContext
+from pulp_tool.models.pulp_results import PulpResultsDocument
 from pulp_tool.models.repository import RepositoryRefs
-from pulp_tool.models.results import PulpResultsModel, RpmUploadResult
+from pulp_tool.models.results import RpmUploadResult
 from pulp_tool.utils.upload_orchestrator import UploadOrchestrator
 
 
@@ -39,7 +40,7 @@ class TestUploadOrchestratorProcessArchitectureUploads:
                 artifacts_href="",
                 artifacts_prn="",
             )
-            results_model = PulpResultsModel(build_id="test-build", repositories=repositories)
+            results_model = PulpResultsDocument(build_id="test-build", repositories=repositories)
             with (
                 patch.object(orchestrator, "_submit_architecture_tasks") as mock_submit,
                 patch.object(orchestrator, "_collect_architecture_results") as mock_collect,
@@ -89,7 +90,7 @@ class TestUploadOrchestratorProcessArchitectureUploads:
                 artifacts_href="",
                 artifacts_prn="",
             )
-            results_model = PulpResultsModel(build_id="test-build", repositories=repositories)
+            results_model = PulpResultsDocument(build_id="test-build", repositories=repositories)
             mock_helper = Mock()
             mock_helper.ensure_rpm_repository_for_arch.return_value = "/arch-specific/rpm"
             done = RpmUploadResult(uploaded_rpms=[], created_resources=[])
@@ -138,7 +139,7 @@ class TestUploadOrchestratorProcessArchitectureUploads:
                 artifacts_href="",
                 artifacts_prn="",
             )
-            results_model = PulpResultsModel(build_id="test-build", repositories=repositories)
+            results_model = PulpResultsDocument(build_id="test-build", repositories=repositories)
             with patch("pulp_tool.utils.upload_orchestrator.logging") as mock_logging:
                 result = orchestrator.process_architecture_uploads(
                     mock_client,
@@ -174,7 +175,7 @@ class TestUploadOrchestratorProcessArchitectureUploads:
             artifacts_href="",
             artifacts_prn="",
         )
-        results_model = PulpResultsModel(build_id="test-build", repositories=repositories)
+        results_model = PulpResultsDocument(build_id="test-build", repositories=repositories)
         with patch("pulp_tool.utils.upload_orchestrator.logging") as mock_logging:
             result = orchestrator.process_architecture_uploads(
                 mock_client,

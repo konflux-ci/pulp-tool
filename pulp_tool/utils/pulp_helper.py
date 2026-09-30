@@ -11,8 +11,9 @@ from typing import TYPE_CHECKING, Optional
 from pulp_tool.models.pulp_api import DistributionRequest, RepositoryRequest
 
 from ..models.context import UploadContext, UploadFilesContext, UploadRpmContext
+from ..models.pulp_results import PulpResultsDocument
 from ..models.repository import RepositoryRefs
-from ..models.results import PulpResultsModel, RpmUploadResult
+from ..models.results import RpmUploadResult
 
 if TYPE_CHECKING:
     from ..api.pulp_client import PulpClient
@@ -224,7 +225,7 @@ class PulpHelper:
         *,
         date_str: str,
         rpm_href: str,
-        results_model: PulpResultsModel,
+        results_model: PulpResultsDocument,
     ) -> dict[str, RpmUploadResult]:
         """
         Process uploads for all supported architectures.
@@ -237,7 +238,7 @@ class PulpHelper:
             repositories: Dictionary of repository identifiers
             date_str: Build date string
             rpm_href: RPM repository href for adding content
-            results_model: PulpResultsModel to update with upload counts
+            results_model: PulpResultsDocument to update with upload counts
 
         Returns:
             Dictionary mapping architecture names to RpmUploadResult

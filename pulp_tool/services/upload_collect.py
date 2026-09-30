@@ -104,6 +104,8 @@ def _upload_and_get_results_url(
     labels = create_labels(context.build_id, "", context.namespace, context.parent_package, date)
     konflux_paths = _konflux_artifact_results_paths(context)
     oci_storage = (getattr(context, "oci_storage", None) or "").strip()
+    if konflux_paths and not oci_storage:
+        raise ValueError("--oci-storage is required when --artifact-results specifies Tekton url_path,digest_path")
     json_content = document.to_canonical_json(namespace=context.namespace, cluster=context.cluster)
 
     try:
@@ -133,10 +135,7 @@ def _upload_and_get_results_url(
             )
             logging.info("Results JSON uploaded successfully")
             results_json_url = _extract_results_url(client, context, task_response)
-            if konflux_paths:
-                _handle_artifact_results(client, context, task_response)
-            else:
-                logging.info("Results JSON available at: %s", results_json_url)
+            logging.info("Results JSON available at: %s", results_json_url)
 
         if context.sbom_results:
             _handle_sbom_results(client, context, json_content)
@@ -269,7 +268,7 @@ def _add_distributions_to_results(
     if bool(getattr(context, "target_arch_repo", False)) and results_model.artifacts:
         arch_urls: dict[str, str] = {}
         for info in results_model.artifacts.values():
-            arch = (info.labels.get("arch") or "").strip()
+            arch = (info.pulp_labels.get("arch") or "").strip()
             if arch in SUPPORTED_ARCHITECTURES:
                 arch_urls[arch] = repository_helper.distribution_url_for_base_path(arch)
         for arch in sorted(arch_urls.keys()):
@@ -301,7 +300,7 @@ def collect_results(
             _populate_results_model(client, results_model, content_data.content_results, file_info_map, context)
         _add_distributions_to_results(client, context, results_model)
         json_content = _serialize_results_to_json(
-            results_model.to_json_dict(namespace=context.namespace, cluster=context.cluster)
+            results_model.to_canonical_dict(namespace=context.namespace, cluster=context.cluster)
         )
         output_path = _save_results_to_folder(context.artifact_results.strip(), json_content, context)
         return str(output_path) if output_path else None
@@ -311,7 +310,7 @@ def collect_results(
             logging.info("No gathered content; using incrementally populated results model only")
             _add_distributions_to_results(client, context, results_model)
             json_content = _serialize_results_to_json(
-                results_model.to_json_dict(namespace=context.namespace, cluster=context.cluster)
+                results_model.to_canonical_dict(namespace=context.namespace, cluster=context.cluster)
             )
             repos = results_model.repositories
             if repos is None:
@@ -323,7 +322,7 @@ def collect_results(
     _populate_results_model(client, results_model, content_data.content_results, file_info_map, context)
     _add_distributions_to_results(client, context, results_model)
     json_content = _serialize_results_to_json(
-        results_model.to_json_dict(namespace=context.namespace, cluster=context.cluster)
+        results_model.to_canonical_dict(namespace=context.namespace, cluster=context.cluster)
     )
 
     repos = results_model.repositories
@@ -420,47 +419,6 @@ def _format_sha256_digest(sha256_hex: str) -> str:
     return f"sha256:{sha256_hex}"
 
 
-def _handle_artifact_results(client: PulpClient, context: UploadContext, task_response: TaskResponse) -> None:
-    """Handle artifact results for Konflux integration."""
-    repository_helper = PulpHelper(client, parent_package=context.parent_package)
-    distribution_urls = repository_helper.get_distribution_urls(context.build_id)
-
-    if "artifacts" not in distribution_urls:
-        logging.error("No distribution URL found for artifacts repository (build_id: %s)", context.build_id)
-        return
-
-    artifacts_dist_url = distribution_urls["artifacts"]
-
-    relative_path = task_response.result.get("relative_path") if task_response.result else None
-    if not relative_path:
-        logging.error("Task response does not contain relative_path in result")
-        return
-
-    distribution_file_url = f"{artifacts_dist_url}{relative_path}"
-
-    if not context.artifact_results:
-        logging.debug("No artifact_results path configured, skipping artifact results handling")
-        return
-
-    try:
-        image_url_path, image_digest_path = context.artifact_results.split(",")
-    except ValueError as e:
-        logging.error("Invalid artifact_results format: %s", e)
-        logging.error("Traceback: %s", traceback.format_exc())
-        return
-
-    artifact_info = _find_artifact_content(client, task_response)
-    if not artifact_info:
-        logging.error("Could not resolve artifact digest for Konflux artifact results")
-        return
-
-    _file_ref, sha256_hex = artifact_info
-    image_url = distribution_file_url
-    digest = _format_sha256_digest(sha256_hex)
-
-    _write_konflux_results(image_url, digest, image_url_path, image_digest_path)
-
-
 def _resolve_sbom_results_url(results: dict[str, Any], context: UploadContext) -> tuple[str | None, str | None]:
     """Return SBOM artifact key and distribution URL from serialized results JSON."""
     artifacts = results.get("artifacts") or {}
@@ -468,7 +426,7 @@ def _resolve_sbom_results_url(results: dict[str, Any], context: UploadContext) -
     for artifact_name, artifact_info in artifacts.items():
         if "sbom" not in artifact_name.lower():
             continue
-        labels = artifact_info.get("labels") or {}
+        labels = artifact_info.get("pulp_labels") or {}
         if labels.get("arch"):
             continue
         url = (artifact_info.get("url") or "").strip()
@@ -478,7 +436,7 @@ def _resolve_sbom_results_url(results: dict[str, Any], context: UploadContext) -
     for artifact_name, artifact_info in artifacts.items():
         if not any(artifact_name.endswith(ext) for ext in (".json", ".spdx", ".spdx.json")):
             continue
-        labels = artifact_info.get("labels") or {}
+        labels = artifact_info.get("pulp_labels") or {}
         if labels.get("arch"):
             continue
         url = (artifact_info.get("url") or "").strip()
@@ -539,6 +497,5 @@ __all__ = [
     "_parse_oci_reference",
     "_write_konflux_oci_results",
     "_konflux_results_from_oci_ref",
-    "_handle_artifact_results",
     "_handle_sbom_results",
 ]

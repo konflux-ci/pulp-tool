@@ -9,7 +9,8 @@ downloaded artifacts.
 import logging
 from typing import TYPE_CHECKING, Any, Optional
 
-from ...models.artifacts import ArtifactJsonResponse, ArtifactMetadata
+from ...models.artifacts import ArtifactMetadata
+from ...models.pulp_results import PulpResultsDocument
 
 if TYPE_CHECKING:
     from ...models.artifacts import PulledArtifacts
@@ -115,22 +116,27 @@ def _extract_field_from_artifact(artifact_info: ArtifactMetadata | dict[str, Any
         Field value or None
     """
     if isinstance(artifact_info, ArtifactMetadata):
-        return (artifact_info.labels or {}).get(field_name)
+        return (artifact_info.pulp_labels or {}).get(field_name)
 
     if isinstance(artifact_info, dict):
-        return artifact_info.get("labels", {}).get(field_name)
+        raw = artifact_info.get("pulp_labels")
+        if isinstance(raw, dict):
+            return raw.get(field_name)
+        return None
 
     return None
 
 
 def extract_metadata_from_artifact_json(
-    artifact_json: dict[str, Any] | ArtifactJsonResponse, field_name: str, fallback: str | None = None
+    artifact_json: dict[str, Any] | PulpResultsDocument,
+    field_name: str,
+    fallback: str | None = None,
 ) -> str | None:
     """
     Extract any metadata field from artifact JSON.
 
     Args:
-        artifact_json: Artifact metadata from distribution client (Dict or ArtifactJsonResponse)
+        artifact_json: Artifact metadata from distribution client (Dict or PulpResultsDocument)
         field_name: Field to extract from labels (e.g., 'build_id', 'namespace', 'parent_package')
         fallback: Value to return if field not found
 
@@ -142,8 +148,8 @@ def extract_metadata_from_artifact_json(
         >>> extract_metadata_from_artifact_json(metadata, "build_id", fallback="rok-storage")
         'build-123'
     """
-    # Handle both Dict and ArtifactJsonResponse types
-    if isinstance(artifact_json, ArtifactJsonResponse):
+    # Handle both Dict and PulpResultsDocument types
+    if isinstance(artifact_json, PulpResultsDocument):
         artifacts = artifact_json.artifacts
     else:
         # Handle raw dictionary
@@ -153,8 +159,8 @@ def extract_metadata_from_artifact_json(
             if isinstance(metadata, dict):
                 # Ensure labels is a dict, not None
                 metadata_dict = dict(metadata)
-                if metadata_dict.get("labels") is None:
-                    metadata_dict["labels"] = {}
+                if metadata_dict.get("pulp_labels") is None:
+                    metadata_dict["pulp_labels"] = {}
                 artifacts[name] = ArtifactMetadata(**metadata_dict)
             else:
                 artifacts[name] = metadata
@@ -216,7 +222,7 @@ def extract_metadata_from_artifacts(
     return fallback
 
 
-def extract_build_id_from_artifact_json(artifact_json: dict[str, Any] | ArtifactJsonResponse) -> str:
+def extract_build_id_from_artifact_json(artifact_json: dict[str, Any] | PulpResultsDocument) -> str:
     """
     Extract build_id from artifact_json metadata.
 
@@ -248,7 +254,7 @@ def extract_build_id_from_artifacts(pulled_artifacts: "PulledArtifacts") -> str:
 
 def determine_build_id(
     args: Any,
-    artifact_json: dict[str, Any] | ArtifactJsonResponse | None = None,
+    artifact_json: dict[str, Any] | PulpResultsDocument | None = None,
     pulled_artifacts: Optional["PulledArtifacts"] = None,
 ) -> str:
     """
@@ -258,7 +264,7 @@ def determine_build_id(
 
     Args:
         args: Command line arguments
-        artifact_json: Optional artifact metadata (Dict or ArtifactJsonResponse)
+        artifact_json: Optional artifact metadata (Dict or PulpResultsDocument)
         pulled_artifacts: Optional pulled artifacts (PulledArtifacts model or dict)
 
     Returns:

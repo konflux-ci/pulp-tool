@@ -71,8 +71,6 @@ from names import (
 )
 from rpm_variant import TEST2_NOARCH_RPM_NAME, build_test2_noarch_rpm
 
-from pulp_tool.models.pulp_results import oci_manifest_ref
-
 
 # ANSI color codes
 class Colors:
@@ -476,7 +474,7 @@ class E2ETestSuite:
                     self.log_distribution_fetch_diagnostics(
                         pulp_results_content,
                         pulp_results_url=pulp_results_url,
-                        pulp_results_digest=pulp_results_digest,
+                        pulp_results_digest=pulp_results_file_digest,
                         sbom_url=sbom_url,
                         failed_check=label,
                         failed_url=url,
@@ -663,7 +661,7 @@ class E2ETestSuite:
         upload_results_data = {
             "artifacts": {
                 "test.2-1.0.0-1.noarch.rpm": {
-                    "labels": {
+                    "pulp_labels": {
                         "date": "2026-06-03 13:31:09",
                         "build_id": upload_build_id,
                         "arch": "noarch",
@@ -850,33 +848,16 @@ class E2ETestSuite:
             digest = f"sha256:{digest}"
         return f"{url}@{digest}"
 
-    def _oci_ref_from_pulp_results(self, build_id: str) -> str:
-        """Legacy helper: embedded ``oci_manifest`` on pulp-content (pre-canonical JSON only)."""
-        client = distribution_client_from_config(self.config_file)
-        pulp_results_url = (
-            f"{self.base_url}/api/pulp-content/{self.namespace}/{build_id}/artifacts/pulp_results.json"
-        )
-        pulp_results_content = json.loads(
-            fetch_bytes(client, pulp_results_url, label="pulp_results.json").decode("utf-8")
-        )
-        oci_ref = oci_manifest_ref(pulp_results_content).strip()
-        if oci_ref and "sha256:" in oci_ref:
-            return oci_ref
-        raise RuntimeError(
-            "pulp_results.json on pulp-content has no embedded oci_manifest; "
-            "use Tekton --artifact-results files for the current OCI digest"
-        )
-
     def _run_upload_build_oras(
         self,
         oci_storage: str,
         build_id: str,
         rpm_dir: Path,
         *,
-        image_url_path: Path | None = None,
-        image_digest_path: Path | None = None,
+        image_url_path: Path,
+        image_digest_path: Path,
     ) -> str:
-        """Run ``upload-build`` with ORAS publish; return ``oci_manifest`` from Pulp."""
+        """Run ``upload-build`` with ORAS publish; return OCI ref from Tekton ``--artifact-results`` files."""
         storage = scoped_oci_storage(oci_storage, build_id, self.run_id)
         upload_cmd = [
             "pulp-tool",
@@ -891,14 +872,9 @@ class E2ETestSuite:
             str(rpm_dir),
             "--oci-storage",
             storage,
+            "--artifact-results",
+            f"{image_url_path},{image_digest_path}",
         ]
-        if image_url_path is not None and image_digest_path is not None:
-            upload_cmd.extend(
-                [
-                    "--artifact-results",
-                    f"{image_url_path},{image_digest_path}",
-                ]
-            )
         exit_code, output = self.run_command(upload_cmd)
         if not self.assert_exit_code(0, exit_code, "upload-build with ORAS completes successfully"):
             self.log_error(output)
@@ -909,9 +885,7 @@ class E2ETestSuite:
                     "PipelineRun service account; see e2e/README.md (ORAS registry auth)."
                 )
             raise RuntimeError("upload-build ORAS failed")
-        if image_url_path is not None and image_digest_path is not None:
-            return self._oci_ref_from_konflux_results(image_url_path, image_digest_path)
-        return self._oci_ref_from_pulp_results(build_id)
+        return self._oci_ref_from_konflux_results(image_url_path, image_digest_path)
 
     def _assert_konflux_oci_results_match_manifest(
         self,
@@ -1547,9 +1521,17 @@ class E2ETestSuite:
         oci_ref = getattr(self, "last_oci_pulp_results_ref", None)
         if not oci_ref:
             rpm_dir = self.rpm_dirs[2] / "noarch"
+            image_url_path = self.output_dir / "pull_oci_artloc_image_url"
+            image_digest_path = self.output_dir / "pull_oci_artloc_image_digest"
             self.run_test("upload-build (setup OCI ref for pull)", detail=f"build_id={build_id}")
             try:
-                oci_ref = self._run_upload_build_oras(oci_storage, build_id, rpm_dir)
+                oci_ref = self._run_upload_build_oras(
+                    oci_storage,
+                    build_id,
+                    rpm_dir,
+                    image_url_path=image_url_path,
+                    image_digest_path=image_digest_path,
+                )
             except RuntimeError as exc:
                 self.stats.failed += 1
                 self.log_error(str(exc))
@@ -1687,7 +1669,7 @@ class E2ETestSuite:
                 "--side-tag",
                 "e2e-side-tag-smoke",
             ],
-            substring="oci_storage",
+            substring="--oci-storage",
         )
         self.expect_cli_failure(
             "upload-build: missing --build-id",
@@ -2017,16 +1999,21 @@ class E2ETestSuite:
             self.skip_test("upload command (full options)", "DRY RUN")
             return
 
+        oci_storage = self._oci_oras_prereqs("upload full (Konflux artifact-results)")
+        if not oci_storage:
+            return
+
         # Use RPM directory index 1
         rpm_dir = self.rpm_dirs[1]
         sbom_results = self.output_dir / "sbom_results.json"
         image_url_path = self.output_dir / "image_url"
         image_digest_path = self.output_dir / "image_digest"
         full_build_id = self.bid(BUILD_ID_UPLOAD_FULL)
+        storage = scoped_oci_storage(oci_storage, full_build_id, self.run_id)
 
         self.run_test(
             "pulp-tool upload (full options)",
-            detail=f"rpm_dir={rpm_dir} build_id={full_build_id} namespace={self.namespace}",
+            detail=f"rpm_dir={rpm_dir} build_id={full_build_id} namespace={self.namespace} oci_storage={storage}",
         )
 
         cmd = [
@@ -2047,6 +2034,8 @@ class E2ETestSuite:
             str(self.sbom_file),
             "--artifact-results",
             f"{image_url_path},{image_digest_path}",
+            "--oci-storage",
+            storage,
             "--sbom-results",
             str(sbom_results),
             "--signed-by",
@@ -2077,6 +2066,14 @@ class E2ETestSuite:
         if not self.assert_file_exists(image_digest_path, "Konflux image digest result file"):
             return
 
+        oci_ref = self._oci_ref_from_konflux_results(image_url_path, image_digest_path)
+        self._assert_konflux_oci_results_match_manifest(
+            oci_ref,
+            image_url_path,
+            image_digest_path,
+            test_label="upload full",
+        )
+
         self.defer_distribution_check(
             "upload full (RPM, SBOM, pulp_results.json)",
             lambda suite: suite._execute_upload_full_distribution_verification(
@@ -2101,12 +2098,15 @@ class E2ETestSuite:
         """Deferred pulp-content checks for test_upload_full."""
         try:
             client = distribution_client_from_config(self.config_file)
-            pulp_results_url = image_url_path.read_text(encoding="utf-8").strip()
-            pulp_results_digest = image_digest_path.read_text(encoding="utf-8").strip()
-            self.log_info(f"Konflux digest result: {pulp_results_digest}")
-            pulp_results_content = json.loads(
-                fetch_bytes(client, pulp_results_url, label="pulp_results.json").decode("utf-8")
+            pulp_results_url = (
+                f"{self.base_url}/api/pulp-content/{self.namespace}/{full_build_id}/artifacts/pulp_results.json"
             )
+            pulp_results_raw = fetch_bytes(client, pulp_results_url, label="pulp_results.json")
+            pulp_results_content = json.loads(pulp_results_raw.decode("utf-8"))
+            pulp_results_file_digest = hashlib.sha256(pulp_results_raw).hexdigest()
+            oci_ref = self._oci_ref_from_konflux_results(image_url_path, image_digest_path)
+            self.log_info(f"Konflux OCI ref: {oci_ref}")
+            self.log_info(f"pulp_results.json pulp-content SHA256: {pulp_results_file_digest}")
             expected_pulp_artifacts = {
                 "test.1-1.0.0-1.x86_64.rpm",
                 "test.1-1.0.0-1.aarch64.rpm",
@@ -2119,7 +2119,7 @@ class E2ETestSuite:
                 self.log_distribution_fetch_diagnostics(
                     pulp_results_content,
                     pulp_results_url=pulp_results_url,
-                    pulp_results_digest=pulp_results_digest,
+                    pulp_results_digest=pulp_results_file_digest,
                     sbom_url=sbom_results_content,
                     failed_check="artifact keys",
                     upload_output=upload_output,
@@ -2134,7 +2134,7 @@ class E2ETestSuite:
                 self.log_distribution_fetch_diagnostics(
                     pulp_results_content,
                     pulp_results_url=pulp_results_url,
-                    pulp_results_digest=pulp_results_digest,
+                    pulp_results_digest=pulp_results_file_digest,
                     sbom_url=sbom_results_content,
                     failed_check="distribution keys",
                     upload_output=upload_output,
@@ -2148,7 +2148,7 @@ class E2ETestSuite:
                 pulp_results_content,
                 sbom_results_content,
                 pulp_results_url,
-                pulp_results_digest,
+                pulp_results_file_digest,
             )
 
         except DistributionFetchError as exc:
@@ -2177,13 +2177,15 @@ class E2ETestSuite:
                     "uses pulp-content HTTP, which can lag after upload — see "
                     "E2E_DISTRIBUTION_FETCH_MAX_WAIT_S (default 300s)."
                 )
-            pulp_results_url = image_url_path.read_text(encoding="utf-8").strip()
+            pulp_results_url = (
+                f"{self.base_url}/api/pulp-content/{self.namespace}/{full_build_id}/artifacts/pulp_results.json"
+            )
             pulp_results_digest = image_digest_path.read_text(encoding="utf-8").strip()
             if "pulp_results_content" in locals():
                 self.log_distribution_fetch_diagnostics(
                     pulp_results_content,
                     pulp_results_url=pulp_results_url,
-                    pulp_results_digest=pulp_results_digest,
+                    pulp_results_digest=pulp_results_file_digest,
                     sbom_url=sbom_results_content,
                     failed_check=getattr(exc, "label", None) or "setup",
                     failed_url=getattr(exc, "url", None) or pulp_results_url,
@@ -2192,18 +2194,22 @@ class E2ETestSuite:
         except json.JSONDecodeError as exc:
             self.stats.failed += 2
             self.log_error(f"Bad pulp_results.json file: {exc}")
-            pulp_results_url = image_url_path.read_text(encoding="utf-8").strip()
+            pulp_results_url = (
+                f"{self.base_url}/api/pulp-content/{self.namespace}/{full_build_id}/artifacts/pulp_results.json"
+            )
             self.log_error(f"pulp_results URL: {pulp_results_url}")
         except KeyError as e:
             self.stats.failed += 2
             self.log_error(f"pulp_results.json file missing key: {e}")
             if "pulp_results_content" in locals():
-                pulp_results_url = image_url_path.read_text(encoding="utf-8").strip()
+                pulp_results_url = (
+                    f"{self.base_url}/api/pulp-content/{self.namespace}/{full_build_id}/artifacts/pulp_results.json"
+                )
                 pulp_results_digest = image_digest_path.read_text(encoding="utf-8").strip()
                 self.log_distribution_fetch_diagnostics(
                     pulp_results_content,
                     pulp_results_url=pulp_results_url,
-                    pulp_results_digest=pulp_results_digest,
+                    pulp_results_digest=pulp_results_file_digest,
                     sbom_url=sbom_results_content,
                     failed_check="structure validation",
                     upload_output=upload_output,
@@ -2733,7 +2739,7 @@ class E2ETestSuite:
         with open(ext_pulp_results, "r") as epr:
             pulp_results_json = json.load(epr)
         pulp_results_json["artifacts"]["bear-4.1-1.noarch.rpm"] = {
-            "labels": {
+            "pulp_labels": {
                 "date": "2026-06-05 12:41:16",
                 "build_id": "test-fixture",
                 "arch": "noarch",
@@ -2980,7 +2986,7 @@ class E2ETestSuite:
         self.invoke_test_case(
             self.test_upload_full,
             "test_upload_full",
-            f"Full upload with SBOM, signed RPMs, Konflux --artifact-results "
+            f"Full upload with SBOM, signed RPMs, Konflux --artifact-results + --oci-storage "
             f"(pulp-content verify deferred); build_id={self.bid(BUILD_ID_UPLOAD_FULL)}.",
             requires_real_server=True,
         )

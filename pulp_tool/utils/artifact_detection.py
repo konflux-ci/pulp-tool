@@ -127,7 +127,7 @@ def extract_architecture_from_metadata(metadata: dict[str, Any] | ArtifactMetada
     if isinstance(metadata, ArtifactMetadata):
         return metadata.arch or "noarch"
 
-    return metadata.get("labels", {}).get("arch", "noarch")
+    return metadata.get("pulp_labels", {}).get("arch", "noarch")
 
 
 def _embedded_artifact_sha256(metadata: Any) -> str | None:

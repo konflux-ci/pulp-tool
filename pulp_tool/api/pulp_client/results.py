@@ -116,7 +116,7 @@ class PulpClientResultsMixin:
         file_relative_path: str | None = None,
     ) -> None:
         """
-        Add one uploaded artifact to PulpResultsModel using the same keys and URLs as gather/build.
+        Add one uploaded artifact to PulpResultsDocument using the same keys and URLs as gather/build.
 
         Called after upload tasks succeed so results JSON can be built incrementally.
         """
@@ -135,7 +135,7 @@ class PulpClientResultsMixin:
             distribution_urls,
             target_arch_repo=target_arch_repo,
         )
-        results_model.add_artifact(key=artifact_key, url=artifact_url, sha256=sha256_hex, labels=labels)
+        results_model.add_artifact(key=artifact_key, url=artifact_url, sha256=sha256_hex, pulp_labels=labels)
 
     def build_results_structure(
         self,
@@ -151,7 +151,7 @@ class PulpClientResultsMixin:
         Build the results structure from content and file info using optimized single-pass processing.
 
         Args:
-            results_model: PulpResultsModel to populate with artifacts
+            results_model: PulpResultsDocument to populate with artifacts
             content_results: Content data from Pulp
             file_info_map: Mapping of artifact hrefs to file info models
             distribution_urls: Optional dictionary mapping repo_type to distribution base URL
@@ -159,7 +159,7 @@ class PulpClientResultsMixin:
             merge: When True, skip artifact keys already present (incremental upload + reconcile)
 
         Returns:
-            Populated PulpResultsModel
+            Populated PulpResultsDocument
         """
         logging.info("Building results structure:")
         logging.info("  - Content items: %d", len(content_results))
@@ -240,7 +240,7 @@ class PulpClientResultsMixin:
 
                 # Add artifact to results model
                 results_model.add_artifact(
-                    key=artifact_key, url=artifact_url, sha256=file_info.sha256 or "", labels=labels
+                    key=artifact_key, url=artifact_url, sha256=file_info.sha256 or "", pulp_labels=labels
                 )
                 entry = results_model.artifacts.get(artifact_key)
                 if entry is not None:

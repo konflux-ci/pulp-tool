@@ -3,8 +3,9 @@
 from unittest.mock import patch
 
 from pulp_tool.models.context import UploadFilesContext, UploadRpmContext
+from pulp_tool.models.pulp_results import PulpResultsDocument
 from pulp_tool.models.repository import RepositoryRefs
-from pulp_tool.models.results import PulpResultsModel, RpmUploadResult
+from pulp_tool.models.results import RpmUploadResult
 from pulp_tool.utils import PulpHelper
 
 
@@ -32,7 +33,7 @@ class TestPulpHelperUploadMethods:
             artifacts_href="",
             artifacts_prn="",
         )
-        results_model = PulpResultsModel(build_id="test-build", repositories=repositories)
+        results_model = PulpResultsDocument(build_id="test-build", repositories=repositories)
         with (
             patch.object(helper, "get_distribution_urls_for_upload_context", return_value={"rpms": "https://x/"}),
             patch.object(helper._upload_orchestrator, "process_architecture_uploads") as mock_process,

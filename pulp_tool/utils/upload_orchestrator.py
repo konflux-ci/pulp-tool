@@ -105,7 +105,7 @@ class UploadOrchestrator:
             rpm_href: RPM repository href for adding content
             logs_prn: Logs repository PRN
             date_str: Build date string
-            results_model: PulpResultsModel to update with upload counts
+            results_model: PulpResultsDocument to update with upload counts
 
         Returns:
             Dictionary mapping futures to architecture names
@@ -192,7 +192,7 @@ class UploadOrchestrator:
             repositories: Dictionary of repository identifiers
             date_str: Build date string
             rpm_href: RPM repository href for adding content
-            results_model: PulpResultsModel to update with upload counts
+            results_model: PulpResultsDocument to update with upload counts
 
         Returns:
             Mapping of architecture name to RpmUploadResult (uploaded RPM paths and created_resources hrefs)

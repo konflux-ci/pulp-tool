@@ -13,7 +13,8 @@ from typing import TYPE_CHECKING, Any
 import httpx
 
 from ..models.context import UploadContext
-from ..models.results import PulpResultsModel, RpmUploadResult
+from ..models.pulp_results import PulpResultsDocument
+from ..models.results import RpmUploadResult
 from .constants import SUPPORTED_ARCHITECTURES
 from .error_handling import handle_generic_error
 from .pulp_tasks import create_file_content_and_wait, wait_for_successful_task
@@ -62,7 +63,7 @@ def upload_log(
     build_id: str,
     labels: dict[str, str],
     arch: str,
-    results_model: PulpResultsModel | None = None,
+    results_model: PulpResultsDocument | None = None,
     distribution_urls: dict[str, str] | None = None,
     target_arch_repo: bool = False,
 ) -> list[str]:
@@ -126,7 +127,7 @@ def _upload_logs_sequential(
     build_id: str,
     labels: dict[str, str],
     arch: str,
-    results_model: PulpResultsModel | None = None,
+    results_model: PulpResultsDocument | None = None,
     distribution_urls: dict[str, str] | None = None,
     target_arch_repo: bool = False,
 ) -> None:
@@ -185,7 +186,7 @@ def upload_artifacts_to_repository(
             # Support both dict and ArtifactFile objects
             if isinstance(artifact_info, dict):
                 file_path = artifact_info["file"]
-                labels = artifact_info["labels"]
+                labels = artifact_info.get("pulp_labels") or {}
             else:  # ArtifactFile model
                 file_path = artifact_info.file
                 labels = artifact_info.labels
@@ -226,7 +227,7 @@ def upload_rpms(
     *,
     rpm_repository_href: str,
     date: str,
-    results_model: PulpResultsModel,
+    results_model: PulpResultsDocument,
     distribution_urls: dict[str, str] | None = None,
     target_arch_repo: bool = False,
 ) -> list[str]:
@@ -242,7 +243,7 @@ def upload_rpms(
         arch: Architecture being processed
         rpm_repository_href: RPM repository href for adding content
         date: Build date string
-        results_model: PulpResultsModel to update with upload counts
+        results_model: PulpResultsDocument to update with upload counts
 
     When context has overwrite=True (UploadRpmContext), existing RPM package units in the
     target repository matching local RPM NVRA filenames (and signed_by when set) are removed before upload.
@@ -326,7 +327,7 @@ def upload_rpms_logs(
     rpm_repository_href: str,
     file_repository_prn: str,
     date: str,
-    results_model: PulpResultsModel,
+    results_model: PulpResultsDocument,
     distribution_urls: dict[str, str] | None = None,
     target_arch_repo: bool = False,
 ) -> RpmUploadResult:
@@ -344,7 +345,7 @@ def upload_rpms_logs(
         rpm_repository_href: RPM repository href for adding content
         file_repository_prn: File repository PRN for log uploads
         date: Build date string
-        results_model: PulpResultsModel to update with upload counts
+        results_model: PulpResultsDocument to update with upload counts
 
     Returns:
         RpmUploadResult containing uploaded RPMs, existing artifacts, and created resources

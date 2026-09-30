@@ -24,7 +24,7 @@ class UploadContext(KonfluxBaseModel):
         debug: Verbosity level (0=WARNING, 1=INFO, 2=DEBUG, 3+=DEBUG with HTTP logs)
         artifact_results: Konflux ``url_path,digest_path``, or a single folder path to write ``pulp_results.json``
             locally (no comma); local folder also skips artifacts repo and ``artifacts`` distribution URLs in JSON
-        oci_storage: OCI registry (``--oci-storage`` or ``cli.oci_storage``) for ORAS ``pulp_results.json`` publish
+        oci_storage: OCI registry (``--oci-storage`` only) for ORAS ``pulp_results.json`` publish
         sbom_results: Optional path to write SBOM results
         skip_logs_repo: When True, logs repo was not created; omit logs distribution URLs
         skip_sbom_repo: When True, SBOM repo was not created; omit sbom distribution URLs
@@ -98,7 +98,7 @@ class PullContext(KonfluxBaseModel):
         build_id: Optional build identifier (can be used for override or with namespace for URL generation)
         side_tag: Optional side-tag name for extra ROK RPM promotion (requires transfer_dest)
         artifact_results: Konflux ``url_path,digest_path`` for OCI manifest Tekton results after side-tag transfer
-        oci_storage: OCI registry target (--oci-storage or cli.oci_storage) for ORAS push
+        oci_storage: OCI registry target (--oci-storage) for ORAS push
         snapshot_path: Optional Konflux release snapshot JSON to update with pulpResultsOciManifest
         cluster: Cluster identity from config (cli.cluster) for origin_cluster labels
         debug: Verbosity level (0=WARNING, 1=INFO, 2=DEBUG, 3+=DEBUG with HTTP logs)

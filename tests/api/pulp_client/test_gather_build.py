@@ -11,6 +11,7 @@ from httpx import HTTPError
 from pulp_tool.api import PulpClient
 from pulp_tool.models.artifacts import ExtraArtifactRef, PulpContentRow
 from pulp_tool.models.pulp_api import RpmDistributionRequest, RpmRepositoryRequest
+from pulp_tool.models.pulp_results import PulpResultsDocument
 
 
 class TestPulpClient:
@@ -89,7 +90,7 @@ class TestPulpClient:
         self, mock_pulp_client, mock_content_data, mock_file_locations, httpx_mock
     ) -> None:
         """Test build_results_structure method."""
-        from pulp_tool.models import FileInfoModel, PulpResultsModel, RepositoryRefs
+        from pulp_tool.models import FileInfoModel, RepositoryRefs
 
         httpx_mock.get(
             "https://pulp.example.com/pulp/api/v3/test-domain/api/v3/artifacts/"
@@ -106,7 +107,7 @@ class TestPulpClient:
             artifacts_href="/artifacts/",
             artifacts_prn="artifacts-prn",
         )
-        results_model = PulpResultsModel(build_id="test-build-123", repositories=repositories)
+        results_model = PulpResultsDocument(build_id="test-build-123", repositories=repositories)
         file_info = FileInfoModel(**mock_file_locations["results"][0])
         file_info_map = {"/pulp/api/v3/artifacts/67890/": file_info}
         result = mock_pulp_client.build_results_structure(results_model, content_results, file_info_map)
@@ -117,7 +118,7 @@ class TestPulpClient:
         self, mock_pulp_client, mock_content_data
     ) -> None:
         """merge=True keeps existing artifact entries; still adds keys from gather."""
-        from pulp_tool.models import FileInfoModel, PulpResultsModel, RepositoryRefs
+        from pulp_tool.models import FileInfoModel, RepositoryRefs
 
         base = mock_content_data["results"][0]
         labels = dict(base["pulp_labels"])
@@ -142,7 +143,7 @@ class TestPulpClient:
             artifacts_href="/artifacts/",
             artifacts_prn="artifacts-prn",
         )
-        results_model = PulpResultsModel(build_id="test-build-123", repositories=repositories)
+        results_model = PulpResultsDocument(build_id="test-build-123", repositories=repositories)
         inc_url = "https://incremental.example/test-package.rpm"
         results_model.add_artifact("test-build-123/x86_64/test-package.rpm", inc_url, "incremental-sha", labels)
         file_info_map = {
@@ -171,7 +172,7 @@ class TestPulpClient:
         self, mock_pulp_client, mock_content_data, httpx_mock
     ) -> None:
         """Test build_results_structure with invalid artifact hrefs (line 1249)."""
-        from pulp_tool.models import FileInfoModel, PulpResultsModel, RepositoryRefs
+        from pulp_tool.models import FileInfoModel, RepositoryRefs
 
         repositories = RepositoryRefs(
             rpms_href="/rpms/",
@@ -183,7 +184,7 @@ class TestPulpClient:
             artifacts_href="/artifacts/",
             artifacts_prn="artifacts-prn",
         )
-        results_model = PulpResultsModel(build_id="test-build-123", repositories=repositories)
+        results_model = PulpResultsDocument(build_id="test-build-123", repositories=repositories)
         content_results = [
             PulpContentRow.model_validate(
                 {
@@ -210,7 +211,7 @@ class TestPulpClient:
         self, mock_pulp_client, mock_content_data, httpx_mock
     ) -> None:
         """Test build_results_structure with many missing file info entries (line 1286)."""
-        from pulp_tool.models import PulpResultsModel, RepositoryRefs
+        from pulp_tool.models import RepositoryRefs
 
         repositories = RepositoryRefs(
             rpms_href="/rpms/",
@@ -222,7 +223,7 @@ class TestPulpClient:
             artifacts_href="/artifacts/",
             artifacts_prn="artifacts-prn",
         )
-        results_model = PulpResultsModel(build_id="test-build-123", repositories=repositories)
+        results_model = PulpResultsDocument(build_id="test-build-123", repositories=repositories)
         content_results = [
             PulpContentRow.model_validate(
                 {

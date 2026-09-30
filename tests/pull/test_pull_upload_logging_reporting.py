@@ -8,7 +8,7 @@ import tempfile
 from unittest.mock import Mock, patch
 
 from pulp_tool.models.artifacts import ArtifactFile, PulledArtifacts
-from pulp_tool.models.results import PulpResultsModel
+from pulp_tool.models.pulp_results import PulpResultsDocument
 from pulp_tool.pull.reporting import (
     _calculate_artifact_totals,
     _format_download_summary,
@@ -105,7 +105,7 @@ class TestLoggingAndReporting:
             artifacts_href="",
             artifacts_prn="",
         )
-        upload_info = PulpResultsModel(build_id="test-build", repositories=repositories)
+        upload_info = PulpResultsDocument(build_id="test-build", repositories=repositories)
         upload_info.uploaded_counts.rpms = 2
         upload_info.uploaded_counts.logs = 1
         upload_info.uploaded_counts.sboms = 1
@@ -165,7 +165,7 @@ class TestLoggingAndReporting:
             artifacts_href="",
             artifacts_prn="",
         )
-        upload_info = PulpResultsModel(build_id="test-build", repositories=repositories)
+        upload_info = PulpResultsDocument(build_id="test-build", repositories=repositories)
         upload_info.uploaded_counts.rpms = 0
         upload_info.uploaded_counts.sboms = 0
         upload_info.uploaded_counts.logs = 0
@@ -186,7 +186,7 @@ class TestLoggingAndReporting:
             artifacts_href="",
             artifacts_prn="",
         )
-        upload_info = PulpResultsModel(build_id="test-build", repositories=repositories)
+        upload_info = PulpResultsDocument(build_id="test-build", repositories=repositories)
         upload_info.uploaded_counts.rpms = 1
         upload_info.uploaded_counts.sboms = 2
         upload_info.uploaded_counts.logs = 1
@@ -212,7 +212,7 @@ class TestLoggingAndReporting:
             artifacts_href="",
             artifacts_prn="",
         )
-        upload_info = PulpResultsModel(build_id="test-build", repositories=repositories)
+        upload_info = PulpResultsDocument(build_id="test-build", repositories=repositories)
         upload_info.uploaded_counts.rpms = 1
         with patch("pulp_tool.pull.reporting.logging") as mock_logging:
             _log_upload_summary(upload_info)
@@ -231,7 +231,7 @@ class TestLoggingAndReporting:
             artifacts_href="",
             artifacts_prn="",
         )
-        upload_info = PulpResultsModel(build_id="test-build", repositories=repositories)
+        upload_info = PulpResultsDocument(build_id="test-build", repositories=repositories)
         upload_info.uploaded_counts.rpms = 1
         with patch("pulp_tool.pull.reporting.logging") as mock_logging:
             _log_upload_summary(upload_info)
@@ -344,7 +344,7 @@ class TestLoggingAndReporting:
             artifacts_href="",
             artifacts_prn="",
         )
-        upload_info = PulpResultsModel(build_id="test-build", repositories=repositories)
+        upload_info = PulpResultsDocument(build_id="test-build", repositories=repositories)
         upload_info.uploaded_counts.rpms = 0
         upload_info.uploaded_counts.sboms = 0
         upload_info.uploaded_counts.logs = 0

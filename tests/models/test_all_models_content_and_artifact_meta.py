@@ -92,28 +92,15 @@ class TestContentData:
 
 
 class TestExtraArtifactRef:
-    """ExtraArtifactRef legacy href coercion."""
+    """ExtraArtifactRef model."""
 
     def test_explicit_pulp_href(self) -> None:
         assert ExtraArtifactRef(pulp_href="/content/1/").pulp_href == "/content/1/"
-
-    def test_legacy_file_key_populates_href(self) -> None:
-        ref = ExtraArtifactRef.model_validate({"file": "/artifacts/99/"})
-        assert ref.pulp_href == "/artifacts/99/"
-
-    def test_legacy_extra_key_populates_href(self) -> None:
-        ref = ExtraArtifactRef.model_validate({"extra": "/content/x/"})
-        assert ref.pulp_href == "/content/x/"
 
     def test_validator_passthrough_non_dict(self) -> None:
         ref = ExtraArtifactRef(pulp_href="/z/")
         same = ExtraArtifactRef.model_validate(ref)
         assert same.pulp_href == "/z/"
-
-    def test_legacy_validator_non_dict_input_unchanged(self) -> None:
-        """Before-validator passthrough when input is not a mapping (line 42)."""
-        coerce = cast(Callable[[Any], Any], ExtraArtifactRef._legacy_dict_href_keys)
-        assert coerce("not-a-dict") == "not-a-dict"
 
 
 class TestArtifactMetadata:
@@ -122,27 +109,27 @@ class TestArtifactMetadata:
     def test_create_artifact_metadata_empty(self) -> None:
         """Test creating empty ArtifactMetadata."""
         metadata = ArtifactMetadata()
-        assert metadata.labels == {}
+        assert metadata.pulp_labels == {}
 
     def test_create_artifact_metadata_with_labels(self) -> None:
         """Test creating ArtifactMetadata with labels."""
         metadata = ArtifactMetadata(
-            labels={
+            pulp_labels={
                 "build_id": "test-build-123",
                 "arch": "x86_64",
                 "namespace": "test-namespace",
                 "parent_package": "test-package",
             }
         )
-        assert metadata.labels["build_id"] == "test-build-123"
-        assert metadata.labels["arch"] == "x86_64"
-        assert metadata.labels["namespace"] == "test-namespace"
-        assert metadata.labels["parent_package"] == "test-package"
+        assert metadata.pulp_labels["build_id"] == "test-build-123"
+        assert metadata.pulp_labels["arch"] == "x86_64"
+        assert metadata.pulp_labels["namespace"] == "test-namespace"
+        assert metadata.pulp_labels["parent_package"] == "test-package"
 
     def test_artifact_metadata_properties(self) -> None:
         """Test ArtifactMetadata property accessors."""
         metadata = ArtifactMetadata(
-            labels={
+            pulp_labels={
                 "build_id": "test-123",
                 "arch": "x86_64",
                 "namespace": "my-namespace",
@@ -156,7 +143,7 @@ class TestArtifactMetadata:
 
     def test_artifact_metadata_properties_missing(self) -> None:
         """Test ArtifactMetadata properties when labels are missing."""
-        metadata = ArtifactMetadata(labels={})
+        metadata = ArtifactMetadata(pulp_labels={})
         assert metadata.build_id is None
         assert metadata.arch is None
         assert metadata.namespace is None
@@ -165,7 +152,7 @@ class TestArtifactMetadata:
     def test_artifact_metadata_with_url_and_sha256(self) -> None:
         """Test ArtifactMetadata with url and sha256 fields."""
         metadata = ArtifactMetadata(
-            labels={"build_id": "test-123", "arch": "x86_64"},
+            pulp_labels={"build_id": "test-123", "arch": "x86_64"},
             url="https://example.com/artifacts/test.rpm",
             sha256="a1b2c3d4e5f6",
         )
@@ -176,23 +163,16 @@ class TestArtifactMetadata:
 
     def test_artifact_metadata_without_url_and_sha256(self) -> None:
         """Test ArtifactMetadata without url and sha256 fields."""
-        metadata = ArtifactMetadata(labels={"build_id": "test-123"})
+        metadata = ArtifactMetadata(pulp_labels={"build_id": "test-123"})
         assert metadata.url is None
         assert metadata.sha256 is None
         assert metadata.build_id == "test-123"
 
     def test_artifact_metadata_explicit_null_url_from_dict(self) -> None:
         """Explicit null url runs url normalizer early-return branch."""
-        metadata = ArtifactMetadata.model_validate({"labels": {}, "url": None})
+        metadata = ArtifactMetadata.model_validate({"pulp_labels": {}, "url": None})
         assert metadata.url is None
 
-    def test_artifact_metadata_pulp_labels_only_when_labels_present(self) -> None:
-        """When both keys exist, labels win and pulp_labels is dropped before validate."""
-        metadata = ArtifactMetadata.model_validate(
-            {"labels": {"build_id": "b"}, "pulp_labels": {"build_id": "ignored"}},
-        )
-        assert metadata.labels["build_id"] == "b"
-
-    def test_artifact_metadata_before_validator_non_dict(self) -> None:
-        coerce = cast(Callable[[Any], Any], ArtifactMetadata._accept_legacy_pulp_labels_key)
+    def test_artifact_metadata_href_history_coerce_non_dict(self) -> None:
+        coerce = cast(Callable[[Any], Any], ArtifactMetadata._coerce_href_history)
         assert coerce("plain") == "plain"

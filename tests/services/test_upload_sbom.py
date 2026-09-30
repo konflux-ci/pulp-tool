@@ -7,8 +7,9 @@ import httpx
 import pytest
 from httpx import HTTPError
 
-from pulp_tool.models import PulpResultsModel, RepositoryRefs
+from pulp_tool.models import RepositoryRefs
 from pulp_tool.models.context import UploadRpmContext
+from pulp_tool.models.pulp_results import PulpResultsDocument
 from pulp_tool.services.upload_service import upload_sbom
 
 
@@ -38,7 +39,7 @@ class TestUploadSbom:
             artifacts_href="/artifacts/",
             artifacts_prn="artifacts-prn",
         )
-        results_model = PulpResultsModel(build_id="test-build", repositories=repositories)
+        results_model = PulpResultsDocument(build_id="test-build", repositories=repositories)
         with (
             patch("os.path.exists", return_value=True),
             patch("pulp_tool.services.upload_service.validate_file_path"),
@@ -63,7 +64,7 @@ class TestUploadSbom:
             artifacts_href="/artifacts/",
             artifacts_prn="artifacts-prn",
         )
-        results_model = PulpResultsModel(build_id="test-build", repositories=repositories)
+        results_model = PulpResultsDocument(build_id="test-build", repositories=repositories)
         with patch("os.path.exists", return_value=True), patch("pulp_tool.services.upload_service.validate_file_path"):
             with pytest.raises(ValueError, match="SBOM repository PRN is empty"):
                 upload_sbom(mock_pulp_client, args, "", "2024-01-01", results_model, "/tmp/x.json")
@@ -96,7 +97,7 @@ class TestUploadSbom:
             artifacts_href="/artifacts/",
             artifacts_prn="artifacts-prn",
         )
-        results_model = PulpResultsModel(build_id="test-build", repositories=repositories)
+        results_model = PulpResultsDocument(build_id="test-build", repositories=repositories)
         with (
             patch("os.path.exists", return_value=True),
             patch("pulp_tool.services.upload_service.validate_file_path"),
@@ -134,7 +135,7 @@ class TestUploadSbom:
             artifacts_href="/artifacts/",
             artifacts_prn="artifacts-prn",
         )
-        results_model = PulpResultsModel(build_id="test-build", repositories=repositories)
+        results_model = PulpResultsDocument(build_id="test-build", repositories=repositories)
         with (
             patch("os.path.exists", return_value=True),
             patch("pulp_tool.services.upload_service.validate_file_path"),
@@ -171,7 +172,7 @@ class TestUploadSbom:
             artifacts_href="/artifacts/",
             artifacts_prn="artifacts-prn",
         )
-        results_model = PulpResultsModel(build_id="test-build", repositories=repositories)
+        results_model = PulpResultsDocument(build_id="test-build", repositories=repositories)
         with patch("os.path.exists", return_value=False):
             with pytest.raises(FileNotFoundError, match="SBOM file not found"):
                 upload_sbom(mock_pulp_client, args, "test-repo", "2024-01-01", results_model, args.sbom_path)
@@ -196,7 +197,7 @@ class TestUploadSbom:
             artifacts_href="/artifacts/",
             artifacts_prn="artifacts-prn",
         )
-        results_model = PulpResultsModel(build_id="test-build", repositories=repositories)
+        results_model = PulpResultsDocument(build_id="test-build", repositories=repositories)
         with (
             patch("os.path.exists", return_value=True),
             patch("pulp_tool.services.upload_service.validate_file_path"),

@@ -13,7 +13,7 @@ from tests.support.temp_config import tempfile_config
 class TestSearchByChecksumErrors:
     """Test search-by error handling."""
 
-    @patch("pulp_tool.cli.search_by.PulpClient")
+    @patch("pulp_tool.services.search_by_service.PulpClient")
     def test_http_error(self, mock_client_class) -> None:
         """Test HTTP error handling."""
         mock_client = Mock()
@@ -24,7 +24,7 @@ class TestSearchByChecksumErrors:
             result = runner.invoke(cli, ["--config", config_path, "search-by", "--checksums", VALID_CHECKSUM_1])
         assert result.exit_code == 1
 
-    @patch("pulp_tool.cli.search_by.PulpClient")
+    @patch("pulp_tool.services.search_by_service.PulpClient")
     def test_generic_exception(self, mock_client_class) -> None:
         """Test generic exception handling."""
         mock_client_class.create_from_config_file.side_effect = ValueError("Config error")

@@ -43,7 +43,7 @@ def test_load_results_document_local(tmp_path: Path) -> None:
     f = tmp_path / "pulp_results.json"
     f.write_text('{"version": 2, "artifacts": {}}', encoding="utf-8")
     doc = load_results_document(str(f), dest_dir=tmp_path / "oci")
-    assert doc.version == "2.0.0"
+    assert doc.version == "2"
 
 
 def test_load_results_document_invalid_json(tmp_path: Path) -> None:
@@ -71,7 +71,7 @@ def test_load_results_document_oci_does_not_embed_manifest(tmp_path: Path) -> No
         doc = load_results_document(ref, dest_dir=tmp_path / "oci")
     assert "oci_manifest" not in doc._mutable_dict()
     assert "oci_manifest_history" not in doc._mutable_dict()
-    assert doc.version == "2.0.0"
+    assert doc.version == "2"
 
 
 def test_resolve_oci_pulls(tmp_path: Path) -> None:

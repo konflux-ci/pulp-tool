@@ -326,7 +326,6 @@ def fetch_pulp_results_json(
     label: str = "pulp_results.json",
     min_last_updated: str | None = None,
     required_distribution_keys: frozenset[str] | None = None,
-    require_oci_manifest: bool = False,
 ) -> dict[str, Any]:
     """
     GET ``pulp_results.json`` from pulp-content until the document matches expectations.
@@ -335,11 +334,10 @@ def fetch_pulp_results_json(
     results document; poll until ``min_last_updated`` (ISO date) and optional keys match.
     """
     LOGGER.info(
-        "Polling %s: min_last_updated=%s required_distributions=%s require_oci_manifest=%s url=%s",
+        "Polling %s: min_last_updated=%s required_distributions=%s url=%s",
         label,
         min_last_updated,
         sorted(required_distribution_keys or ()),
-        require_oci_manifest,
         url,
     )
     started = time.monotonic()
@@ -404,14 +402,6 @@ def fetch_pulp_results_json(
         if not isinstance(distributions, dict):
             distributions = {}
 
-        oci_manifest = ""
-        try:
-            from pulp_tool.models.pulp_results import oci_manifest_ref
-
-            oci_manifest = oci_manifest_ref(content).strip()
-        except Exception:
-            raw = content.get("oci_manifest")
-            oci_manifest = raw.strip() if isinstance(raw, str) else ""
         stale_reasons: list[str] = []
         if min_last_updated and (not last_updated or last_updated < min_last_updated):
             stale_reasons.append(f"last_updated={last_updated_raw!r} want>={min_last_updated!r}")
@@ -421,9 +411,6 @@ def fetch_pulp_results_json(
             missing = [key for key in required_distribution_keys if key not in distributions]
             if missing:
                 stale_reasons.append(f"missing distributions {missing!r}")
-        if require_oci_manifest:
-            if not oci_manifest or "sha256:" not in oci_manifest:
-                stale_reasons.append(f"missing digest-pinned oci_manifest (got {oci_manifest!r})")
 
         if not stale_reasons:
             elapsed_ms = (time.monotonic() - started) * 1000

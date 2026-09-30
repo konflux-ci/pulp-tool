@@ -22,15 +22,15 @@ class TestDownloadArtifactsConcurrently:
 
         artifacts = {
             "test.rpm": {
-                "labels": {"build_id": "test-build", "arch": "x86_64"},
+                "pulp_labels": {"build_id": "test-build", "arch": "x86_64"},
                 "url": "https://example.com/rpms/Packages/t/test.rpm",
             },
             "test.sbom": {
-                "labels": {"build_id": "test-build", "arch": "noarch"},
+                "pulp_labels": {"build_id": "test-build", "arch": "noarch"},
                 "url": "https://example.com/sbom/test.sbom",
             },
             "test.log": {
-                "labels": {"build_id": "test-build", "arch": "noarch"},
+                "pulp_labels": {"build_id": "test-build", "arch": "noarch"},
                 "url": "https://example.com/logs/test.log",
             },
         }
@@ -71,7 +71,10 @@ class TestDownloadArtifactsConcurrently:
         from concurrent.futures import Future
 
         artifacts = {
-            "test.rpm": {"labels": {"build_id": "test-build"}, "url": "https://example.com/rpms/Packages/t/test.rpm"}
+            "test.rpm": {
+                "pulp_labels": {"build_id": "test-build"},
+                "url": "https://example.com/rpms/Packages/t/test.rpm",
+            }
         }
         distros = {"rpms": "https://example.com/rpms/"}
         mock_client = Mock()
@@ -100,7 +103,8 @@ class TestDownloadArtifactsConcurrently:
 
         artifacts = {
             "test.rpm": ArtifactMetadata(
-                labels={"build_id": "test-build", "arch": "x86_64"}, url="https://example.com/rpms/Packages/t/test.rpm"
+                pulp_labels={"build_id": "test-build", "arch": "x86_64"},
+                url="https://example.com/rpms/Packages/t/test.rpm",
             )
         }
         distros = {"rpms": "https://example.com/rpms/"}
@@ -127,8 +131,14 @@ class TestDownloadArtifactsConcurrently:
         from concurrent.futures import Future
 
         artifacts = {
-            "test.rpm": {"labels": {"build_id": "test-build"}, "url": "https://example.com/rpms/Packages/t/test.rpm"},
-            "test2.rpm": {"labels": {"build_id": "test-build"}, "url": "https://example.com/rpms/Packages/t/test2.rpm"},
+            "test.rpm": {
+                "pulp_labels": {"build_id": "test-build"},
+                "url": "https://example.com/rpms/Packages/t/test.rpm",
+            },
+            "test2.rpm": {
+                "pulp_labels": {"build_id": "test-build"},
+                "url": "https://example.com/rpms/Packages/t/test2.rpm",
+            },
         }
         distros = {"rpms": "https://example.com/rpms/"}
         mock_client = Mock()
@@ -156,7 +166,7 @@ class TestExtractArtifactInfo:
 
     def test_extract_artifact_info_with_dict(self) -> None:
         """Test _extract_artifact_info with dict input."""
-        artifact_data = {"file": "/path/to/file.rpm", "labels": {"build_id": "test-build", "arch": "x86_64"}}
+        artifact_data = {"file": "/path/to/file.rpm", "pulp_labels": {"build_id": "test-build", "arch": "x86_64"}}
         file_path, labels = _extract_artifact_info(artifact_data)
         assert file_path == "/path/to/file.rpm"
         assert labels == {"build_id": "test-build", "arch": "x86_64"}

@@ -5,8 +5,9 @@ from unittest.mock import Mock, patch
 import httpx
 import pytest
 
-from pulp_tool.models.artifacts import ArtifactData, ArtifactJsonResponse, ArtifactMetadata, PulledArtifacts
+from pulp_tool.models.artifacts import ArtifactData, ArtifactMetadata, PulledArtifacts
 from pulp_tool.models.context import PullContext
+from pulp_tool.models.pulp_results import PulpResultsDocument
 from pulp_tool.pull.side_tag import SideTagUploadResult, upload_rpms_to_side_tag_repository
 
 
@@ -23,12 +24,12 @@ class TestUploadRpmsToSideTagRepository:
         pulled = PulledArtifacts()
         pulled.add_rpm("pkg.rpm", "/tmp/pkg.rpm", {"build_id": "b1", "namespace": "ns", "arch": "x86_64"})
         artifact_data = ArtifactData(
-            artifact_json=ArtifactJsonResponse(
+            artifact_json=PulpResultsDocument(
                 artifacts={
                     "pkg.rpm": ArtifactMetadata(
                         href="/pulp/source/",
                         url="https://example.com/pkg.rpm",
-                        labels={"build_id": "b1", "namespace": "ns"},
+                        pulp_labels={"build_id": "b1", "namespace": "ns"},
                     )
                 }
             ),
@@ -36,7 +37,7 @@ class TestUploadRpmsToSideTagRepository:
                 "pkg.rpm": ArtifactMetadata(
                     href="/pulp/source/",
                     url="https://example.com/pkg.rpm",
-                    labels={"build_id": "b1", "namespace": "ns"},
+                    pulp_labels={"build_id": "b1", "namespace": "ns"},
                 )
             },
         )

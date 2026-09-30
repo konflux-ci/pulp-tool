@@ -295,7 +295,7 @@ class TestUploadCommandErrorsAndResultsJson:
                     {
                         "artifacts": {
                             "x86_64/pkg.rpm": {
-                                "labels": {
+                                "pulp_labels": {
                                     "build_id": "extracted-build",
                                     "namespace": "extracted-ns",
                                     "arch": "x86_64",
