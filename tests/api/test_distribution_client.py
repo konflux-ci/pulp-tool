@@ -54,11 +54,11 @@ class TestDistributionClient:
         """Test pull_artifact method."""
         client = DistributionClient(cert="cert.pem", key="key.pem")
         httpx_mock.get("https://example.com/artifacts.json").mock(
-            return_value=httpx.Response(200, json={"artifacts": {"test.rpm": {"labels": {"build_id": "test"}}}})
+            return_value=httpx.Response(200, json={"artifacts": {"test.rpm": {"pulp_labels": {"build_id": "test"}}}})
         )
         response = client.pull_artifact("https://example.com/artifacts.json")
         assert response.status_code == 200
-        assert response.json()["artifacts"]["test.rpm"]["labels"]["build_id"] == "test"
+        assert response.json()["artifacts"]["test.rpm"]["pulp_labels"]["build_id"] == "test"
 
     def test_pull_artifact_raises_on_http_error(self, httpx_mock) -> None:
         """Non-success responses fail immediately (raise_for_status)."""
@@ -159,7 +159,7 @@ class TestDistributionClient:
     def test_pull_artifact_with_username_password(self, httpx_mock) -> None:
         """Test pull_artifact with Basic Auth (username/password)."""
         httpx_mock.get("https://example.com/artifacts.json").mock(
-            return_value=httpx.Response(200, json={"artifacts": {"test.rpm": {"labels": {"build_id": "test"}}}})
+            return_value=httpx.Response(200, json={"artifacts": {"test.rpm": {"pulp_labels": {"build_id": "test"}}}})
         )
         client = DistributionClient(username="user", password="pass")
         response = client.pull_artifact("https://example.com/artifacts.json")

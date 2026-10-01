@@ -83,7 +83,7 @@ pulp-tool update-build --help
 pulp-tool search-by --help
 ```
 
-Full command tables, examples, and logging: **[docs/cli-reference.md](docs/cli-reference.md)**.
+Full command tables, examples, and logging: **[docs/cli-reference.md](docs/cli-reference.md)**. The **`upload`** subcommand is a compatibility alias for **`upload-build`** (preferred in new docs and examples).
 
 ```python
 from pulp_tool import PulpClient, PulpHelper
@@ -113,7 +113,7 @@ metadata = dist.pull_artifact("https://pulp.example.com/artifacts.json").json()
 dist.pull_data(filename="pkg.rpm", file_url="...", arch="x86_64", artifact_type="rpm")
 ```
 
-**Models:** `RepositoryRefs`, `UploadContext`, `PullContext`, `ArtifactMetadata`, `PulpResultsModel`, `PulledArtifacts`.
+**Models:** `RepositoryRefs`, `UploadContext`, `PullContext`, `ArtifactMetadata`, `PulpResultsDocument`, `PulledArtifacts`.
 
 ## Development
 

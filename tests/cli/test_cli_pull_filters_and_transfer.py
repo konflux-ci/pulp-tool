@@ -9,6 +9,7 @@ import httpx
 from click.testing import CliRunner
 
 from pulp_tool.cli import cli
+from pulp_tool.models.pulp_results import PulpResultsDocument
 
 
 class TestPullCommandFiltersAndTransfer:
@@ -53,24 +54,26 @@ class TestPullCommandFiltersAndTransfer:
         assert result.exit_code == 1
         assert "Cannot use --artifact-location with --build-id" in result.output
 
-    @patch("pulp_tool.cli.pull.load_and_validate_artifacts")
-    @patch("pulp_tool.cli.pull.setup_repositories_if_needed")
-    @patch("pulp_tool.cli.pull.download_artifacts_concurrently")
-    @patch("pulp_tool.cli.pull.generate_pull_report")
+    @patch("pulp_tool.services.pull_service.load_and_validate_artifacts")
+    @patch("pulp_tool.services.pull_service.setup_repositories_if_needed")
+    @patch("pulp_tool.services.pull_service.download_artifacts_concurrently")
+    @patch("pulp_tool.services.pull_service.generate_pull_report")
     def test_transfer_with_local_file(self, mock_report, mock_download, mock_setup, mock_load) -> None:
         """Test transfer with local artifact file."""
         runner = CliRunner()
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as artifact_file:
-            artifact_file.write('{"artifacts": {"test.rpm": {"labels": {"build_id": "test"}}}, "distributions": {}}')
+            artifact_file.write(
+                '{"artifacts": {"test.rpm": {"pulp_labels": {"build_id": "test"}}}, "distributions": {}}'
+            )
             artifact_path = artifact_file.name
         try:
-            from pulp_tool.models.artifacts import ArtifactData, ArtifactJsonResponse, ArtifactMetadata
+            from pulp_tool.models.artifacts import ArtifactData, ArtifactMetadata
 
             mock_artifact_data = ArtifactData(
-                artifact_json=ArtifactJsonResponse(
-                    artifacts={"test.rpm": ArtifactMetadata(labels={"build_id": "test"})}, distributions={}
+                artifact_json=PulpResultsDocument(
+                    artifacts={"test.rpm": ArtifactMetadata(pulp_labels={"build_id": "test"})}, distributions={}
                 ),
-                artifacts={"test.rpm": ArtifactMetadata(labels={"build_id": "test"})},
+                artifacts={"test.rpm": ArtifactMetadata(pulp_labels={"build_id": "test"})},
             )
             mock_load.return_value = mock_artifact_data
             mock_setup.return_value = None
@@ -85,10 +88,10 @@ class TestPullCommandFiltersAndTransfer:
             os.unlink(artifact_path)
 
     @patch("pulp_tool.cli.pull.DistributionClient")
-    @patch("pulp_tool.cli.pull.load_and_validate_artifacts")
-    @patch("pulp_tool.cli.pull.setup_repositories_if_needed")
-    @patch("pulp_tool.cli.pull.download_artifacts_concurrently")
-    @patch("pulp_tool.cli.pull.generate_pull_report")
+    @patch("pulp_tool.services.pull_service.load_and_validate_artifacts")
+    @patch("pulp_tool.services.pull_service.setup_repositories_if_needed")
+    @patch("pulp_tool.services.pull_service.download_artifacts_concurrently")
+    @patch("pulp_tool.services.pull_service.generate_pull_report")
     def test_transfer_with_remote_url(
         self, mock_report, mock_download, mock_setup, mock_load, mock_dist_client
     ) -> None:
@@ -102,13 +105,13 @@ class TestPullCommandFiltersAndTransfer:
             config_path = Path(tmpdir) / "config.toml"
             config_content = f'[cli]\nbase_url = "https://pulp.example.com"\ncert = "{cert_path}"\nkey = "{key_path}"'
             config_path.write_text(config_content)
-            from pulp_tool.models.artifacts import ArtifactData, ArtifactJsonResponse, ArtifactMetadata
+            from pulp_tool.models.artifacts import ArtifactData, ArtifactMetadata
 
             mock_artifact_data = ArtifactData(
-                artifact_json=ArtifactJsonResponse(
-                    artifacts={"test.rpm": ArtifactMetadata(labels={"build_id": "test"})}, distributions={}
+                artifact_json=PulpResultsDocument(
+                    artifacts={"test.rpm": ArtifactMetadata(pulp_labels={"build_id": "test"})}, distributions={}
                 ),
-                artifacts={"test.rpm": ArtifactMetadata(labels={"build_id": "test"})},
+                artifacts={"test.rpm": ArtifactMetadata(pulp_labels={"build_id": "test"})},
             )
             mock_load.return_value = mock_artifact_data
             mock_setup.return_value = None
@@ -136,10 +139,10 @@ class TestPullCommandFiltersAndTransfer:
             assert result.exit_code == 0
 
     @patch("pulp_tool.cli.pull.DistributionClient")
-    @patch("pulp_tool.cli.pull.load_and_validate_artifacts")
-    @patch("pulp_tool.cli.pull.setup_repositories_if_needed")
-    @patch("pulp_tool.cli.pull.download_artifacts_concurrently")
-    @patch("pulp_tool.cli.pull.generate_pull_report")
+    @patch("pulp_tool.services.pull_service.load_and_validate_artifacts")
+    @patch("pulp_tool.services.pull_service.setup_repositories_if_needed")
+    @patch("pulp_tool.services.pull_service.download_artifacts_concurrently")
+    @patch("pulp_tool.services.pull_service.generate_pull_report")
     def test_transfer_with_key_from_config(
         self, mock_report, mock_download, mock_setup, mock_load, mock_dist_client
     ) -> None:
@@ -153,13 +156,13 @@ class TestPullCommandFiltersAndTransfer:
             config_path = Path(tmpdir) / "config.toml"
             config_content = f'[cli]\nbase_url = "https://pulp.example.com"\ncert = "{cert_path}"\nkey = "{key_path}"'
             config_path.write_text(config_content)
-            from pulp_tool.models.artifacts import ArtifactData, ArtifactJsonResponse, ArtifactMetadata
+            from pulp_tool.models.artifacts import ArtifactData, ArtifactMetadata
 
             mock_artifact_data = ArtifactData(
-                artifact_json=ArtifactJsonResponse(
-                    artifacts={"test.rpm": ArtifactMetadata(labels={"build_id": "test"})}, distributions={}
+                artifact_json=PulpResultsDocument(
+                    artifacts={"test.rpm": ArtifactMetadata(pulp_labels={"build_id": "test"})}, distributions={}
                 ),
-                artifacts={"test.rpm": ArtifactMetadata(labels={"build_id": "test"})},
+                artifacts={"test.rpm": ArtifactMetadata(pulp_labels={"build_id": "test"})},
             )
             mock_load.return_value = mock_artifact_data
             mock_setup.return_value = None
@@ -183,10 +186,10 @@ class TestPullCommandFiltersAndTransfer:
             assert result.exit_code == 0
 
     @patch("pulp_tool.cli.pull.DistributionClient")
-    @patch("pulp_tool.cli.pull.load_and_validate_artifacts")
-    @patch("pulp_tool.cli.pull.setup_repositories_if_needed")
-    @patch("pulp_tool.cli.pull.download_artifacts_concurrently")
-    @patch("pulp_tool.cli.pull.generate_pull_report")
+    @patch("pulp_tool.services.pull_service.load_and_validate_artifacts")
+    @patch("pulp_tool.services.pull_service.setup_repositories_if_needed")
+    @patch("pulp_tool.services.pull_service.download_artifacts_concurrently")
+    @patch("pulp_tool.services.pull_service.generate_pull_report")
     def test_pull_with_username_password_from_config(
         self, mock_report, mock_download, mock_setup, mock_load, mock_dist_client
     ) -> None:
@@ -197,13 +200,13 @@ class TestPullCommandFiltersAndTransfer:
             config_path.write_text(
                 '[cli]\nbase_url = "https://pulp.example.com"\nusername = "myuser"\npassword = "mypass"\n'
             )
-            from pulp_tool.models.artifacts import ArtifactData, ArtifactJsonResponse, ArtifactMetadata
+            from pulp_tool.models.artifacts import ArtifactData, ArtifactMetadata
 
             mock_artifact_data = ArtifactData(
-                artifact_json=ArtifactJsonResponse(
-                    artifacts={"test.rpm": ArtifactMetadata(labels={"build_id": "test"})}, distributions={}
+                artifact_json=PulpResultsDocument(
+                    artifacts={"test.rpm": ArtifactMetadata(pulp_labels={"build_id": "test"})}, distributions={}
                 ),
-                artifacts={"test.rpm": ArtifactMetadata(labels={"build_id": "test"})},
+                artifacts={"test.rpm": ArtifactMetadata(pulp_labels={"build_id": "test"})},
             )
             mock_load.return_value = mock_artifact_data
             mock_setup.return_value = None
@@ -232,10 +235,10 @@ class TestPullCommandFiltersAndTransfer:
             )
 
     @patch("pulp_tool.cli.pull.DistributionClient")
-    @patch("pulp_tool.cli.pull.load_and_validate_artifacts")
-    @patch("pulp_tool.cli.pull.setup_repositories_if_needed")
-    @patch("pulp_tool.cli.pull.download_artifacts_concurrently")
-    @patch("pulp_tool.cli.pull.generate_pull_report")
+    @patch("pulp_tool.services.pull_service.load_and_validate_artifacts")
+    @patch("pulp_tool.services.pull_service.setup_repositories_if_needed")
+    @patch("pulp_tool.services.pull_service.download_artifacts_concurrently")
+    @patch("pulp_tool.services.pull_service.generate_pull_report")
     def test_pull_with_distribution_config(
         self, mock_report, mock_download, mock_setup, mock_load, mock_dist_client
     ) -> None:
@@ -248,13 +251,13 @@ class TestPullCommandFiltersAndTransfer:
             )
             dist_config = Path(tmpdir) / "dist_auth.toml"
             dist_config.write_text('[cli]\nusername = "distuser"\npassword = "distpass"\n')
-            from pulp_tool.models.artifacts import ArtifactData, ArtifactJsonResponse, ArtifactMetadata
+            from pulp_tool.models.artifacts import ArtifactData, ArtifactMetadata
 
             mock_artifact_data = ArtifactData(
-                artifact_json=ArtifactJsonResponse(
-                    artifacts={"test.rpm": ArtifactMetadata(labels={"build_id": "test"})}, distributions={}
+                artifact_json=PulpResultsDocument(
+                    artifacts={"test.rpm": ArtifactMetadata(pulp_labels={"build_id": "test"})}, distributions={}
                 ),
-                artifacts={"test.rpm": ArtifactMetadata(labels={"build_id": "test"})},
+                artifacts={"test.rpm": ArtifactMetadata(pulp_labels={"build_id": "test"})},
             )
             mock_load.return_value = mock_artifact_data
             mock_setup.return_value = None
@@ -284,7 +287,7 @@ class TestPullCommandFiltersAndTransfer:
                 pulp_api_base_url="https://pulp.example.com",
             )
 
-    @patch("pulp_tool.cli.pull.load_and_validate_artifacts")
+    @patch("pulp_tool.services.pull_service.load_and_validate_artifacts")
     def test_transfer_config_load_exception(self, mock_load) -> None:
         """Test transfer when config file loading raises an exception."""
         runner = CliRunner()
@@ -304,7 +307,7 @@ class TestPullCommandFiltersAndTransfer:
             assert result.exit_code == 1
             mock_load.assert_not_called()
 
-    @patch("pulp_tool.cli.pull.load_and_validate_artifacts")
+    @patch("pulp_tool.services.pull_service.load_and_validate_artifacts")
     def test_transfer_remote_url_without_certs(self, mock_load) -> None:
         """Test transfer with remote URL but missing certificates."""
         runner = CliRunner()
@@ -312,7 +315,7 @@ class TestPullCommandFiltersAndTransfer:
         assert result.exit_code == 1
         mock_load.assert_not_called()
 
-    @patch("pulp_tool.cli.pull.load_and_validate_artifacts")
+    @patch("pulp_tool.services.pull_service.load_and_validate_artifacts")
     def test_pull_remote_missing_cli_base_url(self, mock_load) -> None:
         """Remote pulp-content URL requires cli.base_url for fetch allowlist."""
         runner = CliRunner()
@@ -332,7 +335,7 @@ class TestPullCommandFiltersAndTransfer:
         assert result.exit_code == 1
         mock_load.assert_not_called()
 
-    @patch("pulp_tool.cli.pull.load_and_validate_artifacts")
+    @patch("pulp_tool.services.pull_service.load_and_validate_artifacts")
     def test_transfer_http_error(self, mock_load) -> None:
         """Test transfer with HTTP error."""
         runner = CliRunner()
@@ -346,10 +349,10 @@ class TestPullCommandFiltersAndTransfer:
         finally:
             os.unlink(artifact_path)
 
-    @patch("pulp_tool.cli.pull.load_and_validate_artifacts")
-    @patch("pulp_tool.cli.pull.setup_repositories_if_needed")
-    @patch("pulp_tool.cli.pull.download_artifacts_concurrently")
-    @patch("pulp_tool.cli.pull.generate_pull_report")
+    @patch("pulp_tool.services.pull_service.load_and_validate_artifacts")
+    @patch("pulp_tool.services.pull_service.setup_repositories_if_needed")
+    @patch("pulp_tool.services.pull_service.download_artifacts_concurrently")
+    @patch("pulp_tool.services.pull_service.generate_pull_report")
     def test_transfer_with_content_type_filter(self, mock_report, mock_download, mock_setup, mock_load) -> None:
         """Test transfer with --content-types filter."""
         runner = CliRunner()
@@ -357,13 +360,13 @@ class TestPullCommandFiltersAndTransfer:
             artifact_file.write('{"artifacts": [], "distributions": {}}')
             artifact_path = artifact_file.name
         try:
-            from pulp_tool.models.artifacts import ArtifactData, ArtifactJsonResponse, ArtifactMetadata
+            from pulp_tool.models.artifacts import ArtifactData, ArtifactMetadata
 
             mock_artifact_data = ArtifactData(
-                artifact_json=ArtifactJsonResponse(
-                    artifacts={"test.rpm": ArtifactMetadata(labels={"build_id": "test"})}, distributions={}
+                artifact_json=PulpResultsDocument(
+                    artifacts={"test.rpm": ArtifactMetadata(pulp_labels={"build_id": "test"})}, distributions={}
                 ),
-                artifacts={"test.rpm": ArtifactMetadata(labels={"build_id": "test"})},
+                artifacts={"test.rpm": ArtifactMetadata(pulp_labels={"build_id": "test"})},
             )
             mock_load.return_value = mock_artifact_data
             mock_setup.return_value = None
@@ -381,10 +384,10 @@ class TestPullCommandFiltersAndTransfer:
         finally:
             os.unlink(artifact_path)
 
-    @patch("pulp_tool.cli.pull.load_and_validate_artifacts")
-    @patch("pulp_tool.cli.pull.setup_repositories_if_needed")
-    @patch("pulp_tool.cli.pull.download_artifacts_concurrently")
-    @patch("pulp_tool.cli.pull.generate_pull_report")
+    @patch("pulp_tool.services.pull_service.load_and_validate_artifacts")
+    @patch("pulp_tool.services.pull_service.setup_repositories_if_needed")
+    @patch("pulp_tool.services.pull_service.download_artifacts_concurrently")
+    @patch("pulp_tool.services.pull_service.generate_pull_report")
     def test_transfer_with_arch_filter(self, mock_report, mock_download, mock_setup, mock_load) -> None:
         """Test transfer with --archs filter."""
         runner = CliRunner()
@@ -392,13 +395,13 @@ class TestPullCommandFiltersAndTransfer:
             artifact_file.write('{"artifacts": [], "distributions": {}}')
             artifact_path = artifact_file.name
         try:
-            from pulp_tool.models.artifacts import ArtifactData, ArtifactJsonResponse, ArtifactMetadata
+            from pulp_tool.models.artifacts import ArtifactData, ArtifactMetadata
 
             mock_artifact_data = ArtifactData(
-                artifact_json=ArtifactJsonResponse(
-                    artifacts={"test.rpm": ArtifactMetadata(labels={"build_id": "test"})}, distributions={}
+                artifact_json=PulpResultsDocument(
+                    artifacts={"test.rpm": ArtifactMetadata(pulp_labels={"build_id": "test"})}, distributions={}
                 ),
-                artifacts={"test.rpm": ArtifactMetadata(labels={"build_id": "test"})},
+                artifacts={"test.rpm": ArtifactMetadata(pulp_labels={"build_id": "test"})},
             )
             mock_load.return_value = mock_artifact_data
             mock_setup.return_value = None
@@ -417,10 +420,10 @@ class TestPullCommandFiltersAndTransfer:
             os.unlink(artifact_path)
 
     @patch("pulp_tool.cli.pull.DistributionClient")
-    @patch("pulp_tool.cli.pull.load_and_validate_artifacts")
-    @patch("pulp_tool.cli.pull.setup_repositories_if_needed")
-    @patch("pulp_tool.cli.pull.download_artifacts_concurrently")
-    @patch("pulp_tool.cli.pull.generate_pull_report")
+    @patch("pulp_tool.services.pull_service.load_and_validate_artifacts")
+    @patch("pulp_tool.services.pull_service.setup_repositories_if_needed")
+    @patch("pulp_tool.services.pull_service.download_artifacts_concurrently")
+    @patch("pulp_tool.services.pull_service.generate_pull_report")
     def test_pull_artifact_location_oci_manifest_ref(
         self, mock_report, mock_download, mock_setup, mock_load, mock_dist_client
     ) -> None:
@@ -439,10 +442,10 @@ class TestPullCommandFiltersAndTransfer:
             mock_dist_client.return_value = mock_dist_client_instance
             local_json = Path(tmpdir) / "pulp_results.json"
             local_json.write_text('{"artifacts": {}, "distributions": {}}', encoding="utf-8")
-            from pulp_tool.models.artifacts import ArtifactData, ArtifactJsonResponse
+            from pulp_tool.models.artifacts import ArtifactData
 
             mock_load.return_value = ArtifactData(
-                artifact_json=ArtifactJsonResponse(artifacts={}, distributions={}),
+                artifact_json=PulpResultsDocument(artifacts={}, distributions={}),
                 artifacts={},
             )
             mock_setup.return_value = None
@@ -452,7 +455,9 @@ class TestPullCommandFiltersAndTransfer:
             mock_result.failed = 0
             mock_download.return_value = mock_result
             oci_ref = "quay.io/ns/repo@sha256:abc123"
-            with patch("pulp_tool.cli.pull.resolve_results_json_path", return_value=local_json) as mock_oras_pull:
+            with patch(
+                "pulp_tool.cli.runner_helpers.resolve_results_json_path", return_value=local_json
+            ) as mock_oras_pull:
                 result = runner.invoke(
                     cli,
                     [
@@ -478,7 +483,7 @@ class TestPullCommandFiltersAndTransfer:
             cfg.write_text('[cli]\nbase_url = "https://pulp.example"\n')
             oci_ref = "quay.io/ns/repo@sha256:abc123"
             with patch(
-                "pulp_tool.cli.pull.resolve_results_json_path",
+                "pulp_tool.cli.runner_helpers.resolve_results_json_path",
                 side_effect=OrasPublishError("oras pull failed (exit 1): denied"),
             ):
                 result = runner.invoke(
@@ -505,7 +510,7 @@ class TestPullCommandFiltersAndTransfer:
                 ["pull", "--transfer-dest", cfg_path, "--side-tag", "mytest"],
             )
             assert result.exit_code == 1
-            assert "oci_storage" in result.output
+            assert "--oci-storage" in result.output
         finally:
             os.unlink(cfg_path)
 
@@ -530,7 +535,7 @@ class TestPullCommandFiltersAndTransfer:
                 ],
             )
             assert result.exit_code == 1
-            assert "oci_storage" in result.output
+            assert "--oci-storage" in result.output
         finally:
             os.unlink(cfg_path)
 
@@ -553,7 +558,7 @@ class TestPullCommandFiltersAndTransfer:
                 ],
             )
             assert result.exit_code == 1
-            assert "oci_storage" in result.output
+            assert "--oci-storage" in result.output
         finally:
             os.unlink(cfg_path)
 
@@ -582,7 +587,6 @@ class TestPullCommandFiltersAndTransfer:
                     "quay.io/ns/repo:latest",
                 ],
             )
-            assert "cli.oci_storage is required" not in result.output
-            assert "--oci-storage or cli.oci_storage" not in result.output
+            assert "--oci-storage in --transfer-dest is required" not in result.output
         finally:
             os.unlink(cfg_path)

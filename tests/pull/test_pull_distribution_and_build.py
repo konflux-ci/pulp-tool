@@ -35,11 +35,11 @@ class TestDistributionClient:
         """Test pull_artifact method."""
         client = DistributionClient(cert="cert.pem", key="key.pem")
         httpx_mock.get("https://example.com/artifacts.json").mock(
-            return_value=httpx.Response(200, json={"artifacts": {"test.rpm": {"labels": {"build_id": "test"}}}})
+            return_value=httpx.Response(200, json={"artifacts": {"test.rpm": {"pulp_labels": {"build_id": "test"}}}})
         )
         response = client.pull_artifact("https://example.com/artifacts.json")
         assert response.status_code == 200
-        assert response.json()["artifacts"]["test.rpm"]["labels"]["build_id"] == "test"
+        assert response.json()["artifacts"]["test.rpm"]["pulp_labels"]["build_id"] == "test"
 
     def test_pull_data(self, httpx_mock) -> None:
         """Test pull_data method."""
@@ -81,11 +81,11 @@ class TestArtifactManagement:
         """Test loading artifact metadata successfully."""
         client = DistributionClient(cert="cert.pem", key="key.pem")
         httpx_mock.get("https://example.com/artifacts.json").mock(
-            return_value=httpx.Response(200, json={"artifacts": {"test.rpm": {"labels": {"build_id": "test"}}}})
+            return_value=httpx.Response(200, json={"artifacts": {"test.rpm": {"pulp_labels": {"build_id": "test"}}}})
         )
         result = load_artifact_metadata("https://example.com/artifacts.json", client)
         assert "artifacts" in result
-        assert result["artifacts"]["test.rpm"]["labels"]["build_id"] == "test"
+        assert result["artifacts"]["test.rpm"]["pulp_labels"]["build_id"] == "test"
 
     def test_load_artifact_metadata_file_not_found(self) -> None:
         """Test loading artifact metadata from non-existent file."""
@@ -109,9 +109,9 @@ class TestArtifactManagement:
     def test_categorize_artifacts(self) -> None:
         """Test categorizing artifacts by type."""
         artifacts = {
-            "test.rpm": {"labels": {"arch": "x86_64"}},
-            "test.sbom": {"labels": {"arch": "noarch"}},
-            "test.log": {"labels": {"arch": "noarch"}},
+            "test.rpm": {"pulp_labels": {"arch": "x86_64"}},
+            "test.sbom": {"pulp_labels": {"arch": "noarch"}},
+            "test.log": {"pulp_labels": {"arch": "noarch"}},
         }
         distros = {
             "rpms": "https://example.com/rpms/",
@@ -219,7 +219,7 @@ class TestBuildIdManagement:
 
     def test_determine_build_id_from_file(self, temp_file) -> None:
         """Test determining build_id from artifact file."""
-        artifact_data = {"artifacts": {"test.rpm": {"labels": {"build_id": "test-build"}}}}
+        artifact_data = {"artifacts": {"test.rpm": {"pulp_labels": {"build_id": "test-build"}}}}
         with open(temp_file, "w") as f:
             json.dump(artifact_data, f)
         args = Mock()

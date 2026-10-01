@@ -4,33 +4,58 @@ from datetime import date
 
 import pytest
 
-import pulp_tool.models.pulp_results as prd
-from pulp_tool.models.artifacts import ArtifactJsonResponse
+from pulp_tool.models.artifacts import ArtifactMetadata
 from pulp_tool.models.pulp_results import (
     BUILD_SIGN_OPERATION,
     PULP_RESULTS_SCHEMA_VERSION,
+    PulpResultsDocument,
     SideTagRpmTransfer,
     append_href_history,
-    apply_side_tag_transfer_to_document,
-    bump_document_version,
-    document_from_artifact_json,
-    document_to_canonical_json,
     merge_origin_pulp_labels,
     merge_signed_by,
     normalize_document,
-    oci_manifest_ref,
-    prepare_document_for_mutation,
     recompute_distributions,
     resolve_predecessor_href,
+    retain_distribution_slots,
     side_tag_upload_labels,
-    touch_document_last_updated,
 )
+
+
+def _side_tag_doc(source: dict, transfers: list, *, side_tag: str, top_level_side_tag_distribution_url: str) -> dict:
+    return (
+        PulpResultsDocument.from_raw(source)
+        .apply_side_tag_transfer(
+            transfers,
+            side_tag=side_tag,
+            top_level_side_tag_distribution_url=top_level_side_tag_distribution_url,
+        )
+        .to_canonical_dict()
+    )
+
+
+def _prepare_doc(document: dict, *, operation: str) -> str:
+    doc = PulpResultsDocument.from_raw(document)
+    old = doc.prepare_for_mutation(operation=operation)
+    document.clear()
+    document.update(doc.to_canonical_dict())
+    return old
+
+
+def _touch_doc(document: dict) -> str:
+    doc = PulpResultsDocument.from_raw(document)
+    value = doc.touch_last_updated()
+    document.clear()
+    document.update(doc.to_canonical_dict())
+    return value
 
 
 class TestRetainDistributionSlots:
     def test_adds_artifact_slot_not_yet_in_merged(self) -> None:
-        artifact = {"href": "/pulp/same/", "distributions": {"legacy": "https://example/legacy/"}}
-        merged = prd._retain_distribution_slots(artifact, "/pulp/same/", {"st": "https://example/side/"})
+        artifact = ArtifactMetadata(
+            href="/pulp/same/",
+            distributions={"legacy": "https://example/legacy/"},
+        )
+        merged = retain_distribution_slots(artifact, "/pulp/same/", {"st": "https://example/side/"})
         assert merged["legacy"] == "https://example/legacy/"
         assert merged["st"] == "https://example/side/"
 
@@ -46,7 +71,14 @@ class TestLineageHelpers:
         assert resolve_predecessor_href({"labels": "bad"}) == ""
 
     def test_resolve_predecessor_href_pulp_href_label(self) -> None:
-        assert resolve_predecessor_href({"labels": {"pulp_href": "/pulp/c/"}}) == "/pulp/c/"
+        assert resolve_predecessor_href({"pulp_labels": {"pulp_href": "/pulp/c/"}}) == "/pulp/c/"
+
+    def test_resolve_predecessor_href_from_metadata_labels(self) -> None:
+        artifact = ArtifactMetadata(
+            href="",
+            pulp_labels={"source_pulp_href": "/pulp/from-label/"},
+        )
+        assert resolve_predecessor_href(artifact) == "/pulp/from-label/"
 
     def test_merge_origin_labels_do_not_overwrite(self) -> None:
         labels = {"origin_namespace": "keep"}
@@ -95,7 +127,7 @@ class TestApplySideTagTransfer:
                 distribution_url="https://rok.example/side-tag-mytest/Packages/p/pkg.rpm",
             )
         ]
-        merged = apply_side_tag_transfer_to_document(
+        merged = _side_tag_doc(
             source,
             transfers,
             side_tag="mytest",
@@ -123,24 +155,24 @@ class TestApplySideTagTransfer:
         assert "oci_manifest_history" not in doc
 
     def test_append_href_history_skips_empty_prior(self) -> None:
-        art: dict = {"href_history": []}
-        append_href_history(art, prior_href="", prior_sha256="x", last_updated="2026-01-01")
-        assert art["href_history"] == []
+        art = ArtifactMetadata(href_history=[])
+        append_href_history(
+            art,
+            prior_href="",
+            prior_sha256="x",
+            last_updated="2026-01-01",
+        )
+        assert art.href_history == []
 
     def test_touch_document_last_updated_sets_iso_date(self) -> None:
         doc: dict = {"version": "1.0.0", "last_updated": "2019-01-01"}
-        assert touch_document_last_updated(doc) == date.today().isoformat()
+        assert _touch_doc(doc) == date.today().isoformat()
         assert doc["version"] == "1.0.0"
         assert "revision" not in doc
 
-    def test_bump_document_version_alias_touches_last_updated(self) -> None:
-        doc = {"version": "1.0.0", "last_updated": "2019-01-01"}
-        assert bump_document_version(doc) == date.today().isoformat()
-        assert doc["version"] == "1.0.0"
-
     def test_apply_side_tag_non_dict_artifacts(self) -> None:
         source = {"artifacts": "not-a-dict"}
-        merged = apply_side_tag_transfer_to_document(
+        merged = _side_tag_doc(
             source,
             [],
             side_tag="t",
@@ -150,7 +182,7 @@ class TestApplySideTagTransfer:
 
     def test_apply_side_tag_missing_last_updated_still_mutates(self) -> None:
         source = {"artifacts": {}}
-        merged = apply_side_tag_transfer_to_document(
+        merged = _side_tag_doc(
             source,
             [],
             side_tag="t",
@@ -169,7 +201,7 @@ class TestApplySideTagTransfer:
                 distribution_url="https://example/pkg.rpm",
             )
         ]
-        merged = apply_side_tag_transfer_to_document(
+        merged = _side_tag_doc(
             source,
             transfers,
             side_tag="st",
@@ -194,7 +226,7 @@ class TestApplySideTagTransfer:
                 distribution_url="https://example/side/pkg.rpm",
             )
         ]
-        merged = apply_side_tag_transfer_to_document(
+        merged = _side_tag_doc(
             source,
             transfers,
             side_tag="st",
@@ -221,7 +253,7 @@ class TestApplySideTagTransfer:
                 distribution_url="https://example/new-side/pkg.rpm",
             )
         ]
-        merged = apply_side_tag_transfer_to_document(
+        merged = _side_tag_doc(
             source,
             transfers,
             side_tag="st",
@@ -246,7 +278,7 @@ class TestApplySideTagTransfer:
                 distribution_url="https://example/side/pkg.rpm",
             )
         ]
-        merged = apply_side_tag_transfer_to_document(
+        merged = _side_tag_doc(
             source,
             transfers,
             side_tag="st",
@@ -257,17 +289,17 @@ class TestApplySideTagTransfer:
 
 class TestDocumentFromArtifactJson:
     def test_from_pydantic_model(self) -> None:
-        model = ArtifactJsonResponse(artifacts={})
-        doc = document_from_artifact_json(model)
+        model = PulpResultsDocument(artifacts={})
+        doc = PulpResultsDocument.from_artifact_json(model).to_canonical_dict()
         assert "artifacts" in doc
 
     def test_from_dict(self) -> None:
-        doc = document_from_artifact_json({"version": 1})
+        doc = PulpResultsDocument.from_artifact_json({"version": "1.0.0"}).to_canonical_dict()
         assert doc["version"] == "1.0.0"
 
     def test_unsupported_type_raises(self) -> None:
         with pytest.raises(TypeError):
-            document_from_artifact_json(42)
+            PulpResultsDocument.from_artifact_json(42)
 
 
 class TestCanonicalSchema:
@@ -275,17 +307,13 @@ class TestCanonicalSchema:
         raw = {
             "version": 2,
             "oci_manifest": "quay.io/r@sha256:abc",
-            "artifacts": {"a.rpm": {"labels": {"build_id": "b"}, "href": "/h/"}},
+            "artifacts": {"a.rpm": {"pulp_labels": {"build_id": "b"}, "href": "/h/"}},
         }
         doc = normalize_document(raw)
         assert "oci_manifest" not in doc
         assert "oci_manifest_history" not in doc
         assert doc["artifacts"]["a.rpm"]["pulp_labels"]["build_id"] == "b"
         assert "labels" not in doc["artifacts"]["a.rpm"]
-
-    def test_oci_manifest_ref_legacy_embedded_only(self) -> None:
-        doc = {"oci_manifest": {"ref": "quay.io/r", "digest": "sha256:dead"}}
-        assert oci_manifest_ref(doc) == "quay.io/r@sha256:dead"
 
     def test_merge_signed_by_semicolon(self) -> None:
         assert merge_signed_by("a@x.com", "b@x.com") == "a@x.com;b@x.com"
@@ -299,7 +327,7 @@ class TestCanonicalSchema:
             "oci_manifest": {"ref": "quay.io/r", "digest": "sha256:aa"},
             "artifacts": {"p.rpm": {"href": "/old/", "sha256": "x"}},
         }
-        old = prepare_document_for_mutation(doc, operation=BUILD_SIGN_OPERATION)
+        old = _prepare_doc(doc, operation=BUILD_SIGN_OPERATION)
         assert old == prior_day
         assert doc["version"] == "1.0.0"
         assert doc["last_updated"] == date.today().isoformat()
@@ -320,21 +348,13 @@ class TestCanonicalSchema:
         assert "stale" not in out
 
     def test_document_to_canonical_json_uses_pulp_labels(self) -> None:
-        doc = normalize_document({"artifacts": {"f.rpm": {"labels": {"arch": "x86_64"}}}})
-        text = document_to_canonical_json(doc)
+        doc = normalize_document({"artifacts": {"f.rpm": {"pulp_labels": {"arch": "x86_64"}}}})
+        text = PulpResultsDocument.from_raw(doc).to_canonical_json()
         assert '"pulp_labels"' in text
         assert '"labels"' not in text
 
     def test_initial_document_shell(self) -> None:
-        from pulp_tool.models.pulp_results import initial_document_shell
-
-        doc = initial_document_shell(build_id="b", namespace="ns", cluster="c1")
+        doc = PulpResultsDocument.empty_shell(build_id="b", namespace="ns", cluster="c1").to_canonical_dict()
         assert doc["version"] == PULP_RESULTS_SCHEMA_VERSION
         assert doc["last_updated"] == date.today().isoformat()
         assert doc["cluster"] == "c1"
-
-    def test_parse_oci_manifest_empty_object(self) -> None:
-        from pulp_tool.models.pulp_results import parse_oci_manifest_field
-
-        assert parse_oci_manifest_field({"ref": ""}) is None
-        assert parse_oci_manifest_field("  ") is None

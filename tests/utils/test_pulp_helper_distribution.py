@@ -419,7 +419,7 @@ class TestPulpHelperDistributionOperations:
             patch.object(helper._repository_manager, "_new_distribution_task") as mock_new,
         ):
             task_id = helper._repository_manager._create_distribution_task(
-                methods, new_distro, "rpms", is_new_repository=True, build_id="test-build"
+                methods, new_distro, "rpms", build_id="test-build"
             )
         assert task_id == ""
         mock_new.assert_not_called()

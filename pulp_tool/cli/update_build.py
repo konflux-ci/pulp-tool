@@ -45,7 +45,7 @@ from ..utils.oci_storage_resolve import resolve_oci_storage
 )
 @click.option(
     "--oci-storage",
-    help="OCI registry for ORAS publish (Konflux ociStorage); overrides cli.oci_storage",
+    help="OCI registry for ORAS publish (Konflux ociStorage).",
 )
 @click.option(
     "--operation",

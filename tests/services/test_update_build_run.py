@@ -8,7 +8,6 @@ import pytest
 from pulp_tool.models.context import UploadRpmContext
 from pulp_tool.models.pulp_results import PulpResultsDocument
 from pulp_tool.models.repository import RepositoryRefs
-from pulp_tool.models.results import PulpResultsModel
 from pulp_tool.services.update_build import run_update_build
 
 
@@ -51,7 +50,7 @@ def test_run_update_build_happy_path(tmp_path: Path) -> None:
         artifact_results=f"{tmp_path}/url,{tmp_path}/dig",
         oci_storage="quay.io/ns/r:tag",
     )
-    model = PulpResultsModel(build_id="b1", repositories=_repos())
+    model = PulpResultsDocument(build_id="b1", repositories=_repos())
     oci_dir = tmp_path / "oci"
     oci_dir.mkdir()
     with (
@@ -95,7 +94,7 @@ def test_run_update_build_passes_attach_subject_for_oci_results_json(tmp_path: P
         artifact_results=f"{tmp_path}/url,{tmp_path}/dig",
         oci_storage="quay.io/ns/r:tag",
     )
-    model = PulpResultsModel(build_id="b1", repositories=_repos())
+    model = PulpResultsDocument(build_id="b1", repositories=_repos())
     with (
         patch(
             "pulp_tool.services.update_build.load_results_document",
@@ -177,7 +176,7 @@ def test_run_update_build_requires_oci_storage(tmp_path: Path) -> None:
             "artifacts": {"a.rpm": {"distributions": {"rpms": "https://x/rpms/"}}},
         }
     )
-    model = PulpResultsModel(build_id="b1", repositories=_repos())
+    model = PulpResultsDocument(build_id="b1", repositories=_repos())
     model.distributions["rpms"] = "https://new/rpms/"
     with (
         patch("pulp_tool.services.update_build.load_results_document", return_value=doc),
@@ -186,7 +185,7 @@ def test_run_update_build_requires_oci_storage(tmp_path: Path) -> None:
         patch("pulp_tool.services.update_build.resolve_correlation_id", return_value="corr-1"),
     ):
         mock_helper.return_value.setup_repositories.return_value = _repos()
-        with pytest.raises(ValueError, match="oci_storage"):
+        with pytest.raises(ValueError, match="--oci-storage is required"):
             run_update_build(
                 MagicMock(),
                 ctx,
@@ -220,7 +219,7 @@ def test_run_update_build_logs_correlation_id(tmp_path: Path, caplog) -> None:
         patch("pulp_tool.services.update_build.PulpHelper") as mock_helper,
         patch(
             "pulp_tool.services.update_build.process_uploads_from_results_json",
-            return_value=PulpResultsModel(build_id="b1", repositories=_repos()),
+            return_value=PulpResultsDocument(build_id="b1", repositories=_repos()),
         ),
         patch(
             "pulp_tool.services.update_build.sync_pulp_results_with_oci_registry",

@@ -7,8 +7,8 @@ from unittest.mock import patch
 import pytest
 
 from pulp_tool.models.context import UploadRpmContext
+from pulp_tool.models.pulp_results import PulpResultsDocument
 from pulp_tool.models.repository import RepositoryRefs
-from pulp_tool.models.results import PulpResultsModel
 from pulp_tool.services.upload_service import process_uploads_from_results_json
 from pulp_tool.utils.path_utils import resolve_path_under_base, sanitize_arch_for_path
 from pulp_tool.utils.uploads import upload_rpms
@@ -42,8 +42,8 @@ class TestPathTraversalProtection:
             json.dumps(
                 {
                     "artifacts": {
-                        "../secret.rpm": {"labels": {"arch": "x86_64"}},
-                        "x86_64/good.rpm": {"labels": {"arch": "x86_64"}},
+                        "../secret.rpm": {"pulp_labels": {"arch": "x86_64"}},
+                        "x86_64/good.rpm": {"pulp_labels": {"arch": "x86_64"}},
                     }
                 }
             )
@@ -116,7 +116,7 @@ class TestPartialRpmUploadFailure:
             artifacts_href="",
             artifacts_prn="",
         )
-        results_model = PulpResultsModel(build_id="test-build", repositories=repositories)
+        results_model = PulpResultsDocument(build_id="test-build", repositories=repositories)
 
         with (
             patch(
@@ -139,8 +139,8 @@ class TestPartialRpmUploadFailure:
         assert len(results_model.upload_errors) == 1
 
 
-class TestPulpResultsModelThreadSafety:
-    """Tests for thread-safe mutations on PulpResultsModel."""
+class TestPulpResultsDocumentThreadSafety:
+    """Tests for thread-safe mutations on PulpResultsDocument."""
 
     def test_concurrent_add_artifact_preserves_all_entries(self) -> None:
         repositories = RepositoryRefs(
@@ -153,7 +153,7 @@ class TestPulpResultsModelThreadSafety:
             artifacts_href="",
             artifacts_prn="",
         )
-        model = PulpResultsModel(build_id="b1", repositories=repositories)
+        model = PulpResultsDocument(build_id="b1", repositories=repositories)
 
         def add_one(i: int) -> None:
             model.add_artifact(f"pkg{i}.rpm", f"https://example.com/{i}", f"sha{i}", {"arch": "x86_64"})
@@ -174,7 +174,7 @@ class TestPulpResultsModelThreadSafety:
             artifacts_href="",
             artifacts_prn="",
         )
-        model = PulpResultsModel(build_id="b1", repositories=repositories)
+        model = PulpResultsDocument(build_id="b1", repositories=repositories)
 
         def inc(_i: int) -> None:
             model.increment_counts(rpms=1)

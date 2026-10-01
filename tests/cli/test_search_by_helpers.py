@@ -6,7 +6,8 @@ from unittest.mock import Mock, patch
 import pytest
 from pydantic import ValidationError
 
-from pulp_tool.cli.search_by import (
+from pulp_tool.models.cli import FoundPackages, SearchByRequest, SearchByResultsJson
+from pulp_tool.services.search_by_service import (
     _collect_list,
     _filenames_to_nvras_deduplicated,
     _filenames_to_nvrs_deduplicated,
@@ -14,7 +15,6 @@ from pulp_tool.cli.search_by import (
     _log_packages_found,
     _search_pulp_by_filenames_incremental,
 )
-from pulp_tool.models.cli import FoundPackages, SearchByRequest, SearchByResultsJson
 from tests.support.constants import VALID_CHECKSUM_1
 from tests.support.factories import make_rpm_list_response as _make_rpm_response
 
@@ -26,9 +26,9 @@ class TestSearchByChecksumHelpers:
         """Test SearchByResultsJson.extract_rpm_checksums extracts valid checksums, skips invalid."""
         results = {
             "artifacts": {
-                "pkg1.rpm": {"labels": {}, "url": "x", "sha256": "a" * 64},
-                "pkg2.rpm": {"labels": {}, "url": "y", "sha256": "b" * 64},
-                "log.txt": {"labels": {}, "url": "z", "sha256": "c" * 64},
+                "pkg1.rpm": {"pulp_labels": {}, "url": "x", "sha256": "a" * 64},
+                "pkg2.rpm": {"pulp_labels": {}, "url": "y", "sha256": "b" * 64},
+                "log.txt": {"pulp_labels": {}, "url": "z", "sha256": "c" * 64},
                 "bad.rpm": "not a dict",
             }
         }
@@ -39,10 +39,10 @@ class TestSearchByChecksumHelpers:
         """Test SearchByResultsJson.extract_filenames extracts RPM keys, skips non-RPM and invalid."""
         results = {
             "artifacts": {
-                "pkg1.rpm": {"labels": {}, "url": "x", "sha256": "a" * 64},
-                "pkg2.rpm": {"labels": {}, "url": "y", "sha256": "b" * 64},
-                ".rpm": {"labels": {}, "url": "z", "sha256": "c" * 64},
-                "log.txt": {"labels": {}, "url": "z", "sha256": "c" * 64},
+                "pkg1.rpm": {"pulp_labels": {}, "url": "x", "sha256": "a" * 64},
+                "pkg2.rpm": {"pulp_labels": {}, "url": "y", "sha256": "b" * 64},
+                ".rpm": {"pulp_labels": {}, "url": "z", "sha256": "c" * 64},
+                "log.txt": {"pulp_labels": {}, "url": "z", "sha256": "c" * 64},
                 "bad": "not a dict",
             }
         }
@@ -53,11 +53,11 @@ class TestSearchByChecksumHelpers:
         """Test SearchByResultsJson.remove_found removes RPMs with matching labels.signed_by."""
         results = {
             "artifacts": {
-                "pkg1.rpm": {"labels": {"signed_by": "key-123"}, "url": "x", "sha256": "a" * 64},
-                "pkg2.rpm": {"labels": {"signed_by": "key-456"}, "url": "y", "sha256": "b" * 64},
-                "pkg3.rpm": {"labels": {"signed_by": "  key-123  "}, "url": "z", "sha256": "c" * 64},
+                "pkg1.rpm": {"pulp_labels": {"signed_by": "key-123"}, "url": "x", "sha256": "a" * 64},
+                "pkg2.rpm": {"pulp_labels": {"signed_by": "key-456"}, "url": "y", "sha256": "b" * 64},
+                "pkg3.rpm": {"pulp_labels": {"signed_by": "  key-123  "}, "url": "z", "sha256": "c" * 64},
                 "pkg4.rpm": {"labels": ["not-a-dict"]},
-                "log.txt": {"labels": {}, "url": "w", "sha256": "d" * 64},
+                "log.txt": {"pulp_labels": {}, "url": "w", "sha256": "d" * 64},
             }
         }
         found = FoundPackages(signed_by={"key-123", "key-456"}, checksums={"a" * 64, "b" * 64, "c" * 64})
@@ -77,7 +77,7 @@ class TestSearchByChecksumHelpers:
         assert normalized == "Acme [QA]: builders"
         results = {
             "artifacts": {
-                "pkg1.rpm": {"labels": {"signed_by": raw_sb}, "url": "x", "sha256": "a" * 64},
+                "pkg1.rpm": {"pulp_labels": {"signed_by": raw_sb}, "url": "x", "sha256": "a" * 64},
             }
         }
         found = FoundPackages(signed_by={normalized}, checksums={"a" * 64})
@@ -88,9 +88,9 @@ class TestSearchByChecksumHelpers:
         """Test remove_found matches artifact keys by basename when key includes path."""
         results = {
             "artifacts": {
-                "namespace/build-123/pkg-1.0-1.x86_64.rpm": {"labels": {}, "url": "x", "sha256": "a" * 64},
-                "pkg-1.0-1.x86_64.rpm": {"labels": {}, "url": "y", "sha256": "b" * 64},
-                "log.txt": {"labels": {}, "url": "z", "sha256": "c" * 64},
+                "namespace/build-123/pkg-1.0-1.x86_64.rpm": {"pulp_labels": {}, "url": "x", "sha256": "a" * 64},
+                "pkg-1.0-1.x86_64.rpm": {"pulp_labels": {}, "url": "y", "sha256": "b" * 64},
+                "log.txt": {"pulp_labels": {}, "url": "z", "sha256": "c" * 64},
             }
         }
         found = FoundPackages(filenames={"pkg-1.0-1.x86_64.rpm"}, checksums={"a" * 64, "b" * 64})
@@ -103,9 +103,9 @@ class TestSearchByChecksumHelpers:
         """Test remove_found matches artifact keys when location_href from Pulp has path."""
         results = {
             "artifacts": {
-                "pkg-1.0-1.x86_64.rpm": {"labels": {}, "url": "x", "sha256": "a" * 64},
-                "path/to/pkg-1.0-1.x86_64.rpm": {"labels": {}, "url": "y", "sha256": "b" * 64},
-                "log.txt": {"labels": {}, "url": "z", "sha256": "c" * 64},
+                "pkg-1.0-1.x86_64.rpm": {"pulp_labels": {}, "url": "x", "sha256": "a" * 64},
+                "path/to/pkg-1.0-1.x86_64.rpm": {"pulp_labels": {}, "url": "y", "sha256": "b" * 64},
+                "log.txt": {"pulp_labels": {}, "url": "z", "sha256": "c" * 64},
             }
         }
         found = FoundPackages(
@@ -120,9 +120,9 @@ class TestSearchByChecksumHelpers:
         """Test remove_found with filename_checksum_pairs requires both basename and sha256 to match."""
         results = {
             "artifacts": {
-                "pkg-1.0-1.x86_64.rpm": {"labels": {}, "url": "x", "sha256": "a" * 64},
-                "other-pkg-1.0-1.x86_64.rpm": {"labels": {}, "url": "y", "sha256": "a" * 64},
-                "path/pkg-1.0-1.x86_64.rpm": {"labels": {}, "url": "z", "sha256": "b" * 64},
+                "pkg-1.0-1.x86_64.rpm": {"pulp_labels": {}, "url": "x", "sha256": "a" * 64},
+                "other-pkg-1.0-1.x86_64.rpm": {"pulp_labels": {}, "url": "y", "sha256": "a" * 64},
+                "path/pkg-1.0-1.x86_64.rpm": {"pulp_labels": {}, "url": "z", "sha256": "b" * 64},
             }
         }
         found = FoundPackages(filename_checksum_pairs={("pkg-1.0-1.x86_64.rpm", "a" * 64)}, checksums={"a" * 64})
@@ -133,14 +133,14 @@ class TestSearchByChecksumHelpers:
 
     def test_remove_found_filename_checksum_pairs_same_basename_different_sha256_not_removed(self) -> None:
         """Test artifact with same basename as Pulp package but different sha256 is NOT removed."""
-        results = {"artifacts": {"pkg-1.0-1.x86_64.rpm": {"labels": {}, "url": "x", "sha256": "b" * 64}}}
+        results = {"artifacts": {"pkg-1.0-1.x86_64.rpm": {"pulp_labels": {}, "url": "x", "sha256": "b" * 64}}}
         found = FoundPackages(filename_checksum_pairs={("pkg-1.0-1.x86_64.rpm", "a" * 64)}, checksums={"a" * 64})
         filtered = SearchByResultsJson(results).remove_found(found, only_remove_filenames={"pkg-1.0-1.x86_64.rpm"})
         assert "pkg-1.0-1.x86_64.rpm" in filtered["artifacts"]
 
     def test_remove_found_fallback_filenames_when_no_checksum_pairs(self) -> None:
         """Test remove_found uses filenames fallback when filename_checksum_pairs empty (no location_href)."""
-        results = {"artifacts": {"path/pkg-1.0-1.x86_64.rpm": {"labels": {}, "url": "x", "sha256": "a" * 64}}}
+        results = {"artifacts": {"path/pkg-1.0-1.x86_64.rpm": {"pulp_labels": {}, "url": "x", "sha256": "a" * 64}}}
         found = FoundPackages(filenames={"pkg-1.0-1.x86_64.rpm"}, checksums={"a" * 64})
         filtered = SearchByResultsJson(results).remove_found(found, only_remove_filenames={"pkg-1.0-1.x86_64.rpm"})
         assert "path/pkg-1.0-1.x86_64.rpm" not in filtered["artifacts"]
@@ -149,8 +149,8 @@ class TestSearchByChecksumHelpers:
         """Test artifact with same basename AND same sha256 as Pulp package IS removed."""
         results = {
             "artifacts": {
-                "pkg-1.0-1.x86_64.rpm": {"labels": {}, "url": "x", "sha256": "a" * 64},
-                "path/pkg-1.0-1.x86_64.rpm": {"labels": {}, "url": "y", "sha256": "a" * 64},
+                "pkg-1.0-1.x86_64.rpm": {"pulp_labels": {}, "url": "x", "sha256": "a" * 64},
+                "path/pkg-1.0-1.x86_64.rpm": {"pulp_labels": {}, "url": "y", "sha256": "a" * 64},
             }
         }
         found = FoundPackages(filename_checksum_pairs={("pkg-1.0-1.x86_64.rpm", "a" * 64)}, checksums={"a" * 64})
@@ -246,11 +246,11 @@ class TestSearchByChecksumHelpers:
                 return ("b", "2.0", "2")
             return ("a", "1.0", "1") if "a-" in f else ("b", "2.0", "2")
 
-        with patch("pulp_tool.cli.search_by.parse_rpm_filename_to_nvr", side_effect=parse_side_effect):
+        with patch("pulp_tool.services.search_by_service.parse_rpm_filename_to_nvr", side_effect=parse_side_effect):
             results_data: dict[str, Any] = {
                 "artifacts": {
-                    "a-1.0-1.x86_64.rpm": {"labels": {}, "url": "x", "sha256": "a" * 64},
-                    "b-2.0-2.x86_64.rpm": {"labels": {}, "url": "y", "sha256": "b" * 64},
+                    "a-1.0-1.x86_64.rpm": {"pulp_labels": {}, "url": "x", "sha256": "a" * 64},
+                    "b-2.0-2.x86_64.rpm": {"pulp_labels": {}, "url": "y", "sha256": "b" * 64},
                 },
                 "distributions": {},
             }
@@ -288,7 +288,7 @@ class TestSearchByChecksumHelpers:
         client = Mock()
         client.get_rpm_by_filenames_and_signed_by.return_value = _make_rpm_response([pkg_dict])
         results_data = {
-            "artifacts": {"pkg-1.0-1.x86_64.rpm": {"labels": {}, "url": "x", "sha256": VALID_CHECKSUM_1}},
+            "artifacts": {"pkg-1.0-1.x86_64.rpm": {"pulp_labels": {}, "url": "x", "sha256": VALID_CHECKSUM_1}},
             "distributions": {},
         }
         packages, filtered = _search_pulp_by_filenames_incremental(

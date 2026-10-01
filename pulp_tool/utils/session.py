@@ -33,9 +33,6 @@ TRANSPORT_MAX_RETRIES = 3
 RESPONSE_RETRY_TOTAL_ATTEMPTS = 4
 RETRY_BACKOFF_FACTOR = 0.5  # base delay before exponential backoff (seconds)
 
-# Backwards-compatible name (historical: matched transport retries)
-MAX_RETRIES = TRANSPORT_MAX_RETRIES
-
 
 def _compute_retry_delay_s(
     *,
@@ -282,7 +279,6 @@ __all__ = [
     "RESPONSE_RETRY_TOTAL_ATTEMPTS",
     "RETRY_BACKOFF_FACTOR",
     "TRANSPORT_MAX_RETRIES",
-    "MAX_RETRIES",
     "RetryingAsyncClient",
     "RetryingHttpClient",
     "create_session_with_retry",

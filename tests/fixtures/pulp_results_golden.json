@@ -1,0 +1,28 @@
+{
+  "version": "1.0.0",
+  "last_updated": "2026-04-01",
+  "build_id": "golden-build",
+  "namespace": "golden-ns",
+  "cluster": "c1",
+  "artifacts": {
+    "pkg.rpm": {
+      "pulp_labels": {
+        "arch": "x86_64",
+        "build_id": "golden-build",
+        "origin_build_id": "golden-build",
+        "origin_namespace": "golden-ns",
+        "origin_cluster": "c1"
+      },
+      "url": "https://example.com/pkg.rpm",
+      "sha256": "deadbeef",
+      "href": "/pulp/content/pkg/",
+      "href_history": [],
+      "distributions": {
+        "rpms": "https://example.com/rpms/"
+      }
+    }
+  },
+  "distributions": {
+    "rpms": "https://example.com/rpms/"
+  }
+}

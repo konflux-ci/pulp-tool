@@ -12,6 +12,6 @@ def _http_url(url: str) -> AnyHttpUrl:
 
 
 def _dist_map(urls: dict[str, str]) -> dict[str, AnyHttpUrl]:
-    """Dict literal for ArtifactJsonResponse.distributions (values are coerced at runtime)."""
+    """Dict literal for PulpResultsDocument.distributions (values are coerced at runtime)."""
 
     return cast(dict[str, AnyHttpUrl], urls)

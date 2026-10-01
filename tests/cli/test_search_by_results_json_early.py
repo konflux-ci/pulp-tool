@@ -14,7 +14,7 @@ from tests.support.temp_config import tempfile_config
 class TestSearchByResultsJsonEarlyFlows:
     """search-by --results-json early extraction and filename flows."""
 
-    @patch("pulp_tool.cli.search_by.PulpClient")
+    @patch("pulp_tool.services.search_by_service.PulpClient")
     def test_results_json_handles_invalid_api_response_items(self, mock_client_class, tmp_path) -> None:
         """Test that invalid API response items are skipped when building found set."""
         results_input = tmp_path / "input.json"
@@ -24,7 +24,7 @@ class TestSearchByResultsJsonEarlyFlows:
                 {
                     "artifacts": {
                         "pkg1.rpm": {
-                            "labels": {"arch": "x86_64"},
+                            "pulp_labels": {"arch": "x86_64"},
                             "url": "https://example.com/pkg1.rpm",
                             "sha256": VALID_CHECKSUM_1,
                         }
@@ -71,7 +71,7 @@ class TestSearchByResultsJsonEarlyFlows:
         out = json.loads(results_output.read_text())
         assert "pkg1.rpm" not in out["artifacts"]
 
-    @patch("pulp_tool.cli.search_by.PulpClient")
+    @patch("pulp_tool.services.search_by_service.PulpClient")
     def test_results_json_real_world_structure(self, mock_client_class, tmp_path) -> None:
         """Test with real-world results.json: path-style keys, distributions, mixed types."""
         results_input = tmp_path / "input.json"
@@ -81,22 +81,22 @@ class TestSearchByResultsJsonEarlyFlows:
                 {
                     "artifacts": {
                         "ns/build-id/sbom-merged.json": {
-                            "labels": {"arch": "", "build_id": "build-id"},
+                            "pulp_labels": {"arch": "", "build_id": "build-id"},
                             "url": "https://example.com/sbom/sbom-merged.json",
                             "sha256": "1" * 64,
                         },
                         "ns/build-id/s390x/state.log": {
-                            "labels": {"arch": "s390x", "build_id": "build-id"},
+                            "pulp_labels": {"arch": "s390x", "build_id": "build-id"},
                             "url": "https://example.com/logs/s390x/state.log",
                             "sha256": "2" * 64,
                         },
                         "pkg-1.0-1.el10.s390x.rpm": {
-                            "labels": {"arch": "s390x", "build_id": "build-id"},
+                            "pulp_labels": {"arch": "s390x", "build_id": "build-id"},
                             "url": "https://example.com/rpms/pkg.rpm",
                             "sha256": VALID_CHECKSUM_1,
                         },
                         "pkg-debuginfo-1.0-1.el10.s390x.rpm": {
-                            "labels": {"arch": "s390x", "build_id": "build-id"},
+                            "pulp_labels": {"arch": "s390x", "build_id": "build-id"},
                             "url": "https://example.com/rpms/pkg-debuginfo.rpm",
                             "sha256": VALID_CHECKSUM_2,
                         },
@@ -157,7 +157,7 @@ class TestSearchByResultsJsonEarlyFlows:
             "artifacts": "https://example.com/artifacts/",
         }
 
-    @patch("pulp_tool.cli.search_by.PulpClient")
+    @patch("pulp_tool.services.search_by_service.PulpClient")
     def test_results_json_checksum_flag_extracts_and_removes_found_rpms(self, mock_client_class, tmp_path) -> None:
         """Test --checksum flag: extracts checksums from results.json, removes found RPMs."""
         results_input = tmp_path / "input.json"
@@ -167,16 +167,16 @@ class TestSearchByResultsJsonEarlyFlows:
                 {
                     "artifacts": {
                         "pkg1.rpm": {
-                            "labels": {"arch": "x86_64"},
+                            "pulp_labels": {"arch": "x86_64"},
                             "url": "https://example.com/pkg1.rpm",
                             "sha256": VALID_CHECKSUM_1,
                         },
                         "pkg2.rpm": {
-                            "labels": {"arch": "x86_64"},
+                            "pulp_labels": {"arch": "x86_64"},
                             "url": "https://example.com/pkg2.rpm",
                             "sha256": VALID_CHECKSUM_2,
                         },
-                        "log.txt": {"labels": {}, "url": "https://example.com/log.txt", "sha256": "f" * 64},
+                        "log.txt": {"pulp_labels": {}, "url": "https://example.com/log.txt", "sha256": "f" * 64},
                     },
                     "distributions": {"rpms": "https://example.com/rpms/"},
                 },
@@ -227,7 +227,7 @@ class TestSearchByResultsJsonEarlyFlows:
         assert "log.txt" in out["artifacts"]
         assert out["distributions"] == {"rpms": "https://example.com/rpms/"}
 
-    @patch("pulp_tool.cli.search_by.PulpClient")
+    @patch("pulp_tool.services.search_by_service.PulpClient")
     def test_by_filename_flag_extracts_from_results_json(self, mock_client_class, tmp_path) -> None:
         """Test --filename flag: extracts artifact keys from results.json, searches Pulp."""
         results_input = tmp_path / "input.json"
@@ -237,16 +237,16 @@ class TestSearchByResultsJsonEarlyFlows:
                 {
                     "artifacts": {
                         "pkg1-1.0-1.x86_64.rpm": {
-                            "labels": {"arch": "x86_64"},
+                            "pulp_labels": {"arch": "x86_64"},
                             "url": "https://example.com/pkg1.rpm",
                             "sha256": VALID_CHECKSUM_1,
                         },
                         "pkg2-2.0-2.x86_64.rpm": {
-                            "labels": {"arch": "x86_64"},
+                            "pulp_labels": {"arch": "x86_64"},
                             "url": "https://example.com/pkg2.rpm",
                             "sha256": VALID_CHECKSUM_2,
                         },
-                        "log.txt": {"labels": {}, "url": "https://example.com/log.txt", "sha256": "f" * 64},
+                        "log.txt": {"pulp_labels": {}, "url": "https://example.com/log.txt", "sha256": "f" * 64},
                     },
                     "distributions": {"rpms": "https://example.com/rpms/"},
                 },
@@ -300,7 +300,7 @@ class TestSearchByResultsJsonEarlyFlows:
         assert "pkg2-2.0-2.x86_64.rpm" in out["artifacts"]
         assert "log.txt" in out["artifacts"]
 
-    @patch("pulp_tool.cli.search_by.PulpClient")
+    @patch("pulp_tool.services.search_by_service.PulpClient")
     def test_by_filename_removes_all_arches_for_same_nvr(self, mock_client_class, tmp_path) -> None:
         """Test that artifacts sharing the same NVR are all removed in one API call."""
         results_input = tmp_path / "input.json"
@@ -310,12 +310,12 @@ class TestSearchByResultsJsonEarlyFlows:
                 {
                     "artifacts": {
                         "pkg-1.0-1.x86_64.rpm": {
-                            "labels": {"arch": "x86_64"},
+                            "pulp_labels": {"arch": "x86_64"},
                             "url": "https://example.com/pkg.rpm",
                             "sha256": VALID_CHECKSUM_1,
                         },
                         "pkg-1.0-1.s390x.rpm": {
-                            "labels": {"arch": "s390x"},
+                            "pulp_labels": {"arch": "s390x"},
                             "url": "https://example.com/pkg-s390x.rpm",
                             "sha256": VALID_CHECKSUM_2,
                         },

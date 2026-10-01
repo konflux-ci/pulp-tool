@@ -46,6 +46,10 @@ This script runs:
 
 For full CI parity (yamllint, shellcheck, hadolint, codespell, pip-audit, checkton), use `make pre-commit-ci`.
 
+### `run-pylint-precommit.sh` / `run-pip-audit-precommit.sh`
+
+Used by pre-commit for faster local hooks: scoped parallel pylint; pip-audit with a persistent `.audit-venv` and skip when lockfiles are unchanged. `make audit` calls the pip-audit script with `--force`.
+
 ### `update-deps.sh`
 
 Update all dependencies to latest versions.

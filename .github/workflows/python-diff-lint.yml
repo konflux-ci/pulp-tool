@@ -52,7 +52,7 @@ jobs:
         run: ruff format --check pulp_tool tests
 
       - name: Pylint (errors only)
-        run: pylint --rcfile=config/pylintrc pulp_tool tests --errors-only
+        run: pylint --rcfile=config/pylintrc pulp_tool tests --errors-only -j 0
 
       - name: Mypy
         run: mypy pulp_tool tests --show-error-codes

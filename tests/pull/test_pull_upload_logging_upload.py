@@ -11,7 +11,7 @@ import httpx
 from httpx import HTTPError
 
 from pulp_tool.models.artifacts import PulledArtifacts
-from pulp_tool.models.results import PulpResultsModel
+from pulp_tool.models.pulp_results import PulpResultsDocument
 from pulp_tool.pull import upload_downloaded_files_to_pulp
 from pulp_tool.pull.upload import _upload_rpms_to_repository, _upload_sboms_and_logs
 from pulp_tool.utils import RepositoryRefs
@@ -38,7 +38,7 @@ class TestUploadFunctionality:
                 artifacts_href="",
                 artifacts_prn="",
             )
-            upload_info = PulpResultsModel(build_id="test-build", repositories=repositories)
+            upload_info = PulpResultsDocument(build_id="test-build", repositories=repositories)
             httpx_mock.post(re.compile(".*/content/rpm/packages/upload/")).mock(
                 return_value=httpx.Response(201, json={"pulp_href": "/pulp/api/v3/content/12345/"})
             )
@@ -72,7 +72,7 @@ class TestUploadFunctionality:
             artifacts_href="",
             artifacts_prn="",
         )
-        upload_info = PulpResultsModel(build_id="test-build", repositories=repositories)
+        upload_info = PulpResultsDocument(build_id="test-build", repositories=repositories)
         httpx_mock.post(re.compile(".*/content/rpm/packages/upload/")).mock(side_effect=HTTPError("Upload error"))
         with (
             patch("pulp_tool.utils.validation.file.validate_file_path") as mock_validate,
@@ -98,7 +98,7 @@ class TestUploadFunctionality:
             artifacts_href="",
             artifacts_prn="",
         )
-        upload_info = PulpResultsModel(build_id="test", repositories=repositories)
+        upload_info = PulpResultsDocument(build_id="test", repositories=repositories)
         httpx_mock.post(re.compile(".*/content/file/files/")).mock(
             return_value=httpx.Response(202, json={"task": "/pulp/api/v3/tasks/12345/"})
         )
@@ -125,7 +125,7 @@ class TestUploadFunctionality:
             artifacts_href="",
             artifacts_prn="",
         )
-        upload_info = PulpResultsModel(build_id="test", repositories=repositories)
+        upload_info = PulpResultsDocument(build_id="test", repositories=repositories)
         with (
             patch.object(mock_pulp_client, "create_file_content", side_effect=ValueError("SBOM upload failed")),
             patch("pulp_tool.pull.upload.logging") as mock_logging,
@@ -149,7 +149,7 @@ class TestUploadFunctionality:
             artifacts_href="",
             artifacts_prn="",
         )
-        upload_info = PulpResultsModel(build_id="test", repositories=repositories)
+        upload_info = PulpResultsDocument(build_id="test", repositories=repositories)
         with (
             patch.object(mock_pulp_client, "create_file_content", side_effect=ValueError("Log upload failed")),
             patch("pulp_tool.pull.upload.logging") as mock_logging,
@@ -173,7 +173,7 @@ class TestUploadFunctionality:
             artifacts_href="",
             artifacts_prn="",
         )
-        upload_info = PulpResultsModel(build_id="test-build", repositories=repositories)
+        upload_info = PulpResultsDocument(build_id="test-build", repositories=repositories)
         with (
             patch("pulp_tool.pull.upload.upload_rpms_parallel") as mock_upload_rpms,
             patch("pulp_tool.utils.error_handling.logging") as mock_logging,

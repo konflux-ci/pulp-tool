@@ -75,13 +75,13 @@ flowchart TB
 
 | Layer | Path | Role |
 |-------|------|------|
-| CLI | `pulp_tool/cli/` | `upload-build`, **`update-build`**, `upload`, `upload_files`, `pull`, `search_by`, `create_repository`; shared globals (`--config`, `--build-id`, `--namespace`, `--debug`, `--max-workers`) |
+| CLI | `pulp_tool/cli/` | Commands; shared helpers in `cli/runner_helpers.py` (OCI temp dirs, auth config, results JSON paths) |
 | HTTP client | `pulp_tool/api/pulp_client/` | Session, chunked GET, RPM/content queries, repository ops |
 | Other API surface | `pulp_tool/api/` (`artifacts/`, `content/`, `distributions/`, `repositories/`, `tasks/`) | Typed calls aligned with Pulp endpoints |
 | Orchestration | `pulp_tool/utils/pulp_helper.py`, `upload_orchestrator.py` | Repo setup, upload pipelines |
-| Services | `pulp_tool/services/upload_service.py`, `upload_collect.py` | Same flows as CLI; Konflux results JSON, SBOM, artifact results |
-| Pull | `pulp_tool/pull/` | Download / transfer helpers; optional `--side-tag` ROK promotion (`side_tag.py`, `publish.py`) |
-| Results document | `pulp_tool/models/pulp_results.py` | Canonical `PulpResultsDocument`: normalize/serialize, mutation, histories, `pulp_labels` / distributions |
+| Services | `pulp_tool/services/` | `upload_service` + `upload_collect` (Konflux results); `pull_service.run`; `search_by_service`; `upload_collect_public.collect_results` |
+| Pull | `pulp_tool/pull/` | Download / transfer helpers; **`pull` CLI** delegates to **`PullService.run`** |
+| Results document | `pulp_tool/models/pulp_results/` (`document.py`, `normalize.py`, `lineage.py`, …) | Canonical **`PulpResultsDocument`**: in-place mutations; wire JSON uses **`pulp_labels`** only |
 | Results JSON I/O | `pulp_tool/utils/results_json_io.py` | Local path or digest-pinned OCI ref → load/normalize document |
 | Update build | `pulp_tool/services/update_build.py`, `pulp_tool/cli/update_build.py` | Signing/BTS mutations + ORAS publish (requires `--artifact-results`) |
 | Snapshot update | `pulp_tool/utils/snapshot_update.py` | Release snapshot `pulpResultsOciManifest` after side-tag ORAS publish (trusted-artifact workspace) |
@@ -126,7 +126,7 @@ No application database: state is on Pulp and in generated JSON artifacts.
 2. **Konflux contracts** (flags, paths, skip-vs-fail) must stay aligned with linked upstream task YAMLs when changing `upload` or the image.
 3. **Labels and APIs:** Pulpcore forbids `,`, `(`, and `)` in label **values**; `signed_by` replaces `,` with `:` and maps parentheses to `[` / `]` before upload and before RPM queries, so `pulp_label_select` is usually applied server-side together with checksum or NVR filters. Client-side label matching remains a fallback when a query cannot be expressed safely.
 4. **Merge gate:** PR diffs require **100% diff coverage** (`make test-diff-coverage`), not only line coverage in unchanged code.
-5. **Side-tag RPM repos:** `pull --transfer-dest --side-tag` uses Pulp repository/distribution path `side-tag-<sanitized-tag>` only (shared across source builds with the same tag). Mainline destination repos (`{build_id}/rpms`, artifacts, etc.) remain per source `build_id`. Multi-build test flows reuse one `--side-tag` and may chain `--artifact-location` from the latest `oci_manifest` after each transfer.
+5. **Side-tag RPM repos:** `pull --transfer-dest --side-tag` uses Pulp repository/distribution path `side-tag-<sanitized-tag>` only (shared across source builds with the same tag). Mainline destination repos (`{build_id}/rpms`, artifacts, etc.) remain per source `build_id`. Multi-build test flows reuse one `--side-tag` and may chain **`--artifact-location`** from the latest OCI digest ref (Tekton **`--artifact-results`** or ORAS publish), not from a field inside `pulp_results.json`.
 
 ---
 

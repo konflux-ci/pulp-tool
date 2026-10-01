@@ -9,8 +9,9 @@ from unittest.mock import Mock, patch
 import pytest
 
 from pulp_tool.models.context import UploadRpmContext
+from pulp_tool.models.pulp_results import PulpResultsDocument
 from pulp_tool.models.repository import RepositoryRefs
-from pulp_tool.models.results import PulpResultsModel, RpmUploadResult
+from pulp_tool.models.results import RpmUploadResult
 from pulp_tool.utils.upload_orchestrator import UploadOrchestrator
 
 
@@ -70,7 +71,7 @@ class TestUploadOrchestratorSubmitArchitectureTasks:
         rpm_href = "/test/rpm-href"
         logs_prn = "logs-prn"
         date_str = "2024-01-01"
-        results_model = PulpResultsModel(
+        results_model = PulpResultsDocument(
             build_id="test-build",
             repositories=RepositoryRefs(
                 rpms_href="",

@@ -1,141 +1,12 @@
 """Tests for pulp_upload.py module."""
 
-import re
 from unittest.mock import Mock, patch
 
 import httpx
 
-from pulp_tool.models.context import UploadContext, UploadRpmContext
+from pulp_tool.models.context import UploadRpmContext
 from pulp_tool.models.pulp_api import TaskResponse
-from pulp_tool.services.upload_service import _distribution_urls_for_context, _handle_artifact_results
-
-
-class TestHandleArtifactResults:
-    """Test _handle_artifact_results function."""
-
-    def test_handle_artifact_results_success(self, mock_pulp_client, httpx_mock, tmp_path) -> None:
-        """Test successful artifact results handling."""
-        httpx_mock.get(re.compile(".*/content/\\?pulp_href__in=")).mock(
-            return_value=httpx.Response(200, json={"results": [{"artifacts": {"file": "/test/artifacts/"}}]})
-        )
-        httpx_mock.get(re.compile(".*/artifacts/.*")).mock(
-            return_value=httpx.Response(200, json={"results": [{"file": "test.txt@sha256:abc123", "sha256": "abc123"}]})
-        )
-        url_path = tmp_path / "url.txt"
-        digest_path = tmp_path / "digest.txt"
-        context = UploadContext(
-            build_id="test-build",
-            date_str="2024-01-01",
-            namespace="test-namespace",
-            parent_package="test-package",
-            artifact_results=f"{url_path},{digest_path}",
-        )
-        task_response = TaskResponse(
-            pulp_href="/api/v3/tasks/123/",
-            state="completed",
-            created_resources=["/test/content/"],
-            result={"relative_path": "test.txt"},
-        )
-        with (
-            patch("pulp_tool.services.upload_collect.PulpHelper") as mock_helper_class,
-            patch("pulp_tool.services.upload_collect._find_artifact_content", return_value=("ref", "abc123")),
-        ):
-            mock_helper = Mock()
-            mock_helper.get_distribution_urls.return_value = {"artifacts": "https://example.com/artifacts/"}
-            mock_helper_class.return_value = mock_helper
-            _handle_artifact_results(mock_pulp_client, context, task_response)
-
-        assert url_path.read_text() == "https://example.com/artifacts/test.txt"
-        assert digest_path.read_text() == "sha256:abc123"
-
-    def test_handle_artifact_results_no_content(self, mock_pulp_client, tmp_path) -> None:
-        """Test artifact results handling with no content."""
-        url_path = tmp_path / "url.txt"
-        digest_path = tmp_path / "digest.txt"
-        context = UploadContext(
-            build_id="test-build",
-            date_str="2024-01-01",
-            namespace="test-namespace",
-            parent_package="test-package",
-            artifact_results=f"{url_path},{digest_path}",
-        )
-        task_response = TaskResponse(
-            pulp_href="/api/v3/tasks/123/",
-            state="completed",
-            created_resources=["/test/other/"],
-            result={"relative_path": "test.txt"},
-        )
-        _handle_artifact_results(mock_pulp_client, context, task_response)
-
-    def test_handle_artifact_results_invalid_format(self, mock_pulp_client, httpx_mock) -> None:
-        """Test artifact results handling with invalid format."""
-        httpx_mock.get(re.compile(".*/content/\\?pulp_href__in=")).mock(
-            return_value=httpx.Response(200, json={"results": [{"artifacts": {"file": "/test/artifacts/"}}]})
-        )
-        httpx_mock.get(re.compile(".*/artifacts/.*")).mock(
-            return_value=httpx.Response(200, json={"results": [{"file": "test.txt", "sha256": "abc123"}]})
-        )
-        context = UploadContext(
-            build_id="test-build",
-            date_str="2024-01-01",
-            namespace="test-namespace",
-            parent_package="test-package",
-            artifact_results="invalid_format",
-        )
-        task_response = TaskResponse(
-            pulp_href="/api/v3/tasks/123/",
-            state="completed",
-            created_resources=["/test/content/"],
-            result={"relative_path": "test.txt"},
-        )
-        _handle_artifact_results(mock_pulp_client, context, task_response)
-
-    def test_handle_artifact_results_no_distribution_url(self, mock_pulp_client, httpx_mock, tmp_path) -> None:
-        """Test artifact results handling when no distribution URL found."""
-        url_path = tmp_path / "url.txt"
-        digest_path = tmp_path / "digest.txt"
-        with patch("pulp_tool.services.upload_collect.PulpHelper") as mock_helper_class:
-            mock_helper = Mock()
-            mock_helper.get_distribution_urls.return_value = {}
-            mock_helper_class.return_value = mock_helper
-            context = UploadContext(
-                build_id="test-build",
-                date_str="2024-01-01",
-                namespace="test-namespace",
-                parent_package="test-package",
-                artifact_results=f"{url_path},{digest_path}",
-            )
-            task_response = TaskResponse(
-                pulp_href="/api/v3/tasks/123/",
-                state="completed",
-                created_resources=["/test/content/"],
-                result={"relative_path": "test.txt"},
-            )
-            with patch("pulp_tool.services.upload_collect.logging") as mock_logging:
-                _handle_artifact_results(mock_pulp_client, context, task_response)
-                mock_logging.error.assert_called()
-
-    def test_handle_artifact_results_no_relative_path(self, mock_pulp_client, httpx_mock, tmp_path) -> None:
-        """Test artifact results handling when task response has no relative_path."""
-        url_path = tmp_path / "url.txt"
-        digest_path = tmp_path / "digest.txt"
-        with patch("pulp_tool.services.upload_collect.PulpHelper") as mock_helper_class:
-            mock_helper = Mock()
-            mock_helper.get_distribution_urls.return_value = {"artifacts": "https://example.com/artifacts/"}
-            mock_helper_class.return_value = mock_helper
-            context = UploadContext(
-                build_id="test-build",
-                date_str="2024-01-01",
-                namespace="test-namespace",
-                parent_package="test-package",
-                artifact_results=f"{url_path},{digest_path}",
-            )
-            task_response = TaskResponse(
-                pulp_href="/api/v3/tasks/123/", state="completed", created_resources=["/test/content/"], result={}
-            )
-            with patch("pulp_tool.services.upload_collect.logging") as mock_logging:
-                _handle_artifact_results(mock_pulp_client, context, task_response)
-                mock_logging.error.assert_called()
+from pulp_tool.services.upload_service import _distribution_urls_for_context
 
 
 class TestFindArtifactContent:
@@ -143,7 +14,6 @@ class TestFindArtifactContent:
 
     def test_find_artifact_content_no_artifacts_dict(self, mock_pulp_client) -> None:
         """Test _find_artifact_content when artifacts_dict is empty."""
-        from pulp_tool.models.pulp_api import TaskResponse
         from pulp_tool.services.upload_collect import _find_artifact_content
 
         task_response = TaskResponse(
@@ -159,7 +29,6 @@ class TestFindArtifactContent:
 
     def test_find_artifact_content_non_dict_artifacts(self, mock_pulp_client) -> None:
         """Test _find_artifact_content when artifacts is not a dict."""
-        from pulp_tool.models.pulp_api import TaskResponse
         from pulp_tool.services.upload_collect import _find_artifact_content
 
         task_response = TaskResponse(
@@ -175,7 +44,6 @@ class TestFindArtifactContent:
 
     def test_find_artifact_content_no_file_value(self, mock_pulp_client, httpx_mock) -> None:
         """Test _find_artifact_content when artifact response has no file value."""
-        from pulp_tool.models.pulp_api import TaskResponse
         from pulp_tool.services.upload_collect import _find_artifact_content
 
         task_response = TaskResponse(
@@ -194,7 +62,6 @@ class TestFindArtifactContent:
 
     def test_find_artifact_content_no_sha256_value(self, mock_pulp_client, httpx_mock) -> None:
         """Test _find_artifact_content when artifact response has no sha256 value."""
-        from pulp_tool.models.pulp_api import TaskResponse
         from pulp_tool.services.upload_collect import _find_artifact_content
 
         task_response = TaskResponse(
@@ -213,7 +80,6 @@ class TestFindArtifactContent:
 
     def test_find_artifact_content_success(self, mock_pulp_client, httpx_mock) -> None:
         """Test _find_artifact_content successful path."""
-        from pulp_tool.models.pulp_api import TaskResponse
         from pulp_tool.services.upload_collect import _find_artifact_content
 
         task_response = TaskResponse(
@@ -232,7 +98,6 @@ class TestFindArtifactContent:
 
     def test_find_artifact_content_bare_list_json(self, mock_pulp_client, httpx_mock) -> None:
         """find_content JSON may be a list of content objects instead of paginated dict."""
-        from pulp_tool.models.pulp_api import TaskResponse
         from pulp_tool.services.upload_collect import _find_artifact_content
 
         task_response = TaskResponse(

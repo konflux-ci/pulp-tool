@@ -69,14 +69,13 @@ def sync_pulp_results_with_oci_registry(
     def upload_to_pulp(upload_operation: str) -> TaskResponse:
         labels = dict(pulp_label)
         try:
-            labels["document_schema_version"] = str(document.version or schema_version(document._mutable_dict()))
+            labels["document_schema_version"] = str(document.version or schema_version(document.to_canonical_dict()))
             labels["document_last_updated"] = str(
-                document.last_updated or document_last_updated(document._mutable_dict())
+                document.last_updated or document_last_updated(document.to_canonical_dict())
             )
         except (TypeError, ValueError):
             labels["document_schema_version"] = PULP_RESULTS_SCHEMA_VERSION
             labels["document_last_updated"] = document_last_updated({})
-        labels["document_version"] = labels["document_schema_version"]
         return create_file_content_and_wait(
             pulp_client,
             artifacts_prn,

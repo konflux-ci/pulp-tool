@@ -20,13 +20,14 @@ Program/library entry points:
 import json
 import logging
 import os
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ..models.artifacts import ExtraArtifactRef
 from ..models.context import UploadContext, UploadRpmContext
+from ..models.pulp_results import PulpResultsDocument
 from ..models.repository import RepositoryRefs
-from ..models.results import PulpResultsModel
 
 if TYPE_CHECKING:
     from ..api.pulp_client import PulpClient
@@ -41,15 +42,14 @@ from .upload_collect import (
     _extract_results_url,
     _find_artifact_content,
     _gather_and_validate_content,
-    _handle_artifact_results,
     _handle_sbom_results,
     _parse_oci_reference,
     _populate_results_model,
     _save_results_to_folder,
     _serialize_results_to_json,
     _upload_and_get_results_url,
-    collect_results,
 )
+from .upload_collect_public import collect_results
 from .upload_common import _distribution_urls_for_context
 
 # ============================================================================
@@ -142,7 +142,7 @@ def upload_sbom(
     context: UploadContext,
     sbom_repository_prn: str,
     date: str,
-    results_model: PulpResultsModel,
+    results_model: PulpResultsDocument,
     sbom_path: str,
     *,
     distribution_urls: dict[str, str] | None = None,
@@ -156,7 +156,7 @@ def upload_sbom(
         context: Upload context containing metadata
         sbom_repository_prn: SBOM repository PRN
         date: Build date string
-        results_model: PulpResultsModel to update with upload counts
+        results_model: PulpResultsDocument to update with upload counts
         sbom_path: Path to the SBOM file to upload
 
     Returns:
@@ -257,95 +257,69 @@ def scan_results_json_for_log_and_sbom_keys(results_json_path: str) -> tuple[boo
     return has_logs, has_sbom
 
 
-def process_uploads_from_results_json(
-    client: "PulpClient",
-    context: UploadRpmContext,
-    repositories: RepositoryRefs,
+@dataclass
+class UploadPlan:
+    """Resolved local paths and labels for batch upload from a results document."""
+
+    rpms_by_arch: dict[str, list[str]] = field(default_factory=dict)
+    logs_to_upload: list[tuple[str, str]] = field(default_factory=list)
+    sboms_to_upload: list[str] = field(default_factory=list)
+    artifacts_to_upload: list[tuple[str, dict[str, str]]] = field(default_factory=list)
+
+
+def _infer_arch_from_key(key: str, arch_hint: str) -> str:
+    """Use label arch or infer from artifact key path (e.g. ``x86_64/pkg.rpm``)."""
+    if arch_hint:
+        return arch_hint
+    parts = key.replace("\\", "/").split("/")
+    for part in parts:
+        if part in SUPPORTED_ARCHITECTURES:
+            return part
+    return "noarch"
+
+
+def _load_results_document_for_upload(
+    results_json_path: str,
     *,
-    pulp_helper: PulpHelper | None = None,
-    defer_collect: bool = False,
-) -> str | None | PulpResultsModel:
-    """
-    Upload artifacts from pulp_results.json.
-
-    Reads artifact keys from the JSON, resolves file paths (base_path / key),
-    classifies each artifact, and uploads to the appropriate repo.
-    When signed_by is set, uses signed repos and adds signed_by pulp_label.
-
-    Args:
-        client: PulpClient instance
-        context: UploadRpmContext with results_json, files_base_path, signed_by
-        repositories: RepositoryRefs (with signed refs when signed_by set)
-        pulp_helper: Optional PulpHelper for per-arch RPM repos when ``target_arch_repo`` is set
-
-    Returns:
-        URL of the uploaded results JSON, or None if upload failed.
-        When ``defer_collect`` is True, returns the populated ``PulpResultsModel`` instead.
-    """
-    from ..utils.uploads import upload_log, upload_rpms
-
-    helper = pulp_helper or PulpHelper(client, parent_package=context.parent_package)
-    distribution_urls = helper.get_distribution_urls_for_upload_context(context.build_id, context)
-
-    if not context.results_json:
-        return None
-
+    build_id: str,
+    repositories: RepositoryRefs,
+) -> PulpResultsDocument | None:
+    """Load and normalize ``pulp_results.json``; return None when there are no artifacts."""
     try:
-        with open(context.results_json, encoding="utf-8") as f:
-            results_data = json.load(f)
+        with open(results_json_path, encoding="utf-8") as f:
+            raw = json.load(f)
     except (OSError, json.JSONDecodeError) as e:
-        logging.error("Failed to read results JSON %s: %s", context.results_json, e)
+        logging.error("Failed to read results JSON %s: %s", results_json_path, e)
         raise
-
-    artifacts = results_data.get("artifacts", {})
+    artifacts = raw.get("artifacts") or {}
     if not artifacts:
         logging.info("No artifacts in results JSON, creating minimal results")
-        results_model = PulpResultsModel(build_id=context.build_id, repositories=repositories)
-        if defer_collect:
-            return results_model
-        return collect_results(client, context, context.date_str, results_model, extra_artifacts=None)
+        return None
+    doc = PulpResultsDocument.from_raw(raw, repositories=repositories)
+    if not doc.build_id.strip():
+        doc.build_id = build_id
+    return doc
 
-    base_path = Path(context.files_base_path or os.path.dirname(context.results_json)).resolve()
-    use_signed = bool(context.signed_by and context.signed_by.strip())
 
-    # Only RPMs use signed aggregate repo; with target_arch_repo, signed_by is label-only on arch repos
-    rpm_href = (
-        "" if context.target_arch_repo else (repositories.rpms_signed_href if use_signed else repositories.rpms_href)
-    )
-    logs_prn = repositories.logs_prn
-    sbom_prn = repositories.sbom_prn
-    artifacts_prn = repositories.artifacts_prn
-
-    if use_signed and not context.target_arch_repo and not rpm_href and not repositories.rpms_signed_prn:
-        logging.error("signed_by set but signed repositories not available")
-        raise ValueError("signed_by requires signed repositories")
-
-    results_model = PulpResultsModel(build_id=context.build_id, repositories=repositories)
-    created_resources: list[str] = []
+def _plan_uploads_from_document(
+    document: PulpResultsDocument,
+    *,
+    base_path: Path,
+    context: UploadRpmContext,
+) -> UploadPlan:
+    """Classify document artifact keys into upload batches (pure path/plan logic)."""
+    plan = UploadPlan()
     date_str = context.date_str
-
-    # Group artifacts by type for batch processing
-    rpms_by_arch: dict[str, list[str]] = {}
-    logs_to_upload: list[tuple[str, str]] = []  # (path, arch)
-    sboms_to_upload: list[str] = []
-    artifacts_to_upload: list[tuple[str, dict[str, str]]] = []  # (path, labels)
-
-    for key, info in artifacts.items():
-        if not isinstance(info, dict):
-            logging.warning("Skipping invalid artifact entry: %s", key)
-            continue
-
+    for key, meta in document.artifacts.items():
         try:
             resolved_path = resolve_path_under_base(base_path, key)
         except ValueError as e:
             logging.error("Skipping unsafe artifact path %s: %s", key, e)
             continue
-
         if not resolved_path.exists():
             logging.warning("Skipping missing file: %s", resolved_path)
             continue
-
-        labels = dict(info.get("pulp_labels") or info.get("labels") or {})
+        labels = dict(meta.pulp_labels)
         labels.update(
             create_labels(
                 context.build_id,
@@ -356,47 +330,52 @@ def process_uploads_from_results_json(
             )
         )
         art_type = _classify_artifact_from_key(key)
-        arch = labels.get("arch") or ""
-
+        arch = _infer_arch_from_key(key, labels.get("arch") or "")
+        path_str = str(resolved_path)
         if art_type == "rpms":
-            if not arch:
-                # Try to infer from path (e.g. x86_64/pkg.rpm)
-                parts = key.replace("\\", "/").split("/")
-                for p in parts:
-                    if p in SUPPORTED_ARCHITECTURES:
-                        arch = p
-                        break
-                if not arch:
-                    arch = "noarch"
-            rpms_by_arch.setdefault(arch, []).append(str(resolved_path))
+            plan.rpms_by_arch.setdefault(arch, []).append(path_str)
         elif art_type == "logs":
-            if not arch:
-                parts = key.replace("\\", "/").split("/")
-                for p in parts:
-                    if p in SUPPORTED_ARCHITECTURES:
-                        arch = p
-                        break
-                if not arch:
-                    arch = "noarch"
-            logs_to_upload.append((str(resolved_path), arch))
+            plan.logs_to_upload.append((path_str, arch))
         elif art_type == "sbom":
-            sboms_to_upload.append(str(resolved_path))
+            plan.sboms_to_upload.append(path_str)
         else:
-            artifacts_to_upload.append((str(resolved_path), labels))
+            plan.artifacts_to_upload.append((path_str, labels))
+    return plan
 
-    if logs_to_upload and not (repositories.logs_prn or "").strip():
+
+def _validate_upload_plan_repositories(plan: UploadPlan, repositories: RepositoryRefs) -> None:
+    if plan.logs_to_upload and not (repositories.logs_prn or "").strip():
         raise ValueError(
             "Cannot upload log artifacts: logs repository was not created. "
             "Use a run that creates the logs repository when results include log files."
         )
-    if sboms_to_upload and not (repositories.sbom_prn or "").strip():
+    if plan.sboms_to_upload and not (repositories.sbom_prn or "").strip():
         raise ValueError(
             "Cannot upload SBOM artifacts: SBOM repository was not created. "
             "Use a run that creates the SBOM repository when results include SBOM files."
         )
 
-    # Upload RPMs
-    for arch, rpm_list in rpms_by_arch.items():
+
+def _execute_upload_plan(
+    plan: UploadPlan,
+    *,
+    client: "PulpClient",
+    context: UploadRpmContext,
+    repositories: RepositoryRefs,
+    results_model: PulpResultsDocument,
+    helper: PulpHelper,
+    distribution_urls: dict[str, str],
+    rpm_href: str,
+    date_str: str,
+) -> list[str]:
+    from ..utils.uploads import upload_log, upload_rpms
+
+    created_resources: list[str] = []
+    logs_prn = repositories.logs_prn
+    sbom_prn = repositories.sbom_prn
+    artifacts_prn = repositories.artifacts_prn
+
+    for arch, rpm_list in plan.rpms_by_arch.items():
         arch_href = (
             helper.ensure_rpm_repository_for_arch(context.build_id, arch) if context.target_arch_repo else rpm_href
         )
@@ -414,8 +393,7 @@ def process_uploads_from_results_json(
             )
         )
 
-    # Upload logs (never signed)
-    for log_path, arch in logs_to_upload:
+    for log_path, arch in plan.logs_to_upload:
         logging.warning("Uploading log: %s", os.path.basename(log_path))
         log_labels = create_labels(context.build_id, arch, context.namespace, context.parent_package, date_str)
         log_resources = upload_log(
@@ -432,8 +410,7 @@ def process_uploads_from_results_json(
         created_resources.extend(log_resources)
         results_model.increment_counts(logs=1)
 
-    # Upload SBOMs
-    for sbom_path in sboms_to_upload:
+    for sbom_path in plan.sboms_to_upload:
         sbom_resources = upload_sbom(
             client,
             context,
@@ -446,8 +423,7 @@ def process_uploads_from_results_json(
         )
         created_resources.extend(sbom_resources)
 
-    # Upload generic artifacts
-    for file_path, labels in artifacts_to_upload:
+    for file_path, labels in plan.artifacts_to_upload:
         logging.warning("Uploading artifact: %s", os.path.basename(file_path))
         validate_file_path(file_path, "File")
         task_response = create_file_content_and_wait(
@@ -474,6 +450,75 @@ def process_uploads_from_results_json(
                 target_arch_repo=context.target_arch_repo,
                 file_relative_path=rel_path,
             )
+    return created_resources
+
+
+def process_uploads_from_results_json(
+    client: "PulpClient",
+    context: UploadRpmContext,
+    repositories: RepositoryRefs,
+    *,
+    pulp_helper: PulpHelper | None = None,
+    defer_collect: bool = False,
+) -> str | None | PulpResultsDocument:
+    """
+    Upload artifacts from pulp_results.json.
+
+    Reads artifact keys from the JSON, resolves file paths (base_path / key),
+    classifies each artifact, and uploads to the appropriate repo.
+    When signed_by is set, uses signed repos and adds signed_by pulp_label.
+
+    Args:
+        client: PulpClient instance
+        context: UploadRpmContext with results_json, files_base_path, signed_by
+        repositories: RepositoryRefs (with signed refs when signed_by set)
+        pulp_helper: Optional PulpHelper for per-arch RPM repos when ``target_arch_repo`` is set
+
+    Returns:
+        URL of the uploaded results JSON, or None if upload failed.
+        When ``defer_collect`` is True, returns the populated ``PulpResultsDocument`` instead.
+    """
+    helper = pulp_helper or PulpHelper(client, parent_package=context.parent_package)
+    distribution_urls = helper.get_distribution_urls_for_upload_context(context.build_id, context)
+
+    if not context.results_json:
+        return None
+
+    document = _load_results_document_for_upload(
+        context.results_json,
+        build_id=context.build_id,
+        repositories=repositories,
+    )
+    if document is None:
+        results_model = PulpResultsDocument(build_id=context.build_id, repositories=repositories)
+        if defer_collect:
+            return results_model
+        return collect_results(client, context, context.date_str, results_model, extra_artifacts=None)
+
+    base_path = Path(context.files_base_path or os.path.dirname(context.results_json)).resolve()
+    use_signed = bool(context.signed_by and context.signed_by.strip())
+    rpm_href = (
+        "" if context.target_arch_repo else (repositories.rpms_signed_href if use_signed else repositories.rpms_href)
+    )
+    if use_signed and not context.target_arch_repo and not rpm_href and not repositories.rpms_signed_prn:
+        logging.error("signed_by set but signed repositories not available")
+        raise ValueError("signed_by requires signed repositories")
+
+    results_model = PulpResultsDocument(build_id=context.build_id, repositories=repositories)
+    plan = _plan_uploads_from_document(document, base_path=base_path, context=context)
+    _validate_upload_plan_repositories(plan, repositories)
+    date_str = context.date_str
+    created_resources = _execute_upload_plan(
+        plan,
+        client=client,
+        context=context,
+        repositories=repositories,
+        results_model=results_model,
+        helper=helper,
+        distribution_urls=distribution_urls,
+        rpm_href=rpm_href,
+        date_str=date_str,
+    )
 
     extra_artifacts = [ExtraArtifactRef(pulp_href=href) for href in created_resources]
     if defer_collect:
@@ -498,7 +543,6 @@ __all__ = [
     "_add_distributions_to_results",
     "_find_artifact_content",
     "_parse_oci_reference",
-    "_handle_artifact_results",
     "_handle_sbom_results",
     "_distribution_urls_for_context",
 ]

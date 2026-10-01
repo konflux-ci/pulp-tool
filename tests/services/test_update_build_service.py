@@ -3,9 +3,8 @@
 from typing import Any, cast
 from unittest.mock import patch
 
-from pulp_tool.models.pulp_results import BUILD_SIGN_OPERATION, PulpResultsDocument, merge_upload_outcomes_into_document
+from pulp_tool.models.pulp_results import BUILD_SIGN_OPERATION, PulpResultsDocument
 from pulp_tool.models.repository import RepositoryRefs
-from pulp_tool.models.results import PulpResultsModel
 
 
 def test_merge_upload_outcomes_updates_artifact_and_signed_by() -> None:
@@ -19,7 +18,7 @@ def test_merge_upload_outcomes_updates_artifact_and_signed_by() -> None:
         artifacts_href="/a/",
         artifacts_prn="a",
     )
-    model = PulpResultsModel(build_id="b1", repositories=repos)
+    model = PulpResultsDocument(build_id="b1", repositories=repos)
     model.add_artifact("pkg.rpm", "https://new/url", "deadbeef", {"arch": "x86_64", "signed_by": "s1"})
     model.artifacts["pkg.rpm"].href = "/pulp/new/"
 
@@ -67,7 +66,7 @@ def test_merge_upload_outcomes_non_dict_artifacts_and_new_row() -> None:
         artifacts_href="/a/",
         artifacts_prn="a",
     )
-    model = PulpResultsModel(build_id="b1", repositories=repos)
+    model = PulpResultsDocument(build_id="b1", repositories=repos)
     model.add_artifact("new.rpm", "https://u/", "abc", {"arch": "noarch"})
     model.artifacts["new.rpm"].href = "/pulp/h/"
 
@@ -94,7 +93,7 @@ def test_merge_signed_by_from_context_when_upload_labels_empty() -> None:
         artifacts_href="/a/",
         artifacts_prn="a",
     )
-    model = PulpResultsModel(build_id="b1", repositories=repos)
+    model = PulpResultsDocument(build_id="b1", repositories=repos)
     model.add_artifact("p.rpm", "https://u/", "abc", {"arch": "x86_64"})
     model.artifacts["p.rpm"].href = "/pulp/h/"
 
@@ -122,7 +121,7 @@ def test_merge_appends_history_when_href_first_populated() -> None:
         artifacts_href="/a/",
         artifacts_prn="a",
     )
-    model = PulpResultsModel(build_id="b1", repositories=repos)
+    model = PulpResultsDocument(build_id="b1", repositories=repos)
     model.add_artifact("p.rpm", "https://u/", "abc", {"arch": "x86_64"})
     model.artifacts["p.rpm"].href = "/pulp/content/new/"
 
@@ -157,15 +156,14 @@ def test_merge_coerces_non_dict_artifacts_after_normalize_bypass() -> None:
         artifacts_href="/a/",
         artifacts_prn="a",
     )
-    model = PulpResultsModel(build_id="b1", repositories=repos)
+    model = PulpResultsDocument(build_id="b1", repositories=repos)
     doc = PulpResultsDocument.from_raw({"version": 1, "artifacts": "not-a-dict"})
     with patch("pulp_tool.models.pulp_results.normalize_document"):
-        merge_upload_outcomes_into_document(
-            doc._mutable_dict(),
+        doc.merge_upload_outcomes(
             model,
             operation=BUILD_SIGN_OPERATION,
             signed_by=None,
             replace_signed_by=False,
             verified_distribution_slots=set(),
         )
-    assert doc._mutable_dict()["artifacts"] == {}
+    assert doc.to_canonical_dict()["artifacts"] == {}

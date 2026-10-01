@@ -16,8 +16,9 @@ from pydantic import AnyHttpUrl, TypeAdapter, ValidationError
 
 from ..api import DistributionClient, PulpClient
 from ..exceptions import PulpToolChecksumError, PulpToolError
-from ..models.artifacts import ArtifactData, ArtifactJsonResponse, DownloadTask
+from ..models.artifacts import ArtifactData, DownloadTask
 from ..models.context import PullContext
+from ..models.pulp_results import PulpResultsDocument
 from ..models.repository import RepositoryRefs
 from ..models.results import DownloadResult
 from ..utils import PulpHelper, determine_build_id, extract_metadata_from_artifact_json
@@ -118,7 +119,7 @@ def load_artifact_metadata(artifact_location: str, distribution_client: Distribu
 
 def setup_repositories_if_needed(
     args: PullContext,
-    artifact_json: dict[str, Any] | ArtifactJsonResponse | None = None,
+    artifact_json: dict[str, Any] | PulpResultsDocument | None = None,
 ) -> PullDestinationSetup | None:
     """
     Set up repositories using PulpClient if configuration is provided.
@@ -184,7 +185,7 @@ def setup_repositories_if_needed(
 def load_and_validate_artifacts(args: PullContext, distribution_client: DistributionClient | None) -> ArtifactData:
     """Load artifact metadata and validate it matches the pull artifact results model.
 
-    The payload is validated as :class:`~pulp_tool.models.artifacts.ArtifactJsonResponse`; pull
+    The payload is validated as :class:`~pulp_tool.models.pulp_results.PulpResultsDocument`; pull
     requires non-empty ``artifacts``, each with an ``http`` or ``https`` ``url``. Top-level
     ``distributions`` is optional.
 
@@ -209,7 +210,7 @@ def load_and_validate_artifacts(args: PullContext, distribution_client: Distribu
     artifact_json_raw = load_artifact_metadata(args.artifact_location, distribution_client)
 
     try:
-        artifact_json_typed = ArtifactJsonResponse.model_validate(artifact_json_raw)
+        artifact_json_typed = PulpResultsDocument.model_validate(artifact_json_raw)
         artifact_json_typed.validate_for_pull()
     except (ValidationError, ValueError) as exc:
         logging.error("Artifact results JSON does not match the expected model for pull:")
@@ -298,7 +299,7 @@ def download_artifacts_concurrently(
 
                 # Extract labels (handle both ArtifactMetadata and dict)
                 if isinstance(artifact_info, ArtifactMetadata):
-                    labels = artifact_info.labels
+                    labels = artifact_info.pulp_labels
                 else:
                     labels = artifact_info.get("labels", {})
 

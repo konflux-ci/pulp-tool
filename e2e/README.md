@@ -126,7 +126,7 @@ This is an **input file** (not output) containing references to pre-existing tes
 
 | Test | What it exercises |
 |------|-------------------|
-| `test_upload_build_oras_publish` | `upload-build` with `--oci-storage` and `--artifact-results`; pulp-content `oci_manifest` check is deferred until after all uploads |
+| `test_upload_build_oras_publish` | `upload-build` with `--oci-storage` and `--artifact-results`; deferred pulp-content check of ORAS-published results (Tekton URL/digest files) until after all uploads |
 | `test_update_build_oras_live` | `upload-build` then live **`update-build`** with OCI `--results-json`, `--artifact-results`, re-upload from `--files-base-path`; asserts version bump, `href_history`, `signed_by`, new OCI digest, and deferred pulp-content check |
 | `test_update_build_replaced_rpm_checksum` | Same flow with a **rebuilt RPM** (same NEVRA filename, new payload/SHA256); asserts `sha256` change, `href_history` retains prior digest, deferred pulp-content GET verifies new checksum |
 | `test_upload_side_tag_transfer_source` | Upload source build for HTTPS side-tag pull; defers source `pulp_results.json` reachability |
@@ -134,7 +134,7 @@ This is an **input file** (not output) containing references to pre-existing tes
 | `test_upload_build_update_build_pull_pipeline` | **`upload-build` → `update-build` → `pull`**: subject digest (`oras discover`) and Tekton **`--artifact-results`** digest; verifies downloaded RPM SHA256 |
 | `test_pull_artifact_location_oci_manifest_ref` | `pull --artifact-location` with upload-build OCI ref only (no `update-build`; full attach flow is `test_upload_build_update_build_pull_pipeline`) |
 | `test_pull_side_tag_transfer` | `pull --transfer-dest --side-tag` from HTTPS `pulp_results`; writes Tekton-style OCI URL/digest via `--artifact-results` |
-| `test_pull_side_tag_transfer_from_oci_artifact_location` | Same flow with `--artifact-location` set to ORAS `oci_manifest@digest` (run-scoped `--side-tag` name) |
+| `test_pull_side_tag_transfer_from_oci_artifact_location` | Same flow with `--artifact-location` set to digest-pinned OCI ref from upload-build ORAS publish (run-scoped `--side-tag` name) |
 
 Side-tag RPM repositories in Pulp use the global name `side-tag-<tag>` (see `pull_side_tag_rpm_repo_key` in [`names.py`](names.py)), not `{source_build_id}/side-tag-<tag>`, so multiple builds can target the same run-scoped tag.
 
@@ -146,7 +146,7 @@ When adding or extending **`--real-server`** cases in [`test-pulp-tool.py`](test
 
 1. **Upload phase** — Register the test in `run_all_tests()` **before** `run_distribution_verification_phase()`. The test method should only run `pulp-tool` mutations (`upload`, `upload-build`, `upload-files`) and **local** assertions (exit code, files on disk, expected SBOM results URL strings). Split “setup upload” from “pull” when a flow needs both (see side-tag source tests).
 2. **Deferred pulp-content HTTP** — Any GET to pulp-content (`packages.redhat.com` / `…/pulp-content/…`) for `pulp_results.json`, RPM, or SBOM URLs must use `E2ETestSuite.defer_distribution_check()` (backed by [`distribution_verify_queue.py`](distribution_verify_queue.py)), not inline `fetch_bytes()` in the upload test. Implement the check in a `_execute_*` helper invoked from the deferred callback.
-3. **Pull phase** — Tests that `pull` (or depend on pulp-content URLs being warm) go **after** `run_distribution_verification_phase()` in `run_all_tests()`. Post-pull assertions (e.g. side-tag `version` / `oci_manifest` after transfer) stay in the pull test or shared pull helper.
+3. **Pull phase** — Tests that `pull` (or depend on pulp-content URLs being warm) go **after** `run_distribution_verification_phase()` in `run_all_tests()`. Post-pull assertions (e.g. side-tag document `version` and new OCI digest from **`--artifact-results`**) stay in the pull test or shared pull helper.
 4. **`run_all_tests()` order** — When adding a case, place upload mutations with the other upload `invoke_test_case` calls; do not interleave new uploads after the verification phase unless you intentionally add another verification batch (avoid that—extend the queue instead).
 
 Unit tests for e2e helpers live under [`tests/e2e/`](../tests/e2e/). Agent entry point: [docs/AGENTS.md](../docs/AGENTS.md) (convention 6).

@@ -38,7 +38,7 @@ def publish_side_tag_results(
     oci_storage = (context.oci_storage or "").strip()
     artifact_results = (context.artifact_results or "").strip()
     if not oci_storage:
-        raise ValueError("--oci-storage or cli.oci_storage is required for side-tag transfer")
+        raise ValueError("--oci-storage is required for side-tag transfer")
 
     build_id = determine_build_id(context, artifact_json=artifact_data.artifact_json)
     parent_package = None

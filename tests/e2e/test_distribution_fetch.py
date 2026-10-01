@@ -239,8 +239,7 @@ def _mock_pulp_results_response(body: bytes) -> MagicMock:
 def test_fetch_pulp_results_json_polls_stale_last_updated() -> None:
     stale = b'{"version": "1.0.0", "last_updated": "2020-01-01", "distributions": {}}'
     ready = (
-        b'{"version": "1.0.0", "last_updated": "2026-06-15", "distributions": {"tag1": "https://example.com/tag1/"}, '
-        b'"oci_manifest": "quay.io/repo@sha256:abc"}'
+        b'{"version": "1.0.0", "last_updated": "2026-06-15", "distributions": {"tag1": "https://example.com/tag1/"}}'
     )
     client = MagicMock()
     client.session.stream.return_value.__enter__.side_effect = [
@@ -254,7 +253,6 @@ def test_fetch_pulp_results_json_polls_stale_last_updated() -> None:
             "https://example.com/pulp_results.json",
             min_last_updated="2026-06-15",
             required_distribution_keys=frozenset({"tag1"}),
-            require_oci_manifest=True,
         )
     assert doc["last_updated"] == "2026-06-15"
     assert doc["distributions"]["tag1"].startswith("https://")

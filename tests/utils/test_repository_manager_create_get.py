@@ -310,5 +310,5 @@ class TestRepositoryManagerCreateOrGetRepository:
             patch("pulp_tool.utils.repository_manager.logging") as mock_logging,
             pytest.raises(ValueError, match="Invalid base_path"),
         ):
-            manager._create_distribution_task(methods, new_distro, "rpms", True, "test-build")
+            manager._create_distribution_task(methods, new_distro, "rpms", "test-build")
             mock_logging.error.assert_called()

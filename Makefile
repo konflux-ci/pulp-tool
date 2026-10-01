@@ -19,7 +19,7 @@ help:
 	@echo "  make format       - Format code with Ruff"
 	@echo "  make check        - Run all checks (lint + test)"
 	@echo "  make pre-commit-ci - Run pre-commit commit + push stages (matches PR CI)"
-	@echo "  make audit        - Run pip-audit in a throwaway venv (dev deps from uv.lock; no editable install)"
+	@echo "  make audit        - Run pip-audit (reuses .audit-venv; dev deps from uv.lock)"
 	@echo "  make clean        - Clean build artifacts"
 	@echo "  make lock         - Regenerate uv.lock from pyproject.toml (uv lock)"
 	@echo "  make lock-check   - Fail if pyproject.toml and uv.lock are out of sync"
@@ -101,7 +101,7 @@ lint-ruff:
 	python3 -m ruff format --check pulp_tool/ tests/
 
 lint-pylint:
-	python3 -m pylint --rcfile=config/pylintrc pulp_tool/ tests/ --errors-only
+	python3 -m pylint --rcfile=config/pylintrc pulp_tool/ tests/ --errors-only -j 0
 
 lint-mypy:
 	python3 -m mypy pulp_tool/ tests/ --show-error-codes
@@ -119,19 +119,10 @@ pre-commit-ci:
 	pre-commit run --all-files
 	pre-commit run --hook-stage pre-push --all-files
 
-# Pygments CVE-2026-4539: no wheel >2.19.2 on PyPI yet (transitive via pytest/diff-cover). Drop when pinning pygments>=2.19.3.
-AUDIT_IGNORES := --ignore-vuln CVE-2026-4539 --ignore-vuln GHSA-5239-wwwm-4pmq
+# Pygments CVE-2026-4539: see scripts/run-pip-audit-precommit.sh and security-scan.yml
 
 audit:
-	@echo "pip-audit: creating $(AUDIT_VENV), installing dev deps from uv.lock (no editable install)..."
-	@rm -rf "$(AUDIT_VENV)" && python3 -m venv "$(AUDIT_VENV)" && \
-	 "$(AUDIT_VENV)/bin/python" -m pip install -q -U pip uv pip-audit && \
-	 "$(AUDIT_VENV)/bin/uv" export --frozen --extra dev --no-emit-project \
-	   -o "$(AUDIT_VENV)/requirements-audit.txt" && \
-	 "$(AUDIT_VENV)/bin/python" -m pip install -q -r "$(AUDIT_VENV)/requirements-audit.txt" && \
-	 "$(AUDIT_VENV)/bin/pip-audit" -l --desc on $(AUDIT_IGNORES)
-	@rm -rf "$(AUDIT_VENV)"
-	@echo "pip-audit: OK"
+	@scripts/run-pip-audit-precommit.sh --force
 
 # Cleanup
 clean:
@@ -141,7 +132,7 @@ clean:
 	rm -rf .pytest_cache
 	rm -rf .mypy_cache
 	rm -rf .ruff_cache
-	rm -rf .hypothesis
+	rm -rf .audit-venv/
 	rm -f coverage.xml
 	rm -f .coverage
 	rm -f .checkton.sarif

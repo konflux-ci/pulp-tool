@@ -4,11 +4,10 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from pulp_tool.models.artifacts import ArtifactData, ArtifactJsonResponse, ArtifactMetadata
+from pulp_tool.models.artifacts import ArtifactData, ArtifactMetadata
 from pulp_tool.models.context import PullContext
 from pulp_tool.models.pulp_results import PulpResultsDocument, SideTagRpmTransfer
 from pulp_tool.models.repository import RepositoryRefs
-from pulp_tool.models.results import PulpResultsModel
 from pulp_tool.pull.publish import publish_side_tag_results
 
 
@@ -81,7 +80,7 @@ class TestPublishSideTagResults:
         with pytest.raises(ValueError, match="repositories required"):
             publish_side_tag_results(
                 Mock(),
-                ArtifactData(artifact_json=ArtifactJsonResponse(artifacts={})),
+                ArtifactData(artifact_json=PulpResultsDocument(artifacts={})),
                 context,
                 upload_info,
                 [
@@ -98,14 +97,14 @@ class TestPublishSideTagResults:
     def test_publish_side_tag_results_orchestration(self) -> None:
         mock_client = Mock()
         artifact_data = ArtifactData(
-            artifact_json=ArtifactJsonResponse(
+            artifact_json=PulpResultsDocument(
                 version=1,
                 artifacts={
                     "pkg.rpm": ArtifactMetadata(
                         href="/pulp/src/",
                         url="https://example.com/pkg.rpm",
                         sha256="aa",
-                        labels={"build_id": "b1", "namespace": "ns", "parent_package": "parent-pkg"},
+                        pulp_labels={"build_id": "b1", "namespace": "ns", "parent_package": "parent-pkg"},
                     )
                 },
                 distributions={"rpms": "https://example.com/rpms/"},  # type: ignore[dict-item]
@@ -115,7 +114,7 @@ class TestPublishSideTagResults:
                     href="/pulp/src/",
                     url="https://example.com/pkg.rpm",
                     sha256="aa",
-                    labels={"build_id": "b1", "namespace": "ns", "parent_package": "parent-pkg"},
+                    pulp_labels={"build_id": "b1", "namespace": "ns", "parent_package": "parent-pkg"},
                 )
             },
         )
@@ -139,7 +138,7 @@ class TestPublishSideTagResults:
             sbom_href="/sbom/",
             artifacts_href="/artifacts/",
         )
-        upload_info = PulpResultsModel(build_id="b1", repositories=repos)
+        upload_info = PulpResultsDocument(build_id="b1", repositories=repos)
         transfers = [
             SideTagRpmTransfer(
                 artifact_key="pkg.rpm",
@@ -170,14 +169,14 @@ class TestPublishSideTagResults:
     def test_publish_updates_snapshot_when_configured(self) -> None:
         mock_client = Mock()
         artifact_data = ArtifactData(
-            artifact_json=ArtifactJsonResponse(
+            artifact_json=PulpResultsDocument(
                 version=1,
                 artifacts={
                     "pkg.rpm": ArtifactMetadata(
                         href="/pulp/src/",
                         url="https://example.com/pkg.rpm",
                         sha256="aa",
-                        labels={"build_id": "b1"},
+                        pulp_labels={"build_id": "b1"},
                     )
                 },
             ),
@@ -186,7 +185,7 @@ class TestPublishSideTagResults:
                     href="/pulp/src/",
                     url="https://example.com/pkg.rpm",
                     sha256="aa",
-                    labels={"build_id": "b1"},
+                    pulp_labels={"build_id": "b1"},
                 )
             },
         )
@@ -209,7 +208,7 @@ class TestPublishSideTagResults:
             sbom_href="/sbom/",
             artifacts_href="/artifacts/",
         )
-        upload_info = PulpResultsModel(build_id="b1", repositories=repos)
+        upload_info = PulpResultsDocument(build_id="b1", repositories=repos)
         transfers = [
             SideTagRpmTransfer(
                 artifact_key="pkg.rpm",

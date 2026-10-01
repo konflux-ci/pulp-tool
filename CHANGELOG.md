@@ -25,25 +25,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Canonical **`pulp_results.json`** schema via **`PulpResultsDocument`** ([`pulp_tool/models/pulp_results.py`](pulp_tool/models/pulp_results.py)): document-level **`version`** (JSON schema semver `x.y.z`), **`last_updated`** (ISO date on mutations), `build_id`, `namespace`, `cluster`, per-artifact **`pulp_labels`** and authoritative **`distributions`**; legacy read support for artifact `labels`, integer **`version`**, and embedded **`oci_manifest`** (stripped on normalize)
+- Canonical **`pulp_results.json`** schema via **`PulpResultsDocument`**: document-level **`version`** (JSON schema semver), **`last_updated`**, `build_id`, `namespace`, `cluster`, per-artifact **`pulp_labels`** and **`distributions`** only (no artifact **`labels`**, integer **`version`**, embedded **`oci_manifest`**, or **`cli.oci_storage`** config fallback)
 - Shared OCI/local loader **`resolve_results_json_path`** / **`load_results_document`** ([`pulp_tool/utils/results_json_io.py`](pulp_tool/utils/results_json_io.py)) for **`pull`**, **`upload-build`**, **`search-by`**, and **`update-build`**
 - **`update-build`** command and service: mutate versioned results after signing/BTS; required **`--results-json`**, **`--artifact-results`**, and **`--oci-storage`**; in-process ORAS pull/push; correlation ID logging (NF2)
 - Expanded Konflux contracts in [`docs/CLAUDE.md`](docs/CLAUDE.md), [`docs/cli-reference.md`](docs/cli-reference.md), [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+- Golden JSON fixture test for **`PulpResultsDocument.to_canonical_json()`** on-wire shape ([`tests/fixtures/pulp_results_golden.json`](tests/fixtures/pulp_results_golden.json))
 
 ### Changed
 
 - **`update-build`** with digest-pinned **`--results-json`**: ORAS **`attach`** to the subject manifest (referrer artifact); **`upload-build`** / side-tag without attach subject still **`oras push`** to **`--oci-storage`**
 - Digest-pinned OCI **`pull`** / **`load_results_document`**: **`oras discover`** for attached **`pulp_results`** referrers; select newest attached JSON by document **`last_updated`** (schema **`version`** unchanged across mutations)
-- **`PulpResultsDocument`** (replaces separate upload model + dict helpers): canonical JSON export, upload session state, and mutation methods in [`pulp_tool/models/pulp_results.py`](pulp_tool/models/pulp_results.py)
+- **`PulpResultsDocument`** package ([`pulp_tool/models/pulp_results/`](pulp_tool/models/pulp_results/)): in-place mutations; removed **`PulpResultsModel`** / **`ArtifactJsonResponse`** aliases; [`results.py`](pulp_tool/models/results.py) holds upload/download DTOs only
+- **Internal refactor:** shared [`cli/runner_helpers.py`](pulp_tool/cli/runner_helpers.py); **`PullService.run`** orchestrates **`pull`** (including side-tag); [`search_by_service.py`](pulp_tool/services/search_by_service.py) for **`search-by`**; upload-from-JSON **`UploadPlan`** pipeline in **`upload_service`**; [`upload_collect_public`](pulp_tool/services/upload_collect_public.py) entry for **`collect_results`**; [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) service map updated
 - Side-tag publish serializes canonical JSON and uses unified mutation helpers
 - E2e ORAS checks use Tekton **`--artifact-results`** files (not embedded **`oci_manifest`** in JSON)
 - Live e2e **`test_update_build_oras_live`**: `upload-build` + **`update-build`** against real Pulp and ORAS when **`--oci-storage`** is set
 - Repository layout: `container/Dockerfile`, `config/` linter configs, agent docs under `docs/AGENTS.md` and `docs/CLAUDE.md` (root stubs retained); CI bot config under `.github/`; expanded `make clean`
 
+### Fixed
+
+- Dev lockfile: **`virtualenv>=21.7.13`** constraint (transitive via **pre-commit**; PYSEC-2026-4011–4014)
+
+### Removed
+
+- **`PulpResultsModel`** and **`ArtifactJsonResponse`** type aliases (use **`PulpResultsDocument`**)
+- Removed **`pulp_tool/models/pulp_results/legacy.py`** and dict-era public helpers; use **`PulpResultsDocument`** methods only
+- Non-ORAS Tekton **`--artifact-results`** (Pulp distribution URL + digest without **`--oci-storage`**) and **`cli.oci_storage`** in config
+
 ### Added
 
 - E2e harness: CLI validation smoke, live read-only error paths (auth, 404 `pulp_results`, bad checksum, pull filters, bad local/OCI refs), and live mutating errors (empty `--rpm-path`, bad `--results-json`, missing `upload-files` path, duplicate `create-repository`) with isolated build IDs and in-test `pulp` cleanup; documented in `e2e/README.md` ([ec3d824](https://github.com/konflux-ci/pulp-tool/commit/ec3d824))
-- `upload-build` command (`upload` remains a compatibility alias): ORAS publish of `pulp_results.json` via **`--oci-storage`** (Konflux `ociStorage`) or `cli.oci_storage`; with `--artifact-results`, Tekton files get OCI image URL (without digest) and `sha256:` digest matching import-to-quay `PULP-IMAGE_*` results ([2a3f5c8](https://github.com/konflux-ci/pulp-tool/commit/2a3f5c8))
+- `upload-build` command (`upload` remains a compatibility alias): ORAS publish of `pulp_results.json` via **`--oci-storage`** (Konflux `ociStorage`); with comma-separated `--artifact-results`, Tekton files get OCI image URL (without digest) and `sha256:` digest matching import-to-quay `PULP-IMAGE_*` results ([2a3f5c8](https://github.com/konflux-ci/pulp-tool/commit/2a3f5c8)) — config **`cli.oci_storage`** and non-ORAS Tekton result files were removed later in this release (see **Removed** above)
 - `pull --oci-storage` for side-tag ORAS publish (flag overrides transfer config) ([2a3f5c8](https://github.com/konflux-ci/pulp-tool/commit/2a3f5c8))
 - `pull --side-tag` (with `--transfer-dest`): extra ROK RPM repo/distribution, versioned `pulp_results.json` merge, ORAS push, `--artifact-results` Tekton outputs, and optional `--snapshot-path` (`pulpResultsOciManifest`) for trusted-artifact release workspaces ([2a3f5c8](https://github.com/konflux-ci/pulp-tool/commit/2a3f5c8))
 - `pulp-tool-container` image: ORAS CLI, `jq`, and Konflux `select-oci-auth` for registry auth (`oras --registry-config`); e2e ORAS tests when e2e **`--oci-storage`** is set (Konflux `ociStorage` param) ([2a3f5c8](https://github.com/konflux-ci/pulp-tool/commit/2a3f5c8))

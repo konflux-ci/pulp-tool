@@ -121,22 +121,22 @@ class TestExtractArchitectureFromMetadata:
 
     def test_extract_from_artifact_metadata(self) -> None:
         """Test extracting architecture from ArtifactMetadata (line 88)."""
-        metadata = ArtifactMetadata(labels={"arch": "x86_64"})
+        metadata = ArtifactMetadata(pulp_labels={"arch": "x86_64"})
         assert extract_architecture_from_metadata(metadata) == "x86_64"
 
     def test_extract_from_artifact_metadata_no_arch(self) -> None:
         """Test extracting architecture from ArtifactMetadata without arch (line 88)."""
-        metadata = ArtifactMetadata(labels={})
+        metadata = ArtifactMetadata(pulp_labels={})
         assert extract_architecture_from_metadata(metadata) == "noarch"
 
     def test_extract_from_dict(self) -> None:
         """Test extracting architecture from dict."""
-        metadata = {"labels": {"arch": "aarch64"}}
+        metadata = {"pulp_labels": {"arch": "aarch64"}}
         assert extract_architecture_from_metadata(metadata) == "aarch64"
 
     def test_extract_from_dict_no_arch(self) -> None:
         """Test extracting architecture from dict without arch."""
-        metadata: dict[str, dict[str, str]] = {"labels": {}}
+        metadata: dict[str, dict[str, str]] = {"pulp_labels": {}}
         assert extract_architecture_from_metadata(metadata) == "noarch"
 
 
@@ -171,7 +171,7 @@ class TestCategorizeArtifactsByType:
         """Use url from results JSON when present instead of building from distros."""
         embedded = "https://mtls.example.com/api/pulp-content/ns/build/logs/s390x/build.log"
         artifacts = {
-            "ns/build/s390x/build.log": ArtifactMetadata(labels={"arch": "s390x"}, url=embedded, sha256="65cc68fa")
+            "ns/build/s390x/build.log": ArtifactMetadata(pulp_labels={"arch": "s390x"}, url=embedded, sha256="65cc68fa")
         }
         wrong_distros = {"logs": "https://wrong.example.com/logs/"}
         with patch("pulp_tool.utils.artifact_detection.build_artifact_url") as mock_build:
@@ -184,7 +184,7 @@ class TestCategorizeArtifactsByType:
     def test_categorize_embedded_url_dict_metadata(self) -> None:
         """Dict artifact entries with url skip build_artifact_url."""
         embedded = "https://source.example/rpms/Packages/p/pkg.rpm"
-        artifacts = {"pkg.rpm": {"labels": {"arch": "x86_64"}, "url": embedded, "sha256": "a" * 64}}
+        artifacts = {"pkg.rpm": {"pulp_labels": {"arch": "x86_64"}, "url": embedded, "sha256": "a" * 64}}
         with patch("pulp_tool.utils.artifact_detection.build_artifact_url") as mock_build:
             result = categorize_artifacts_by_type(artifacts, {"rpms": "https://other/"})
         assert len(result) == 1
@@ -194,9 +194,9 @@ class TestCategorizeArtifactsByType:
     def test_categorize_basic(self) -> None:
         """Test basic artifact categorization."""
         artifacts = {
-            "package.rpm": ArtifactMetadata(labels={"arch": "x86_64"}),
-            "build.log": ArtifactMetadata(labels={"arch": "noarch"}),
-            "sbom.json": ArtifactMetadata(labels={"arch": "noarch"}),
+            "package.rpm": ArtifactMetadata(pulp_labels={"arch": "x86_64"}),
+            "build.log": ArtifactMetadata(pulp_labels={"arch": "noarch"}),
+            "sbom.json": ArtifactMetadata(pulp_labels={"arch": "noarch"}),
         }
         distros = {
             "rpms": "https://example.com/rpms/",
@@ -211,7 +211,7 @@ class TestCategorizeArtifactsByType:
 
     def test_categorize_unknown_type(self) -> None:
         """Test categorization skips unknown artifact types (lines 120-121)."""
-        artifacts = {"unknown.txt": ArtifactMetadata(labels={"arch": "noarch"})}
+        artifacts = {"unknown.txt": ArtifactMetadata(pulp_labels={"arch": "noarch"})}
         distros = {"rpms": "https://example.com/rpms/"}
         with patch("pulp_tool.utils.artifact_detection.logging") as mock_logging:
             result = categorize_artifacts_by_type(artifacts, distros)
@@ -220,7 +220,7 @@ class TestCategorizeArtifactsByType:
 
     def test_categorize_no_url(self) -> None:
         """Test categorization skips artifacts when URL cannot be built (lines 126-127)."""
-        artifacts = {"package.rpm": ArtifactMetadata(labels={"arch": "x86_64"})}
+        artifacts = {"package.rpm": ArtifactMetadata(pulp_labels={"arch": "x86_64"})}
         with (
             patch("pulp_tool.utils.artifact_detection.detect_artifact_type", return_value="rpm"),
             patch("pulp_tool.utils.artifact_detection.build_artifact_url", return_value=None),
@@ -233,8 +233,8 @@ class TestCategorizeArtifactsByType:
     def test_categorize_content_type_filter(self) -> None:
         """Test categorization with content type filter (lines 131-132)."""
         artifacts = {
-            "package.rpm": ArtifactMetadata(labels={"arch": "x86_64"}),
-            "build.log": ArtifactMetadata(labels={"arch": "noarch"}),
+            "package.rpm": ArtifactMetadata(pulp_labels={"arch": "x86_64"}),
+            "build.log": ArtifactMetadata(pulp_labels={"arch": "noarch"}),
         }
         distros = {"rpms": "https://example.com/rpms/", "logs": "https://example.com/logs/"}
         with patch("pulp_tool.utils.artifact_detection.logging") as mock_logging:
@@ -248,8 +248,8 @@ class TestCategorizeArtifactsByType:
     def test_categorize_architecture_filter(self) -> None:
         """Test categorization with architecture filter (lines 136-137)."""
         artifacts = {
-            "package1.rpm": ArtifactMetadata(labels={"arch": "x86_64"}),
-            "package2.rpm": ArtifactMetadata(labels={"arch": "aarch64"}),
+            "package1.rpm": ArtifactMetadata(pulp_labels={"arch": "x86_64"}),
+            "package2.rpm": ArtifactMetadata(pulp_labels={"arch": "aarch64"}),
         }
         distros = {"rpms": "https://example.com/rpms/"}
         with patch("pulp_tool.utils.artifact_detection.logging") as mock_logging:
@@ -263,9 +263,9 @@ class TestCategorizeArtifactsByType:
     def test_categorize_with_both_filters(self) -> None:
         """Test categorization with both content type and architecture filters."""
         artifacts = {
-            "package.rpm": ArtifactMetadata(labels={"arch": "x86_64"}),
-            "build.log": ArtifactMetadata(labels={"arch": "noarch"}),
-            "sbom.json": ArtifactMetadata(labels={"arch": "noarch"}),
+            "package.rpm": ArtifactMetadata(pulp_labels={"arch": "x86_64"}),
+            "build.log": ArtifactMetadata(pulp_labels={"arch": "noarch"}),
+            "sbom.json": ArtifactMetadata(pulp_labels={"arch": "noarch"}),
         }
         distros = {
             "rpms": "https://example.com/rpms/",
@@ -281,7 +281,7 @@ class TestCategorizeArtifactsByType:
 
     def test_categorize_embedded_urls_only_skips_without_url(self) -> None:
         """Pull mode: no synthesized URL from distributions when url is missing."""
-        artifacts = {"package.rpm": ArtifactMetadata(labels={"arch": "x86_64"})}
+        artifacts = {"package.rpm": ArtifactMetadata(pulp_labels={"arch": "x86_64"})}
         distros = {"rpms": "https://example.com/rpms/"}
         with patch("pulp_tool.utils.artifact_detection.build_artifact_url") as mock_build:
             with patch("pulp_tool.utils.artifact_detection.logging") as mock_logging:
@@ -295,7 +295,7 @@ class TestCategorizeArtifactsByType:
     def test_categorize_embedded_urls_only_keeps_embedded_url(self) -> None:
         """Pull mode: artifact url is used even when distros would differ."""
         embedded = "https://cdn.example/artifacts/pkg.rpm"
-        artifacts = {"package.rpm": ArtifactMetadata(labels={"arch": "x86_64"}, url=embedded)}
+        artifacts = {"package.rpm": ArtifactMetadata(pulp_labels={"arch": "x86_64"}, url=embedded)}
         distros = {"rpms": "https://wrong.example/rpms/"}
         with patch("pulp_tool.utils.artifact_detection.build_artifact_url") as mock_build:
             result = categorize_artifacts_by_type(artifacts, distros, embedded_urls_only=True)

@@ -120,11 +120,11 @@ make lint
 # Or individually:
 ruff check pulp_tool/ tests/
 ruff format --check pulp_tool/ tests/
-pylint --rcfile=config/pylintrc pulp_tool/ tests/ --errors-only
+pylint --rcfile=config/pylintrc pulp_tool/ tests/ --errors-only -j 0
 mypy pulp_tool/ tests/ --show-error-codes
 ```
 
-**Pre-commit matches GitHub PR CI.** Commit hooks run lint + pip-audit; pre-push hooks run `make test-diff-coverage` and Checkton (install with `pre-commit install --hook-type pre-push`). Run everything locally:
+**Pre-commit matches GitHub PR CI** for full-tree checks (`make pre-commit-ci`). On each commit, **pylint** runs only on staged `pulp_tool/` and `tests/` Python files (parallel `-j 0`); **pip-audit** runs only when `uv.lock` or `pyproject.toml` change (reuses `.audit-venv`, skips if those files are unchanged since the last successful audit). Pre-push hooks run `make test-diff-coverage` and Checkton (install with `pre-commit install --hook-type pre-push`). Run everything locally:
 
 ```bash
 make pre-commit-ci

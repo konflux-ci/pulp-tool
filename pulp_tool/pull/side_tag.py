@@ -56,7 +56,9 @@ def upload_rpms_to_side_tag_repository(
     for artifact_key, artifact_file in pulled_artifacts.rpms.items():
         source_meta = source_artifacts.get(artifact_key)
         source_dict = source_meta.model_dump() if source_meta is not None else {"labels": artifact_file.labels}
-        predecessor = resolve_predecessor_href(source_dict)
+        predecessor = (
+            resolve_predecessor_href(source_meta) if source_meta is not None else resolve_predecessor_href(source_dict)
+        )
         labels = side_tag_upload_labels(
             dict(artifact_file.labels),
             side_tag=side_tag,

@@ -8,6 +8,7 @@ import pytest
 
 from pulp_tool.models import RepositoryRefs
 from pulp_tool.models.context import UploadRpmContext
+from pulp_tool.models.pulp_results import PulpResultsDocument
 from pulp_tool.services.upload_service import (
     process_uploads_from_results_json,
 )
@@ -23,7 +24,9 @@ class TestProcessUploadsFromResultsJson:
         log_path = arch_dir / "build.log"
         log_path.write_text("log line")
         results_json_path = tmp_path / "pulp_results.json"
-        results_json_path.write_text(json.dumps({"artifacts": {"x86_64/build.log": {"labels": {"arch": "x86_64"}}}}))
+        results_json_path.write_text(
+            json.dumps({"artifacts": {"x86_64/build.log": {"pulp_labels": {"arch": "x86_64"}}}})
+        )
         context = UploadRpmContext(
             build_id="test-build",
             date_str="2024-01-01",
@@ -79,7 +82,7 @@ class TestProcessUploadsFromResultsJson:
         rpm_file.parent.mkdir()
         rpm_file.write_bytes(b"fake rpm content")
         results_json_path = tmp_path / "pulp_results.json"
-        results_data = {"artifacts": {"x86_64/pkg.rpm": {"labels": {"arch": "x86_64"}}}}
+        results_data = {"artifacts": {"x86_64/pkg.rpm": {"pulp_labels": {"arch": "x86_64"}}}}
         results_json_path.write_text(json.dumps(results_data))
         context = UploadRpmContext(
             build_id="test-build",
@@ -112,7 +115,7 @@ class TestProcessUploadsFromResultsJson:
         rpm_file.parent.mkdir()
         rpm_file.write_bytes(b"fake rpm content")
         results_json_path = tmp_path / "pulp_results.json"
-        results_data = {"artifacts": {"x86_64/pkg.rpm": {"labels": {"arch": "x86_64"}}}}
+        results_data = {"artifacts": {"x86_64/pkg.rpm": {"pulp_labels": {"arch": "x86_64"}}}}
         results_json_path.write_text(json.dumps(results_data))
         context = UploadRpmContext(
             build_id="test-build",
@@ -156,7 +159,7 @@ class TestProcessUploadsFromResultsJson:
         rpm_file.parent.mkdir()
         rpm_file.write_bytes(b"x")
         results_json_path = tmp_path / "pulp_results.json"
-        results_data = {"artifacts": {"x86_64/pkg.rpm": {"labels": {"arch": "x86_64"}}}}
+        results_data = {"artifacts": {"x86_64/pkg.rpm": {"pulp_labels": {"arch": "x86_64"}}}}
         results_json_path.write_text(json.dumps(results_data))
         context = UploadRpmContext(
             build_id="test-build",
@@ -199,7 +202,7 @@ class TestProcessUploadsFromResultsJson:
         rpm_file.parent.mkdir()
         rpm_file.write_bytes(b"fake rpm content")
         results_json_path = tmp_path / "pulp_results.json"
-        results_data = {"artifacts": {"x86_64/pkg.rpm": {"labels": {"arch": "x86_64"}}}}
+        results_data = {"artifacts": {"x86_64/pkg.rpm": {"pulp_labels": {"arch": "x86_64"}}}}
         results_json_path.write_text(json.dumps(results_data))
         context = UploadRpmContext(
             build_id="test-build",
@@ -230,7 +233,7 @@ class TestProcessUploadsFromResultsJson:
     def test_upload_from_results_json_missing_file(self, tmp_path, mock_pulp_client, caplog) -> None:
         """Test handling of missing file - skip with warning."""
         results_json_path = tmp_path / "pulp_results.json"
-        results_data = {"artifacts": {"x86_64/pkg.rpm": {"labels": {"arch": "x86_64"}}}}
+        results_data = {"artifacts": {"x86_64/pkg.rpm": {"pulp_labels": {"arch": "x86_64"}}}}
         results_json_path.write_text(json.dumps(results_data))
         context = UploadRpmContext(
             build_id="test-build",
@@ -343,7 +346,7 @@ class TestProcessUploadsFromResultsJson:
         rpm_file.parent.mkdir()
         rpm_file.write_bytes(b"fake rpm")
         results_json_path = tmp_path / "pulp_results.json"
-        results_json_path.write_text(json.dumps({"artifacts": {"x86_64/pkg.rpm": {"labels": {"arch": "x86_64"}}}}))
+        results_json_path.write_text(json.dumps({"artifacts": {"x86_64/pkg.rpm": {"pulp_labels": {"arch": "x86_64"}}}}))
         context = UploadRpmContext(
             build_id="test-build",
             date_str="2024-01-01",
@@ -368,13 +371,13 @@ class TestProcessUploadsFromResultsJson:
         with pytest.raises(ValueError, match="signed_by requires signed repositories"):
             process_uploads_from_results_json(mock_pulp_client, context, repositories)
 
-    def test_upload_from_results_json_invalid_artifact_entry(self, tmp_path, mock_pulp_client, caplog) -> None:
-        """Test process_uploads_from_results_json skips non-dict artifact entries."""
+    def test_upload_from_results_json_invalid_artifact_entry(self, tmp_path, mock_pulp_client) -> None:
+        """Non-dict artifact rows are dropped during ``from_raw`` normalization."""
         rpm_file = tmp_path / "pkg.rpm"
         rpm_file.write_bytes(b"fake rpm")
         results_json_path = tmp_path / "pulp_results.json"
         results_json_path.write_text(
-            json.dumps({"artifacts": {"pkg.rpm": {"labels": {"arch": "noarch"}}, "bad": "not a dict"}})
+            json.dumps({"artifacts": {"pkg.rpm": {"pulp_labels": {"arch": "noarch"}}, "bad": "not a dict"}})
         )
         context = UploadRpmContext(
             build_id="test-build",
@@ -397,11 +400,9 @@ class TestProcessUploadsFromResultsJson:
         with (
             patch("pulp_tool.utils.uploads.upload_rpms", return_value=["/rpm/1"]),
             patch("pulp_tool.services.upload_service.collect_results", return_value="https://example.com/results.json"),
-            caplog.at_level(logging.WARNING),
         ):
             result = process_uploads_from_results_json(mock_pulp_client, context, repositories)
         assert result == "https://example.com/results.json"
-        assert "Skipping invalid artifact entry" in caplog.text
 
     def test_upload_from_results_json_log_and_sbom_and_artifact(self, tmp_path, mock_pulp_client) -> None:
         """Test process_uploads_from_results_json with log, sbom, and generic artifact."""
@@ -417,9 +418,9 @@ class TestProcessUploadsFromResultsJson:
             json.dumps(
                 {
                     "artifacts": {
-                        "x86_64/state.log": {"labels": {"arch": "x86_64"}},
-                        "sbom.json": {"labels": {}},
-                        "data.txt": {"labels": {}},
+                        "x86_64/state.log": {"pulp_labels": {"arch": "x86_64"}},
+                        "sbom.json": {"pulp_labels": {}},
+                        "data.txt": {"pulp_labels": {}},
                     }
                 }
             )
@@ -462,7 +463,7 @@ class TestProcessUploadsFromResultsJson:
         rpm_file.parent.mkdir()
         rpm_file.write_bytes(b"fake rpm")
         results_json_path = tmp_path / "pulp_results.json"
-        results_json_path.write_text(json.dumps({"artifacts": {"aarch64/pkg.rpm": {"labels": {}}}}))
+        results_json_path.write_text(json.dumps({"artifacts": {"aarch64/pkg.rpm": {"pulp_labels": {}}}}))
         context = UploadRpmContext(
             build_id="test-build",
             date_str="2024-01-01",
@@ -496,7 +497,7 @@ class TestProcessUploadsFromResultsJson:
         log_file.parent.mkdir()
         log_file.write_text("log")
         results_json_path = tmp_path / "pulp_results.json"
-        results_json_path.write_text(json.dumps({"artifacts": {"s390x/state.log": {"labels": {}}}}))
+        results_json_path.write_text(json.dumps({"artifacts": {"s390x/state.log": {"pulp_labels": {}}}}))
         context = UploadRpmContext(
             build_id="test-build",
             date_str="2024-01-01",
@@ -532,7 +533,7 @@ class TestProcessUploadsFromResultsJson:
         log_file.write_text("log")
         results_json_path = tmp_path / "pulp_results.json"
         results_json_path.write_text(
-            json.dumps({"artifacts": {"pkg.rpm": {"labels": {}}, "state.log": {"labels": {}}}})
+            json.dumps({"artifacts": {"pkg.rpm": {"pulp_labels": {}}, "state.log": {"pulp_labels": {}}}})
         )
         context = UploadRpmContext(
             build_id="test-build",
@@ -568,7 +569,9 @@ class TestProcessUploadsFromResultsJson:
         log_file.parent.mkdir()
         log_file.write_text("log")
         results_json_path = tmp_path / "pulp_results.json"
-        results_json_path.write_text(json.dumps({"artifacts": {"x86_64/state.log": {"labels": {"arch": "x86_64"}}}}))
+        results_json_path.write_text(
+            json.dumps({"artifacts": {"x86_64/state.log": {"pulp_labels": {"arch": "x86_64"}}}})
+        )
         context = UploadRpmContext(
             build_id="test-build",
             date_str="2024-01-01",
@@ -620,10 +623,9 @@ class TestProcessUploadsFromResultsJson:
             artifacts_href="",
             artifacts_prn="artifacts-prn",
         )
-        from pulp_tool.models.results import PulpResultsModel
 
         out = process_uploads_from_results_json(mock_pulp_client, context, repositories, defer_collect=True)
-        assert isinstance(out, PulpResultsModel)
+        assert isinstance(out, PulpResultsDocument)
 
     def test_defer_collect_after_uploads(self, tmp_path, mock_pulp_client) -> None:
         rpm = tmp_path / "pkg.rpm"
@@ -650,7 +652,6 @@ class TestProcessUploadsFromResultsJson:
             artifacts_href="",
             artifacts_prn="artifacts-prn",
         )
-        from pulp_tool.models.results import PulpResultsModel
 
         with (
             patch("pulp_tool.utils.uploads.upload_rpms", return_value=[]),
@@ -662,4 +663,42 @@ class TestProcessUploadsFromResultsJson:
                 repositories,
                 defer_collect=True,
             )
-        assert isinstance(out, PulpResultsModel)
+        assert isinstance(out, PulpResultsDocument)
+
+
+class TestUploadPlanFromDocument:
+    def test_plan_groups_rpm_log_and_sbom(self, tmp_path) -> None:
+        from pulp_tool.services.upload_service import _plan_uploads_from_document
+
+        rpm = tmp_path / "x86_64" / "pkg.rpm"
+        rpm.parent.mkdir()
+        rpm.write_bytes(b"rpm")
+        log = tmp_path / "build.log"
+        log.write_text("log", encoding="utf-8")
+        sbom = tmp_path / "sbom.json"
+        sbom.write_text("{}", encoding="utf-8")
+        doc = PulpResultsDocument.from_raw(
+            {
+                "artifacts": {
+                    "x86_64/pkg.rpm": {"pulp_labels": {"arch": "x86_64"}},
+                    "build.log": {"pulp_labels": {}},
+                    "sbom.json": {"pulp_labels": {}},
+                }
+            }
+        )
+        context = UploadRpmContext(
+            build_id="b1",
+            date_str="2024-01-01",
+            namespace="ns",
+            results_json=str(tmp_path / "pulp_results.json"),
+        )
+        plan = _plan_uploads_from_document(doc, base_path=tmp_path, context=context)
+        assert plan.rpms_by_arch["x86_64"] == [str(rpm)]
+        assert plan.logs_to_upload == [(str(log), "noarch")]
+        assert plan.sboms_to_upload == [str(sbom)]
+
+    def test_infer_arch_from_path_when_label_missing(self) -> None:
+        from pulp_tool.services.upload_service import _infer_arch_from_key
+
+        assert _infer_arch_from_key("aarch64/foo.rpm", "") == "aarch64"
+        assert _infer_arch_from_key("pkg.rpm", "x86_64") == "x86_64"

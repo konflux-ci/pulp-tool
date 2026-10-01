@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+from pulp_tool.models.pulp_results import PulpResultsDocument
 from pulp_tool.pull import load_and_validate_artifacts, setup_repositories_if_needed
 
 
@@ -138,7 +139,7 @@ class TestLoadAndValidateArtifacts:
         args = Mock()
         args.artifact_location = temp_file
         with open(temp_file, "w") as f:
-            json.dump({"artifacts": {"a.rpm": {"labels": {}, "url": "ftp://example.com/a.rpm"}}}, f)
+            json.dump({"artifacts": {"a.rpm": {"pulp_labels": {}, "url": "ftp://example.com/a.rpm"}}}, f)
         mock_client = Mock()
         with patch.object(sys, "exit", side_effect=SystemExit(1)) as mock_exit, pytest.raises(SystemExit):
             load_and_validate_artifacts(args, mock_client)
@@ -153,7 +154,7 @@ class TestLoadAndValidateArtifacts:
         with open(temp_file, "w") as f:
             json.dump(
                 {
-                    "artifacts": {"a.rpm": {"labels": {}, "url": "https://example.com/a.rpm"}},
+                    "artifacts": {"a.rpm": {"pulp_labels": {}, "url": "https://example.com/a.rpm"}},
                     "build_id": "should-not-be-here",
                 },
                 f,
@@ -170,12 +171,12 @@ class TestLoadAndValidateArtifacts:
         artifact_data = {
             "artifacts": {
                 "test.rpm": {
-                    "labels": {"build_id": "test-build", "arch": "x86_64"},
+                    "pulp_labels": {"build_id": "test-build", "arch": "x86_64"},
                     "url": "https://example.com/api/pulp-content/ns/build/rpms/Packages/t/test.rpm",
                     "sha256": "a" * 64,
                 },
                 "test.sbom": {
-                    "labels": {"build_id": "test-build", "arch": "noarch"},
+                    "pulp_labels": {"build_id": "test-build", "arch": "noarch"},
                     "url": "https://example.com/api/pulp-content/ns/build/sbom/test.sbom",
                     "sha256": "b" * 64,
                 },
@@ -194,6 +195,5 @@ class TestLoadAndValidateArtifacts:
 
         assert isinstance(result.artifacts["test.rpm"], ArtifactMetadata)
         assert isinstance(result.artifacts["test.sbom"], ArtifactMetadata)
-        from pulp_tool.models.artifacts import ArtifactJsonResponse
 
-        assert isinstance(result.artifact_json, ArtifactJsonResponse)
+        assert isinstance(result.artifact_json, PulpResultsDocument)

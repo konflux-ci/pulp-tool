@@ -14,6 +14,7 @@ import pytest
 from httpx import ConnectError, HTTPError, TimeoutException
 
 from pulp_tool.api import OAuth2ClientCredentialsAuth, PulpClient
+from pulp_tool.models.pulp_results import PulpResultsDocument
 from pulp_tool.utils import PulpHelper, validate_file_path
 
 
@@ -377,7 +378,7 @@ class TestEdgeCases:
 
     def test_build_results_structure_edge_cases(self, mock_config) -> None:
         """Test build_results_structure method with edge cases."""
-        from pulp_tool.models import PulpResultsModel, RepositoryRefs
+        from pulp_tool.models import RepositoryRefs
         from pulp_tool.models.artifacts import PulpContentRow
 
         client = PulpClient(mock_config)
@@ -391,14 +392,14 @@ class TestEdgeCases:
             artifacts_href="/artifacts/",
             artifacts_prn="artifacts-prn",
         )
-        results_model = PulpResultsModel(build_id="test-build", repositories=repositories)
+        results_model = PulpResultsDocument(build_id="test-build", repositories=repositories)
         result = client.build_results_structure(results_model, [], {})
         assert result.artifact_count == 0
-        results_model = PulpResultsModel(build_id="test-build", repositories=repositories)
+        results_model = PulpResultsDocument(build_id="test-build", repositories=repositories)
         content_results = [PulpContentRow.model_validate({"artifacts": {"file": "/pulp/api/v3/artifacts/12345/"}})]
         result = client.build_results_structure(results_model, content_results, {})
         assert result.artifact_count == 0
-        results_model = PulpResultsModel(build_id="test-build", repositories=repositories)
+        results_model = PulpResultsDocument(build_id="test-build", repositories=repositories)
         content_results = [PulpContentRow.model_validate({"pulp_labels": {"build_id": "test"}})]
         result = client.build_results_structure(results_model, content_results, {})
         assert result.artifact_count == 0

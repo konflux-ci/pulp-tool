@@ -16,13 +16,12 @@ import click
 import httpx
 
 from ..api import PulpClient
+from ..cli.runner_helpers import PullRunnerError, resolve_results_json_local_path
 from ..models.context import UploadRpmContext
 from ..services.upload_service import scan_results_json_for_log_and_sbom_keys
 from ..utils import PulpHelper, setup_logging
 from ..utils.error_handling import handle_generic_error, handle_http_error
-from ..utils.oci_pull import is_oci_artifact_reference
 from ..utils.oci_storage_resolve import resolve_oci_storage
-from ..utils.results_json_io import ResultsJsonIOError, resolve_results_json_path
 from ..utils.uploads import rpm_directory_has_log_files
 
 
@@ -50,7 +49,7 @@ def _extract_build_id_namespace_from_results_json(results_json_path: Path) -> tu
     artifacts = data.get("artifacts", {})
     for _key, info in artifacts.items():
         if isinstance(info, dict):
-            labels = info.get("pulp_labels") or info.get("labels") or {}
+            labels = info.get("pulp_labels") or {}
             bid = labels.get("build_id", "").strip()
             ns = labels.get("namespace", "").strip()
             if bid and ns:
@@ -91,7 +90,7 @@ def _extract_build_id_namespace_from_results_json(results_json_path: Path) -> tu
     "--oci-storage",
     help=(
         "OCI registry for ORAS publish of pulp_results.json (Konflux pipeline param ociStorage). "
-        "Overrides cli.oci_storage in --config when both are set."
+        "Konflux pipeline param ociStorage (ORAS publish of pulp_results.json)."
     ),
 )
 @click.option("--sbom-results", type=click.Path(), help="Path to write SBOM results")
@@ -159,20 +158,14 @@ def upload_build(  # pylint: disable=too-many-arguments,too-many-positional-argu
     resolved_results_json: str | None = None
     results_json_temp: tempfile.TemporaryDirectory[str] | None = None
     if results_json:
-        loc = results_json.strip()
         try:
-            if is_oci_artifact_reference(loc):
-                results_json_temp = tempfile.TemporaryDirectory(prefix="pulp-tool-upload-json-")
-                local_path = resolve_results_json_path(loc, Path(results_json_temp.name))
-                resolved_results_json = str(local_path)
-            else:
-                path = Path(loc).expanduser().resolve()
-                if not path.is_file():
-                    click.echo(f"Error: results JSON not found: {path}", err=True)
-                    ctx.exit(1)
-                resolved_results_json = str(path)
-        except ResultsJsonIOError as e:
-            click.echo(f"Error: {e}", err=True)
+            resolved_results_json, results_json_temp = resolve_results_json_local_path(
+                results_json.strip(),
+                oci_dest_dir=None,
+                prefix="pulp-tool-upload-json-",
+            )
+        except PullRunnerError as e:
+            click.echo(f"Error: {e.message}", err=True)
             ctx.exit(1)
 
     # When using --results-json, build_id and namespace can be extracted from the JSON
@@ -313,6 +306,8 @@ def upload_build(  # pylint: disable=too-many-arguments,too-many-positional-argu
         handle_generic_error(e, "upload-build operation")
         sys.exit(1)
     finally:
+        if results_json_temp is not None:
+            results_json_temp.cleanup()
         # Ensure client session is properly closed
         if client:
             client.close()

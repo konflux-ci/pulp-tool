@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -61,7 +60,7 @@ def run_update_build(
         raise ValueError("build_id and namespace required (document or CLI flags)")
 
     local_json = oci_temp_dir / "pulp_results_input.json"
-    local_json.write_text(json.dumps(document._mutable_dict(), indent=2), encoding="utf-8")
+    local_json.write_text(document.to_canonical_json(), encoding="utf-8")
     context.results_json = str(local_json)
 
     helper = PulpHelper(client, parent_package=context.parent_package)
@@ -107,7 +106,7 @@ def run_update_build(
 
     oci_storage = (context.oci_storage or "").strip()
     if not oci_storage:
-        raise ValueError("--oci-storage or cli.oci_storage is required for update-build")
+        raise ValueError("--oci-storage is required for update-build")
 
     labels = create_labels(context.build_id, "", context.namespace, context.parent_package, context.date_str)
     attach_subject = (

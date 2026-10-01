@@ -21,7 +21,8 @@ class TestUploadRpms:
     def test_upload_rpms_empty_list(self, mock_pulp_client) -> None:
         """Test upload_rpms with empty RPM list (lines 208-209)."""
         from pulp_tool.models.context import UploadRpmContext
-        from pulp_tool.models.results import PulpResultsModel, RepositoryRefs
+        from pulp_tool.models.pulp_results import PulpResultsDocument
+        from pulp_tool.models.repository import RepositoryRefs
 
         context = UploadRpmContext(
             build_id="test-build",
@@ -41,7 +42,7 @@ class TestUploadRpms:
             artifacts_href="",
             artifacts_prn="",
         )
-        results_model = PulpResultsModel(build_id="test-build", repositories=repositories)
+        results_model = PulpResultsDocument(build_id="test-build", repositories=repositories)
         with patch("pulp_tool.utils.uploads.logging") as mock_logging:
             result = upload_rpms(
                 [],
@@ -59,7 +60,8 @@ class TestUploadRpms:
         """Test upload_rpms with created resources (lines 225-227, 229-231)."""
         from pulp_tool.models.context import UploadRpmContext
         from pulp_tool.models.pulp_api import TaskResponse
-        from pulp_tool.models.results import PulpResultsModel, RepositoryRefs
+        from pulp_tool.models.pulp_results import PulpResultsDocument
+        from pulp_tool.models.repository import RepositoryRefs
 
         context = UploadRpmContext(
             build_id="test-build",
@@ -79,7 +81,7 @@ class TestUploadRpms:
             artifacts_href="",
             artifacts_prn="",
         )
-        results_model = PulpResultsModel(build_id="test-build", repositories=repositories)
+        results_model = PulpResultsDocument(build_id="test-build", repositories=repositories)
         mock_artifacts = [("/path/to/package.rpm", "/rpm/artifact/1"), ("/path/to/package2.rpm", "/rpm/artifact/2")]
         mock_task_response = TaskResponse(
             pulp_href="/tasks/123/", state="completed", created_resources=["/resource/1", "/resource/2"]
@@ -112,7 +114,8 @@ class TestUploadRpms:
         """Passing distribution_urls records each uploaded RPM in results (incremental JSON)."""
         from pulp_tool.models.context import UploadRpmContext
         from pulp_tool.models.pulp_api import TaskResponse
-        from pulp_tool.models.results import PulpResultsModel, RepositoryRefs
+        from pulp_tool.models.pulp_results import PulpResultsDocument
+        from pulp_tool.models.repository import RepositoryRefs
 
         context = UploadRpmContext(
             build_id="test-build",
@@ -132,7 +135,7 @@ class TestUploadRpms:
             artifacts_href="",
             artifacts_prn="",
         )
-        results_model = PulpResultsModel(build_id="test-build", repositories=repositories)
+        results_model = PulpResultsDocument(build_id="test-build", repositories=repositories)
         mock_artifacts = [("/path/to/a.rpm", "/rpm/artifact/1"), ("/path/to/b.rpm", "/rpm/artifact/2")]
         mock_task_response = TaskResponse(pulp_href="/tasks/123/", state="completed", created_resources=["/resource/1"])
         mock_repo_task = TaskResponse(pulp_href="/tasks/123/", state="pending", created_resources=[])
@@ -163,7 +166,8 @@ class TestUploadRpms:
         """Incremental results JSON stores Pulp content href on each uploaded RPM row."""
         from pulp_tool.models.context import UploadRpmContext
         from pulp_tool.models.pulp_api import TaskResponse
-        from pulp_tool.models.results import PulpResultsModel, RepositoryRefs
+        from pulp_tool.models.pulp_results import PulpResultsDocument
+        from pulp_tool.models.repository import RepositoryRefs
 
         context = UploadRpmContext(
             build_id="test-build",
@@ -183,7 +187,7 @@ class TestUploadRpms:
             artifacts_href="",
             artifacts_prn="",
         )
-        results_model = PulpResultsModel(build_id="test-build", repositories=repositories)
+        results_model = PulpResultsDocument(build_id="test-build", repositories=repositories)
         rpm_path = "/path/to/pkg.rpm"
         content_href = "/pulp/api/v3/content/rpm/packages/abc/"
         mock_artifacts = [(rpm_path, content_href)]
@@ -192,7 +196,7 @@ class TestUploadRpms:
 
         def add_side_effect(*args: object, **kwargs: object) -> None:
             results_model_arg = args[0]
-            assert isinstance(results_model_arg, PulpResultsModel)
+            assert isinstance(results_model_arg, PulpResultsDocument)
             local_path = str(kwargs["local_path"])
             results_model_arg.add_artifact(
                 os.path.basename(local_path),
@@ -223,7 +227,8 @@ class TestUploadRpms:
         """Test upload_rpms adds signed_by to labels when context has signed_by (lines 212-214)."""
         from pulp_tool.models.context import UploadRpmContext
         from pulp_tool.models.pulp_api import TaskResponse
-        from pulp_tool.models.results import PulpResultsModel, RepositoryRefs
+        from pulp_tool.models.pulp_results import PulpResultsDocument
+        from pulp_tool.models.repository import RepositoryRefs
 
         context = UploadRpmContext(
             build_id="test-build",
@@ -244,7 +249,7 @@ class TestUploadRpms:
             artifacts_href="",
             artifacts_prn="",
         )
-        results_model = PulpResultsModel(build_id="test-build", repositories=repositories)
+        results_model = PulpResultsDocument(build_id="test-build", repositories=repositories)
         mock_artifacts = [("/path/to/package.rpm", "/rpm/artifact/1")]
         mock_task_response = TaskResponse(pulp_href="/tasks/123/", state="completed", created_resources=["/resource/1"])
         mock_repo_task = TaskResponse(pulp_href="/tasks/123/", state="pending", created_resources=[])
@@ -270,7 +275,8 @@ class TestUploadRpms:
         """Test upload_rpms with overwrite invokes remove_rpms_matching_local_files_from_repository."""
         from pulp_tool.models.context import UploadRpmContext
         from pulp_tool.models.pulp_api import TaskResponse
-        from pulp_tool.models.results import PulpResultsModel, RepositoryRefs
+        from pulp_tool.models.pulp_results import PulpResultsDocument
+        from pulp_tool.models.repository import RepositoryRefs
 
         context = UploadRpmContext(
             build_id="test-build",
@@ -292,7 +298,7 @@ class TestUploadRpms:
             artifacts_href="",
             artifacts_prn="",
         )
-        results_model = PulpResultsModel(build_id="test-build", repositories=repositories)
+        results_model = PulpResultsDocument(build_id="test-build", repositories=repositories)
         mock_artifacts = [("/path/to/package.rpm", "/rpm/artifact/1")]
         mock_task_response = TaskResponse(pulp_href="/tasks/123/", state="completed", created_resources=["/resource/1"])
         mock_repo_task = TaskResponse(pulp_href="/tasks/123/", state="pending", created_resources=[])
@@ -317,7 +323,8 @@ class TestUploadRpms:
         """RPM content hrefs are returned even when add_content task reports no created_resources."""
         from pulp_tool.models.context import UploadRpmContext
         from pulp_tool.models.pulp_api import TaskResponse
-        from pulp_tool.models.results import PulpResultsModel, RepositoryRefs
+        from pulp_tool.models.pulp_results import PulpResultsDocument
+        from pulp_tool.models.repository import RepositoryRefs
 
         context = UploadRpmContext(
             build_id="test-build",
@@ -337,7 +344,7 @@ class TestUploadRpms:
             artifacts_href="",
             artifacts_prn="",
         )
-        results_model = PulpResultsModel(build_id="test-build", repositories=repositories)
+        results_model = PulpResultsDocument(build_id="test-build", repositories=repositories)
         mock_artifacts = [("/path/to/package.rpm", "/rpm/artifact/1")]
         mock_task_response = TaskResponse(pulp_href="/tasks/123/", state="completed", created_resources=[])
         mock_repo_task = TaskResponse(pulp_href="/tasks/123/", state="pending", created_resources=[])
@@ -364,7 +371,8 @@ class TestUploadRpms:
     def test_upload_rpms_empty_artifacts(self, mock_pulp_client) -> None:
         """Test upload_rpms with empty rpm_results_artifacts (not hitting lines 225-227)."""
         from pulp_tool.models.context import UploadRpmContext
-        from pulp_tool.models.results import PulpResultsModel, RepositoryRefs
+        from pulp_tool.models.pulp_results import PulpResultsDocument
+        from pulp_tool.models.repository import RepositoryRefs
 
         context = UploadRpmContext(
             build_id="test-build",
@@ -384,7 +392,7 @@ class TestUploadRpms:
             artifacts_href="",
             artifacts_prn="",
         )
-        results_model = PulpResultsModel(build_id="test-build", repositories=repositories)
+        results_model = PulpResultsDocument(build_id="test-build", repositories=repositories)
         with (
             patch("pulp_tool.utils.uploads.upload_rpms_parallel", return_value=([], [])),
             patch.object(mock_pulp_client, "add_content") as mock_add_content,

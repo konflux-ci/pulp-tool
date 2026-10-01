@@ -743,10 +743,8 @@ class RepositoryManager:
         existing_repo = self._get_existing_repository(methods, new_repository.name, repo_type)
         if existing_repo:
             repository_prn, repository_href = existing_repo
-            is_new_repository = False
         else:
             repository_prn, repository_href = self._create_new_repository(methods, new_repository, repo_type)
-            is_new_repository = True
 
         # Create distribution (always create new distribution for new repositories)
         new_distribution.repository = repository_prn
@@ -760,7 +758,6 @@ class RepositoryManager:
             methods,
             new_distribution,
             repo_type,
-            is_new_repository,
             build_id=build_id,
             distribution_cache_type=distribution_cache_type,
         )
@@ -860,23 +857,11 @@ class RepositoryManager:
         methods: RepositoryApiOps,
         new_distribution: DistributionRequest,
         repo_type: str,
-        is_new_repository: bool = False,
         build_id: str | None = None,
         *,
         distribution_cache_type: str | None = None,
     ) -> str:
-        """Create a distribution for a repository and return the task ID.
-
-        Args:
-            methods: Dictionary of repository methods
-            new_distribution: DistributionRequest model for the distribution to create
-            repo_type: Type of repository ('rpms', 'logs', 'sbom', 'artifacts', 'rpm', 'file')
-            is_new_repository: Retained for call-site compatibility; existence is always checked
-            build_id: Base name for the repository (may include namespace prefix)
-
-        Returns:
-            Task ID if distribution was created, empty string if it already exists
-        """
+        """Create a distribution for a repository and return the task ID."""
         # Always check for an existing distribution (covers re-runs and 504 retries where
         # the first POST succeeded server-side but the client retried).
         if self._check_existing_distribution(methods, new_distribution.name, repo_type):

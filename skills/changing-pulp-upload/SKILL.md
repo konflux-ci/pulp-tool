@@ -29,7 +29,7 @@ Before merge, verify (extend tests where applicable):
 
 - [ ] `upload` / `upload-files` behavior, defaults, required options
 - [ ] Global: `--config`, `--build-id`, `--namespace`
-- [ ] `--rpm-path`, `--parent-package`, `--sbom-path`, `--artifact-results`
+- [ ] `--rpm-path`, `--parent-package`, `--sbom-path`, `--artifact-results`, **`--oci-storage`** (Konflux `ociStorage`; no `cli.oci_storage` in config)
 - [ ] Config/TLS/paths assumed in containers; image entrypoint and invocation (image *build*: **changing-pulp-container**)
 - [ ] RPM discovery under `--rpm-path`
 - [ ] Both pipelines still match (config path, flags, workspace `/var/workdir/results`, `oras-staging/` where used)
@@ -54,7 +54,7 @@ Before merge, verify (extend tests where applicable):
 | | import-to-quay | push-artifacts-to-storage |
 |--|----------------|---------------------------|
 | Config | `/pulp-access/cli.toml` | `/etc/rok-access/cli.toml` |
-| Upload flags | `--parent-package`, `--sbom-path`, `--artifact-results` | `--rpm-path` only |
+| Upload flags | `--parent-package`, `--sbom-path`, `--artifact-results`, **`--oci-storage`** | `--rpm-path` only |
 | Missing config | Skip upload; empty Tekton results | Exit 0 without `pulp-tool` |
 
 Full command examples and secrets behavior: [CLAUDE.md](../../docs/CLAUDE.md).

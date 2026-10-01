@@ -5,33 +5,28 @@ This module provides the pull command for downloading artifacts and optionally r
 """
 
 import logging
-import os
 import sys
-import tempfile
-from pathlib import Path
 
 import click
 import httpx
 
 from ..api import DistributionClient
-from ..models.context import PullContext
-from ..pull import (
-    download_artifacts_concurrently,
-    generate_pull_report,
-    load_and_validate_artifacts,
-    setup_repositories_if_needed,
-    upload_downloaded_files_to_pulp,
+from ..cli.runner_helpers import (
+    DistributionAuthSettings,
+    PullRunnerError,
+    load_distribution_auth_from_config,
+    oci_pull_tempdir,
+    resolve_artifact_location_for_pull,
+    resolve_pulp_api_base_url_for_remote,
+    validate_remote_pull_auth,
 )
-from ..pull.publish import publish_side_tag_results
-from ..pull.side_tag import upload_rpms_to_side_tag_repository
+from ..models.context import PullContext
+from ..services.pull_service import PullService
 from ..utils import setup_logging
 from ..utils.config_manager import ConfigManager
 from ..utils.error_handling import handle_generic_error, handle_http_error
 from ..utils.oci_pull import is_oci_artifact_reference
 from ..utils.oci_storage_resolve import resolve_oci_storage
-from ..utils.oras_publish import OrasPublishError
-from ..utils.results_json_io import ResultsJsonIOError, resolve_results_json_path
-from ..utils.validation.build_id import sanitize_build_id_for_repository, strip_namespace_from_build_id
 
 
 @click.command()
@@ -84,12 +79,12 @@ from ..utils.validation.build_id import sanitize_build_id_for_repository, strip_
     "--side-tag",
     help=(
         "Side-tag name for an extra ROK RPM repository/distribution during transfer. "
-        "Requires --transfer-dest and --oci-storage or cli.oci_storage."
+        "Requires --transfer-dest and --oci-storage."
     ),
 )
 @click.option(
     "--oci-storage",
-    help="OCI registry for ORAS publish (Konflux ociStorage); overrides cli.oci_storage in --transfer-dest.",
+    help="OCI registry for ORAS publish (Konflux ociStorage).",
 )
 @click.option(
     "--artifact-results",
@@ -122,7 +117,6 @@ def pull(  # pylint: disable=too-many-positional-arguments
     oci_storage: str | None,
 ) -> None:
     """Download artifacts and optionally re-upload to Pulp repositories."""
-    # Get shared options from context
     config = ctx.obj["config"]
     namespace = ctx.obj["namespace"]
     build_id = ctx.obj["build_id"]
@@ -135,7 +129,7 @@ def pull(  # pylint: disable=too-many-positional-arguments
     if side_tag_value and not (transfer_dest and transfer_dest.strip()):
         click.echo("Error: --side-tag requires --transfer-dest", err=True)
         sys.exit(1)
-    # Destination Pulp API config (--transfer-dest); source metadata/auth uses group-level --config.
+
     source_config_path = (config or "").strip() or None
     dest_config_path = (transfer_dest or "").strip() or None
     pulp_client_config_path = dest_config_path or source_config_path
@@ -153,252 +147,114 @@ def pull(  # pylint: disable=too-many-positional-arguments
             logging.debug("Could not load transfer-dest config for side-tag: %s", e)
         if not resolved_oci_storage:
             click.echo(
-                "Error: --oci-storage or cli.oci_storage in --transfer-dest config is required when using --side-tag",
+                "Error: --oci-storage in --transfer-dest is required when using --side-tag",
                 err=True,
             )
             sys.exit(1)
 
-    # Validate mutually exclusive options
-    if artifact_location and (namespace or build_id):
-        click.echo("Error: Cannot use --artifact-location with --build-id and --namespace", err=True)
-        sys.exit(1)
-
-    # Generate artifact_location from build_id + namespace if needed
-    if namespace or build_id:
-        # Both must be provided together
-        if not (namespace and build_id):
-            click.echo("Error: Both --build-id and --namespace must be provided together", err=True)
-            sys.exit(1)
-
-        metadata_config_path = source_config_path or dest_config_path
-        if not metadata_config_path:
-            click.echo("Error: --config is required when using --build-id and --namespace", err=True)
-            sys.exit(1)
-
-        # Load source config for content base_url (see cli-reference: --config supplies base_url for auto URL)
-        config_manager = ConfigManager(metadata_config_path)
-        config_manager.load()
-        base_url = config_manager.get("cli.base_url")
-
-        # Construct artifact_location URL
-        content_build_id = sanitize_build_id_for_repository(strip_namespace_from_build_id(build_id))
-        artifact_location = f"{base_url}/api/pulp-content/{namespace}/{content_build_id}/artifacts/pulp_results.json"
-        logging.info("Auto-generated artifact location: %s", artifact_location)
-
-    elif not artifact_location:
-        click.echo("Error: Either --artifact-location OR (--build-id AND --namespace) must be provided", err=True)
-        sys.exit(1)
-
-    oci_pull_temp: tempfile.TemporaryDirectory[str] | None = None
-    if artifact_location and is_oci_artifact_reference(artifact_location):
-        try:
-            oci_pull_temp = tempfile.TemporaryDirectory(prefix="pulp-tool-oras-pull-")
-            local_json = resolve_results_json_path(artifact_location, Path(oci_pull_temp.name))
-            logging.info("ORAS-pulled pulp_results.json to %s", local_json)
-            artifact_location = str(local_json)
-        except (OrasPublishError, ResultsJsonIOError) as e:
-            click.echo(f"Error: {e}", err=True)
-            sys.exit(1)
-
-    # Parse comma-separated filters
     content_types_list = [ct.strip() for ct in content_types.split(",")] if content_types else None
     archs_list = [arch.strip() for arch in archs.split(",")] if archs else None
 
-    # Auth for fetching source pulp_results (distribution); destination creds live in --transfer-dest.
-    username: str | None = None
-    password: str | None = None
-    pulp_api_base_url: str | None = None
     auth_config_path = distribution_config or source_config_path or dest_config_path
-    if auth_config_path:
-        try:
-            config_manager = ConfigManager(auth_config_path)
-            config_manager.load()
-            if not cert_path:
-                loaded_cert = config_manager.get("cli.cert")
-                if loaded_cert and isinstance(loaded_cert, str) and loaded_cert.strip():
-                    loaded_cert = loaded_cert.strip()
-                    expanded_cert = os.path.expanduser(loaded_cert)
-                    if os.path.exists(expanded_cert):
-                        cert_path = expanded_cert
-            if not key_path:
-                loaded_key = config_manager.get("cli.key")
-                if loaded_key and isinstance(loaded_key, str) and loaded_key.strip():
-                    loaded_key = loaded_key.strip()
-                    expanded_key = os.path.expanduser(loaded_key)
-                    if os.path.exists(expanded_key):
-                        key_path = expanded_key
-            if username is None:
-                username = config_manager.get("cli.username")
-                username = str(username).strip() if username else None
-            if password is None:
-                password = config_manager.get("cli.password")
-                password = str(password) if password is not None else None
-            if pulp_api_base_url is None:
-                loaded_base = config_manager.get("cli.base_url")
-                if loaded_base and isinstance(loaded_base, str) and loaded_base.strip():
-                    pulp_api_base_url = loaded_base.strip()
-        except Exception as e:
-            logging.debug("Could not load auth from config: %s", e)
-
-    is_remote = artifact_location.startswith(("http://", "https://")) if artifact_location else False
-    if is_remote and not pulp_api_base_url:
-        for base_config_path in (dest_config_path, source_config_path, distribution_config):
-            if not base_config_path:
-                continue
-            try:
-                base_manager = ConfigManager(base_config_path)
-                base_manager.load()
-                loaded_base = base_manager.get("cli.base_url")
-                if loaded_base and isinstance(loaded_base, str) and loaded_base.strip():
-                    pulp_api_base_url = loaded_base.strip()
-                    break
-            except Exception as e:
-                logging.debug("Could not load cli.base_url from %s: %s", base_config_path, e)
-
-    # Validate: for remote URLs, need (cert+key) OR (username+password)
-    has_cert = cert_path and key_path
-    has_basic = username is not None and password is not None
-    if is_remote and not has_cert and not has_basic:
-        logging.error(
-            "Authentication required for remote URLs. Provide either (cert, key) or (username, password) "
-            "via --distribution-config, --transfer-dest, --config, --cert-path, or --key-path."
-        )
-        sys.exit(1)
-    if is_remote and not pulp_api_base_url:
-        logging.error(
-            "cli.base_url in config is required for remote --artifact-location (fetch allowlist uses Pulp API host)."
-        )
-        sys.exit(1)
-
-    # Create context object
-    args = PullContext(
-        artifact_location=artifact_location,
-        namespace=namespace,
+    auth = load_distribution_auth_from_config(
+        auth_config_path=auth_config_path,
+        cert_path=cert_path,
         key_path=key_path,
-        config=pulp_client_config_path,
-        transfer_dest=transfer_dest,
-        build_id=build_id,
-        side_tag=side_tag_value,
-        artifact_results=artifact_results,
-        oci_storage=resolved_oci_storage,
-        snapshot_path=(snapshot_path or "").strip() or None,
-        cluster=cluster,
-        debug=debug,
-        max_workers=max_workers,
-        content_types=content_types_list,
-        archs=archs_list,
     )
 
+    distribution_client: DistributionClient | None = None
+    run_result = None
     try:
-        # Initialize distribution client only if needed
-        distribution_client = None
-        if has_cert or has_basic:
-            logging.info("Initializing distribution client...")
-            if has_cert:
-                distribution_client = DistributionClient(
-                    cert=cert_path,
-                    key=key_path,
-                    pulp_api_base_url=pulp_api_base_url,
+        with oci_pull_tempdir() as oci_dir:
+            try:
+                resolved_location = resolve_artifact_location_for_pull(
+                    artifact_location=artifact_location,
+                    namespace=namespace,
+                    build_id=build_id,
+                    source_config_path=source_config_path,
+                    dest_config_path=dest_config_path,
+                    oci_dest_dir=(
+                        oci_dir if artifact_location and is_oci_artifact_reference(artifact_location) else None
+                    ),
                 )
-            else:
-                distribution_client = DistributionClient(
-                    username=username,
-                    password=password,
-                    pulp_api_base_url=pulp_api_base_url,
-                )
+            except PullRunnerError as e:
+                click.echo(f"Error: {e.message}", err=True)
+                sys.exit(1)
 
-        # Load artifact metadata and validate
-        artifact_data = load_and_validate_artifacts(args, distribution_client)
-
-        # Set up repositories if configuration is provided
-        destination_setup = setup_repositories_if_needed(args, artifact_data.artifact_json)
-        pulp_client = destination_setup.client if destination_setup else None
-
-        # Process artifacts by type
-        distros = artifact_data.get_distributions()
-
-        # Download artifacts concurrently
-        download_result = download_artifacts_concurrently(
-            artifact_data.artifacts,
-            distros,
-            distribution_client,
-            max_workers,
-            args.content_types,
-            args.archs,
-        )
-
-        # Upload downloaded files to Pulp repositories if client is available
-        upload_info = None
-        if pulp_client:
-            logging.info("Uploading downloaded files to Pulp repositories...")
-            upload_info = upload_downloaded_files_to_pulp(
-                pulp_client,
-                download_result.pulled_artifacts,
-                args,
-                repositories=destination_setup.repositories if destination_setup else None,
+            auth = resolve_pulp_api_base_url_for_remote(
+                artifact_location=resolved_location,
+                auth=auth,
+                fallback_config_paths=(dest_config_path, source_config_path, distribution_config),
             )
-            if args.side_tag and upload_info:
-                side_tag_upload = upload_rpms_to_side_tag_repository(
-                    pulp_client,
-                    download_result.pulled_artifacts,
-                    artifact_data,
-                    args,
+            try:
+                validate_remote_pull_auth(resolved_location, auth)
+            except PullRunnerError as e:
+                logging.error("%s", e.message)
+                sys.exit(1)
+
+            pull_context = PullContext(
+                artifact_location=resolved_location,
+                namespace=namespace,
+                key_path=auth.key_path,
+                config=pulp_client_config_path,
+                transfer_dest=transfer_dest,
+                build_id=build_id,
+                side_tag=side_tag_value,
+                artifact_results=artifact_results,
+                oci_storage=resolved_oci_storage,
+                snapshot_path=(snapshot_path or "").strip() or None,
+                cluster=cluster,
+                debug=debug,
+                max_workers=max_workers,
+                content_types=content_types_list,
+                archs=archs_list,
+            )
+
+            distribution_client = _build_distribution_client(auth)
+            try:
+                run_result = PullService().run(
+                    pull_context,
+                    distribution_client=distribution_client,
+                    max_workers=max_workers,
                 )
-                publish_side_tag_results(
-                    pulp_client,
-                    artifact_data,
-                    args,
-                    upload_info,
-                    side_tag_upload.transfers,
-                    side_tag_distribution_base=side_tag_upload.distribution_base_url,
-                )
-        else:
-            logging.info("No Pulp client available, skipping upload to repositories")
-
-        # Generate and display pull report
-        generate_pull_report(
-            download_result.pulled_artifacts, download_result.completed, download_result.failed, args, upload_info
-        )
-
-        # Check for any errors and exit with error code if found
-        has_errors = False
-        error_messages = []
-
-        # Check for download failures
-        if download_result.failed > 0:
-            has_errors = True
-            error_messages.append(f"{download_result.failed} artifact download(s) failed")
-
-        # Check for upload errors
-        if upload_info and upload_info.has_errors:
-            has_errors = True
-            error_count = len(upload_info.upload_errors)
-            error_messages.append(f"{error_count} upload error(s) occurred")
-
-        if has_errors:
-            logging.error("Pull completed with errors:")
-            for msg in error_messages:
-                logging.error("  - %s", msg)
-            sys.exit(1)
-
-        logging.info("All operations completed successfully")
-
-    except httpx.HTTPError as e:
-        handle_http_error(e, "pull operation")
-        sys.exit(1)
-    except Exception as e:
-        handle_generic_error(e, "pull operation")
-        sys.exit(1)
+            except httpx.HTTPError as e:
+                handle_http_error(e, "pull operation")
+                sys.exit(1)
+            except Exception as e:
+                handle_generic_error(e, "pull operation")
+                sys.exit(1)
     finally:
-        if oci_pull_temp is not None:
-            oci_pull_temp.cleanup()
-        # Ensure pulp client session is properly closed if it was created
-        if "pulp_client" in locals() and pulp_client:
-            pulp_client.close()
+        if run_result and run_result.pulp_client:
+            run_result.pulp_client.close()
             logging.debug("PulpClient session closed")
         if distribution_client and hasattr(distribution_client, "session"):
             distribution_client.session.close()
             logging.debug("Distribution client session closed")
+
+    if run_result and not run_result.success:
+        logging.error("Pull completed with errors:")
+        for msg in run_result.error_messages:
+            logging.error("  - %s", msg)
+        sys.exit(1)
+
+    logging.info("All operations completed successfully")
+
+
+def _build_distribution_client(auth: DistributionAuthSettings) -> DistributionClient | None:
+    if not auth.has_any_auth:
+        return None
+    logging.info("Initializing distribution client...")
+    if auth.has_cert_auth:
+        return DistributionClient(
+            cert=auth.cert_path,
+            key=auth.key_path,
+            pulp_api_base_url=auth.pulp_api_base_url,
+        )
+    return DistributionClient(
+        username=auth.username,
+        password=auth.password,
+        pulp_api_base_url=auth.pulp_api_base_url,
+    )
 
 
 __all__ = ["pull"]

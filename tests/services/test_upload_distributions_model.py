@@ -3,8 +3,9 @@
 import logging
 from unittest.mock import Mock, patch
 
-from pulp_tool.models import PulpResultsModel, RepositoryRefs
+from pulp_tool.models import RepositoryRefs
 from pulp_tool.models.context import UploadContext, UploadRpmContext
+from pulp_tool.models.pulp_results import PulpResultsDocument
 from pulp_tool.services.upload_service import _add_distributions_to_results, _populate_results_model
 
 
@@ -23,7 +24,7 @@ class TestBuildResultsStructure:
             artifacts_href="/artifacts/",
             artifacts_prn="artifacts-prn",
         )
-        results_model = PulpResultsModel(build_id="test-build", repositories=repositories)
+        results_model = PulpResultsDocument(build_id="test-build", repositories=repositories)
         from pulp_tool.models.artifacts import FileInfoModel, PulpContentRow
 
         content_results = [
@@ -67,7 +68,7 @@ class TestBuildResultsStructure:
             artifacts_href="/artifacts/",
             artifacts_prn="artifacts-prn",
         )
-        results_model = PulpResultsModel(build_id="test-build", repositories=repositories)
+        results_model = PulpResultsDocument(build_id="test-build", repositories=repositories)
         content_results: list = []
         file_info_map: dict[str, FileInfoModel] = {}
         context = UploadRpmContext(
@@ -99,7 +100,7 @@ class TestBuildResultsStructure:
             artifacts_href="/artifacts/",
             artifacts_prn="artifacts-prn",
         )
-        results_model = PulpResultsModel(build_id="test-build", repositories=repositories)
+        results_model = PulpResultsDocument(build_id="test-build", repositories=repositories)
         results_model.add_artifact(
             "pkg.rpm",
             "https://example.com/pkg.rpm",
@@ -140,7 +141,7 @@ class TestBuildResultsStructure:
             artifacts_href="",
             artifacts_prn="",
         )
-        results_model = PulpResultsModel(build_id="my-build", repositories=repositories)
+        results_model = PulpResultsDocument(build_id="my-build", repositories=repositories)
         context = UploadRpmContext(
             build_id="my-build",
             date_str="2024-01-01",
@@ -166,7 +167,7 @@ class TestBuildResultsStructure:
             artifacts_href="/artifacts/",
             artifacts_prn="artifacts-prn",
         )
-        results_model = PulpResultsModel(build_id="test-build", repositories=repositories)
+        results_model = PulpResultsDocument(build_id="test-build", repositories=repositories)
         context = UploadRpmContext(
             build_id="test-build",
             date_str="2024-01-01",

@@ -369,10 +369,10 @@ def mock_artifacts_json() -> None:
     return {
         "artifacts": {
             "test-package-1.0.0-1.x86_64.rpm": {
-                "labels": {"build_id": "test-build-123", "arch": "x86_64", "namespace": "test-namespace"}
+                "pulp_labels": {"build_id": "test-build-123", "arch": "x86_64", "namespace": "test-namespace"}
             },
             "test-sbom.json": {
-                "labels": {"build_id": "test-build-123", "arch": "noarch", "namespace": "test-namespace"}
+                "pulp_labels": {"build_id": "test-build-123", "arch": "noarch", "namespace": "test-namespace"}
             },
         },
         "distributions": {
@@ -462,7 +462,7 @@ def mock_results_structure() -> None:
     return {
         "artifacts": {
             "test-package-1.0.0-1.x86_64.rpm": {
-                "labels": {"build_id": "test-build-123", "arch": "x86_64", "namespace": "test-namespace"},
+                "pulp_labels": {"build_id": "test-build-123", "arch": "x86_64", "namespace": "test-namespace"},
                 "url": "https://pulp.example.com/pulp/content/test-build/rpms/test-package.rpm",
                 "sha256": "abcd1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
             }

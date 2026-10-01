@@ -5,12 +5,15 @@ This module provides a service layer that orchestrates pull operations,
 abstracting the complexity of downloading and optionally re-uploading artifacts.
 """
 
+from __future__ import annotations
+
 import logging
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Optional
 
-from ..models.artifacts import ArtifactData, ArtifactJsonResponse, PulledArtifacts
+from ..models.artifacts import ArtifactData, PulledArtifacts
 from ..models.context import PullContext
-from ..models.results import PulpResultsModel
+from ..models.pulp_results import PulpResultsDocument
 
 if TYPE_CHECKING:
     from ..api import DistributionClient, PulpClient
@@ -24,6 +27,38 @@ from ..pull import (
     setup_repositories_if_needed,
     upload_downloaded_files_to_pulp,
 )
+from ..pull.publish import publish_side_tag_results
+from ..pull.side_tag import upload_rpms_to_side_tag_repository
+
+
+@dataclass(frozen=True, slots=True)
+class PullRunResult:
+    """Outcome of a full pull run (download, optional transfer upload, side-tag)."""
+
+    pulled_artifacts: PulledArtifacts
+    completed: int
+    failed: int
+    upload_info: PulpResultsDocument | None
+    error_messages: list[str] = field(default_factory=list)
+    pulp_client: Any | None = None
+    distribution_client: Any | None = None
+
+    @property
+    def success(self) -> bool:
+        return not self.error_messages
+
+
+def validate_pull_side_tag_context(context: PullContext) -> str | None:
+    """Return an error message when side-tag options are inconsistent."""
+    side_tag = (context.side_tag or "").strip()
+    if not side_tag:
+        return None
+    transfer_dest = (context.transfer_dest or "").strip()
+    if not transfer_dest:
+        return "--side-tag requires --transfer-dest"
+    if not (context.oci_storage or "").strip():
+        return "--oci-storage in --transfer-dest is required when using --side-tag"
+    return None
 
 
 class PullService:
@@ -98,7 +133,7 @@ class PullService:
         context: PullContext,
         *,
         repositories: "RepositoryRefs | None" = None,
-    ) -> PulpResultsModel | None:
+    ) -> PulpResultsDocument | None:
         """
         Upload downloaded artifacts to Pulp repositories.
 
@@ -108,7 +143,7 @@ class PullService:
             context: Pull context with configuration
 
         Returns:
-            PulpResultsModel containing upload information, or None if upload skipped
+            PulpResultsDocument containing upload information, or None if upload skipped
         """
         logging.info("Uploading downloaded artifacts to Pulp repositories")
         upload_info = upload_downloaded_files_to_pulp(pulp_client, pulled_artifacts, context, repositories=repositories)
@@ -118,7 +153,7 @@ class PullService:
     def setup_destination_repositories(
         self,
         context: PullContext,
-        artifact_json: dict[str, Any] | ArtifactJsonResponse | None = None,
+        artifact_json: dict[str, Any] | PulpResultsDocument | None = None,
     ) -> PullDestinationSetup | None:
         """
         Set up destination repositories if configuration is provided.
@@ -151,7 +186,7 @@ class PullService:
         completed: int,
         failed: int,
         context: PullContext,
-        upload_info: PulpResultsModel | None = None,
+        upload_info: PulpResultsDocument | None = None,
     ) -> None:
         """
         Generate and display pull report.
@@ -165,5 +200,88 @@ class PullService:
         """
         generate_pull_report(pulled_artifacts, completed, failed, context, upload_info)
 
+    def run(
+        self,
+        context: PullContext,
+        *,
+        distribution_client: Optional["DistributionClient"],
+        max_workers: int,
+    ) -> PullRunResult:
+        """Execute load → setup → download → optional upload/side-tag → report."""
+        side_tag_error = validate_pull_side_tag_context(context)
+        if side_tag_error:
+            return PullRunResult(
+                pulled_artifacts=PulledArtifacts(),
+                completed=0,
+                failed=0,
+                upload_info=None,
+                error_messages=[side_tag_error],
+            )
 
-__all__ = ["PullService"]
+        artifact_data = load_and_validate_artifacts(context, distribution_client)
+        destination_setup = setup_repositories_if_needed(context, artifact_data.artifact_json)
+        pulp_client = destination_setup.client if destination_setup else None
+
+        download_result = download_artifacts_concurrently(
+            artifact_data.artifacts,
+            artifact_data.get_distributions(),
+            distribution_client,
+            max_workers,
+            context.content_types,
+            context.archs,
+        )
+
+        upload_info: PulpResultsDocument | None = None
+        if pulp_client:
+            logging.info("Uploading downloaded files to Pulp repositories...")
+            upload_info = upload_downloaded_files_to_pulp(
+                pulp_client,
+                download_result.pulled_artifacts,
+                context,
+                repositories=destination_setup.repositories if destination_setup else None,
+            )
+            if context.side_tag and upload_info:
+                side_tag_upload = upload_rpms_to_side_tag_repository(
+                    pulp_client,
+                    download_result.pulled_artifacts,
+                    artifact_data,
+                    context,
+                )
+                publish_side_tag_results(
+                    pulp_client,
+                    artifact_data,
+                    context,
+                    upload_info,
+                    side_tag_upload.transfers,
+                    side_tag_distribution_base=side_tag_upload.distribution_base_url,
+                )
+        else:
+            logging.info("No Pulp client available, skipping upload to repositories")
+
+        generate_pull_report(
+            download_result.pulled_artifacts,
+            download_result.completed,
+            download_result.failed,
+            context,
+            upload_info,
+        )
+
+        error_messages: list[str] = []
+        if download_result.failed > 0:
+            error_messages.append(f"{download_result.failed} artifact download(s) failed")
+        if upload_info and upload_info.has_errors:
+            error_count = len(upload_info.upload_errors)
+            error_messages.append(f"{error_count} upload error(s) occurred")
+
+        return PullRunResult(
+            pulled_artifacts=download_result.pulled_artifacts,
+            completed=download_result.completed,
+            failed=download_result.failed,
+            upload_info=upload_info,
+            error_messages=error_messages,
+            pulp_client=pulp_client,
+            distribution_client=distribution_client,
+        )
+
+
+__all__ = ["PullRunResult", "PullService", "validate_pull_side_tag_context"]

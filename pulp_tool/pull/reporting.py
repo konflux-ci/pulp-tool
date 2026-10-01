@@ -75,7 +75,7 @@ def _extract_artifact_info(
         Tuple of (file_path, labels)
     """
     if isinstance(artifact_data, dict):
-        return artifact_data["file"], artifact_data.get("labels", {})
+        return artifact_data["file"], artifact_data.get("pulp_labels", {})
 
     if hasattr(artifact_data, "file"):
         labels = getattr(artifact_data, "labels", {})

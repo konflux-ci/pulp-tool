@@ -20,7 +20,7 @@ class TestHandleSbomResults:
         results_json = {
             "artifacts": {
                 "test-sbom.spdx.json": {
-                    "labels": {"build_id": "test-build", "namespace": "test-ns"},
+                    "pulp_labels": {"build_id": "test-build", "namespace": "test-ns"},
                     "url": (
                         "https://pulp.example.com/pulp/content/test-build/sbom/"
                         "test-sbom.spdx.json@sha256:abc123def456789"
@@ -28,7 +28,7 @@ class TestHandleSbomResults:
                     "sha256": "abc123def456789",
                 },
                 "test-package.rpm": {
-                    "labels": {"build_id": "test-build", "arch": "x86_64"},
+                    "pulp_labels": {"build_id": "test-build", "arch": "x86_64"},
                     "url": "https://pulp.example.com/pulp/content/test-build/rpms/test-package.rpm",
                     "sha256": "rpm123456",
                 },
@@ -57,7 +57,7 @@ class TestHandleSbomResults:
         results_json = {
             "artifacts": {
                 "test-package.rpm": {
-                    "labels": {"build_id": "test-build", "arch": "x86_64"},
+                    "pulp_labels": {"build_id": "test-build", "arch": "x86_64"},
                     "url": "https://pulp.example.com/pulp/content/test-build/rpms/test-package.rpm",
                     "sha256": "rpm123456",
                 }
@@ -85,7 +85,7 @@ class TestHandleSbomResults:
         results_json = {
             "artifacts": {
                 "cyclonedx.json": {
-                    "labels": {"build_id": "test-build", "namespace": "test-ns"},
+                    "pulp_labels": {"build_id": "test-build", "namespace": "test-ns"},
                     "url": "https://pulp.example.com/pulp/content/test-build/sbom/cyclonedx.json@sha256:def789abc123",
                     "sha256": "def789abc123",
                 }

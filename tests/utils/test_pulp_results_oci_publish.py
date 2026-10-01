@@ -310,7 +310,7 @@ class TestSyncPulpResultsWithOciRegistry:
             )
         assert captured[0]["document_schema_version"] == "x"
         assert captured[0]["document_last_updated"]
-        assert captured[0]["document_version"] == "x"
+        assert captured[0]["document_schema_version"] == "x"
 
     def test_sync_wraps_oras_publish_error(self) -> None:
         with (

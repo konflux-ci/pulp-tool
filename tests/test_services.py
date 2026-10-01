@@ -2,14 +2,30 @@
 
 from unittest.mock import Mock, patch
 
-from pulp_tool.models.artifacts import ArtifactData, ArtifactJsonResponse
+from pulp_tool.models.artifacts import ArtifactData
 from pulp_tool.models.context import PullContext, UploadRpmContext
-from pulp_tool.services.pull_service import PullService
+from pulp_tool.models.pulp_results import PulpResultsDocument
+from pulp_tool.services.pull_service import PullService, validate_pull_side_tag_context
 from pulp_tool.services.upload_service import UploadService
 
 
 class TestPullService:
     """Test PullService class."""
+
+    def test_validate_pull_side_tag_requires_transfer_dest(self) -> None:
+        context = PullContext(artifact_location="/x.json", side_tag="tag1", transfer_dest=None)
+        assert validate_pull_side_tag_context(context) == "--side-tag requires --transfer-dest"
+
+    def test_validate_pull_side_tag_requires_oci_storage(self) -> None:
+        context = PullContext(
+            artifact_location="/x.json",
+            side_tag="tag1",
+            transfer_dest="/dest.toml",
+            oci_storage=None,
+        )
+        msg = validate_pull_side_tag_context(context)
+        assert msg is not None
+        assert "oci-storage" in msg
 
     def test_pull_service_init(self) -> None:
         """Test PullService initialization."""
@@ -23,7 +39,7 @@ class TestPullService:
         service = PullService()
         context = PullContext(artifact_location="/test/path.json")
         mock_artifact_data = ArtifactData(
-            artifact_json=ArtifactJsonResponse(artifacts={}, distributions={}), artifacts={}
+            artifact_json=PulpResultsDocument(artifacts={}, distributions={}), artifacts={}
         )
         mock_load.return_value = mock_artifact_data
         result = service.load_artifacts(context, None)
@@ -38,7 +54,7 @@ class TestPullService:
         service = PullService()
         context = PullContext(artifact_location="/test/path.json")
         mock_artifact_data = ArtifactData(
-            artifact_json=ArtifactJsonResponse(artifacts={}, distributions={}), artifacts={}
+            artifact_json=PulpResultsDocument(artifacts={}, distributions={}), artifacts={}
         )
         mock_result = Mock()
         mock_result.pulled_artifacts = Mock()
@@ -59,11 +75,11 @@ class TestPullService:
         context = PullContext(artifact_location="/test/path.json")
         mock_client = Mock()
         mock_pulled_artifacts = Mock()
+        from pulp_tool.models.pulp_results import PulpResultsDocument
         from pulp_tool.models.repository import RepositoryRefs
-        from pulp_tool.models.results import PulpResultsModel
         from pulp_tool.models.statistics import UploadCounts
 
-        mock_upload_info = PulpResultsModel(
+        mock_upload_info = PulpResultsDocument(
             build_id="test-build",
             repositories=RepositoryRefs(
                 rpms_href="",
@@ -128,6 +144,57 @@ class TestPullService:
         mock_pulled_artifacts = Mock()
         service.generate_report(mock_pulled_artifacts, 5, 0, context, None)
         mock_report.assert_called_once_with(mock_pulled_artifacts, 5, 0, context, None)
+
+    @patch("pulp_tool.services.pull_service.publish_side_tag_results")
+    @patch("pulp_tool.services.pull_service.upload_rpms_to_side_tag_repository")
+    @patch("pulp_tool.services.pull_service.upload_downloaded_files_to_pulp")
+    @patch("pulp_tool.services.pull_service.download_artifacts_concurrently")
+    @patch("pulp_tool.services.pull_service.setup_repositories_if_needed")
+    @patch("pulp_tool.services.pull_service.load_and_validate_artifacts")
+    @patch("pulp_tool.services.pull_service.generate_pull_report")
+    def test_run_side_tag_publish(
+        self,
+        _mock_report,
+        mock_load,
+        mock_setup,
+        mock_download,
+        mock_upload,
+        mock_side_upload,
+        mock_publish,
+    ) -> None:
+        from pulp_tool.models.artifacts import ArtifactData
+        from pulp_tool.models.pulp_results import PulpResultsDocument
+        from pulp_tool.pull.side_tag import SideTagUploadResult
+
+        mock_load.return_value = ArtifactData(
+            artifact_json=PulpResultsDocument(artifacts={}),
+            artifacts={},
+        )
+        mock_client = Mock()
+        mock_setup.return_value = Mock(client=mock_client, repositories=Mock())
+        mock_download.return_value = Mock(pulled_artifacts=Mock(), completed=1, failed=0)
+        mock_upload.return_value = PulpResultsDocument(build_id="b1")
+        mock_side_upload.return_value = SideTagUploadResult([], "https://side/")
+        context = PullContext(
+            artifact_location="/tmp/pulp_results.json",
+            config="/cfg.toml",
+            transfer_dest="/dest.toml",
+            side_tag="tag1",
+            oci_storage="quay.io/ns/repo:tag",
+        )
+        result = PullService().run(context, distribution_client=None, max_workers=2)
+        assert result.success
+        mock_publish.assert_called_once()
+
+    def test_run_returns_error_when_side_tag_invalid(self) -> None:
+        context = PullContext(
+            artifact_location="/tmp/pulp_results.json",
+            side_tag="tag1",
+            transfer_dest=None,
+        )
+        result = PullService().run(context, distribution_client=None, max_workers=1)
+        assert not result.success
+        assert result.error_messages[0] == "--side-tag requires --transfer-dest"
 
 
 class TestUploadService:

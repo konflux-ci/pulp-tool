@@ -16,4 +16,5 @@ rules:
 
 ignore: |
   .venv/
+  .audit-venv/
   htmlcov/

@@ -1,7 +1,7 @@
 # Pre-commit hooks configuration for pulp-tool
 # Mirrors GitHub Actions: python-diff-lint.yml, security-scan.yml (pip-audit)
 #
-# Commit stage: lint + pip-audit (same commands/paths as CI).
+# Commit stage: lint + pip-audit (pip-audit only when uv.lock/pyproject.toml change).
 # Push stage: test-diff-coverage + checkton (PR-only jobs in CI).
 #
 # Install hooks:
@@ -54,10 +54,9 @@ repos:
 
       - id: pylint
         name: pylint (errors only)
-        entry: pylint --rcfile=config/pylintrc pulp_tool tests --errors-only
-        language: system
-        pass_filenames: false
-        always_run: true
+        entry: scripts/run-pylint-precommit.sh
+        language: script
+        files: ^(pulp_tool|tests)/.*\.py$
 
       - id: mypy
         name: mypy
@@ -71,10 +70,10 @@ repos:
     hooks:
       - id: pip-audit
         name: pip-audit (dev deps)
-        entry: make audit
-        language: system
+        entry: scripts/run-pip-audit-precommit.sh
+        language: script
+        files: ^(uv\.lock|pyproject\.toml)$
         pass_filenames: false
-        always_run: true
 
   # repo-lint job (yamllint --strict .)
   - repo: local

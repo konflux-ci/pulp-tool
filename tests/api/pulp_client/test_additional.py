@@ -6,6 +6,7 @@ import httpx
 import pytest
 
 from pulp_tool.api import PulpClient
+from pulp_tool.models.pulp_results import PulpResultsDocument
 
 
 class TestPulpClientAdditional:
@@ -57,7 +58,7 @@ class TestPulpClientAdditional:
 
     def test_add_uploaded_artifact_to_results_model_rpm_key_is_basename(self, mock_pulp_client, tmp_path) -> None:
         """RPM incremental path uses basename as artifact key (is_rpm branch)."""
-        from pulp_tool.models import PulpResultsModel, RepositoryRefs
+        from pulp_tool.models import RepositoryRefs
 
         rpm_path = tmp_path / "my-pkg-1.0-1.x86_64.rpm"
         rpm_path.write_bytes(b"rpm-bytes")
@@ -71,7 +72,7 @@ class TestPulpClientAdditional:
             artifacts_href="/artifacts/",
             artifacts_prn="artifacts-prn",
         )
-        results_model = PulpResultsModel(build_id="test-build", repositories=repositories)
+        results_model = PulpResultsDocument(build_id="test-build", repositories=repositories)
         labels = {"build_id": "test-build", "arch": "x86_64"}
         urls = {"rpms": "https://pulp.example.com/content/test/rpms/"}
         with (

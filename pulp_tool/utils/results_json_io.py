@@ -6,7 +6,7 @@ import json
 import logging
 from pathlib import Path
 
-from ..models.pulp_results import PulpResultsDocument, normalize_document
+from ..models.pulp_results import PulpResultsDocument
 from .oci_pull import is_oci_artifact_reference, pull_pulp_results_json
 
 
@@ -56,7 +56,7 @@ def load_results_document(location: str, *, dest_dir: Path) -> PulpResultsDocume
         raise ResultsJsonIOError(f"Failed to read results JSON {path}: {e}") from e
     if not isinstance(raw, dict):
         raise ResultsJsonIOError(f"Results JSON root must be an object: {path}")
-    return PulpResultsDocument.from_raw(normalize_document(raw))
+    return PulpResultsDocument.from_raw(raw)
 
 
 __all__ = [

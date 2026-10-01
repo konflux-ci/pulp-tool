@@ -4,11 +4,9 @@ from pydantic import Field
 
 from .artifacts import ArtifactMetadata, PulledArtifacts
 from .base import KonfluxBaseModel
-from .pulp_results import ArtifactJsonResponse, PulpResultsDocument, PulpResultsModel
-from .repository import RepositoryRefs
-from .statistics import UploadCounts
 
-# Re-export upload/download result types from pulp_results for backward compatibility.
+# Same model as ``pulp_results.json`` artifact entries (push and pull).
+ArtifactInfo = ArtifactMetadata
 
 
 class RpmUploadResult(KonfluxBaseModel):
@@ -56,17 +54,8 @@ class DownloadResult(KonfluxBaseModel):
         return self.failed > 0
 
 
-# Same model as ``pulp_results.json`` artifact entries (push and pull).
-ArtifactInfo = ArtifactMetadata
-
-
 __all__ = [
     "RpmUploadResult",
     "DownloadResult",
     "ArtifactInfo",
-    "PulpResultsDocument",
-    "PulpResultsModel",
-    "ArtifactJsonResponse",
-    "UploadCounts",
-    "RepositoryRefs",
 ]

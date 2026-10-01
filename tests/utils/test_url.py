@@ -25,7 +25,7 @@ class TestBuildIDExtraction:
 
     def test_extract_build_id_from_artifact_json_no_build_id(self) -> None:
         """Test extract_build_id_from_artifact_json with no build_id."""
-        artifact_json = {"artifacts": {"test-file": {"labels": {"arch": "x86_64"}}}}
+        artifact_json = {"artifacts": {"test-file": {"pulp_labels": {"arch": "x86_64"}}}}
         build_id = extract_build_id_from_artifact_json(artifact_json)
         assert build_id == "rok-storage"
 
