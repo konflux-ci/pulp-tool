@@ -2,7 +2,7 @@
 # python3 + pulp-cli only — independent of Dockerfile.e2e so cleanup can run when the runner image build fails.
 # Build: docker build -f e2e/Dockerfile.e2e-cleanup -t pulp-e2e-cleanup:test .
 
-FROM registry.access.redhat.com/ubi10/ubi-minimal:10.2-1789645153
+FROM registry.access.redhat.com/ubi10/ubi-minimal:10.2-1791444377
 
 RUN microdnf install -y \
         python3 \
