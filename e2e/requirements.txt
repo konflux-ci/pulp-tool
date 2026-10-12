@@ -1,4 +1,4 @@
 # E2e runner image (Dockerfile.e2e) and local venv installs for e2e scripts.
 # pulp-cli pin is duplicated in e2e/requirements-cleanup.txt for Dockerfile.e2e-cleanup.
-pulp-cli>=0.40.6,<0.41
+pulp-cli>=0.41,<0.42
 rpm-rs>=0.28.0

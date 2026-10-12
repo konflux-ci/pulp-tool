@@ -1,2 +1,2 @@
 # Post-test cleanup image (Dockerfile.e2e-cleanup); keep pulp-cli pin in sync with e2e/requirements.txt
-pulp-cli>=0.40.6,<0.41
+pulp-cli>=0.41,<0.42
