@@ -41,6 +41,8 @@ On confirmation, write **only the PR body** (sections above) to `pr-description.
 
 ## Suggested commit message
 
+Provide **one** commit message for the whole PR (squash branch to a single commit before merge). Do not suggest a series of commit messages for follow-up fixes.
+
 ```text
 <type(scope): short description>
 

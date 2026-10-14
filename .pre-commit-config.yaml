@@ -28,7 +28,7 @@ repos:
       - id: mixed-line-ending
         args: [--fix=lf]
 
-  # python-lint job (.github/workflows/python-diff-lint.yml)
+  # python-lint job (.github/workflows/python-diff-lint.yml) — ruff/mypy/pylint via Makefile + scripts/run-pylint.sh
   - repo: local
     hooks:
       - id: lock-check
@@ -40,14 +40,14 @@ repos:
 
       - id: ruff-check
         name: ruff check
-        entry: ruff check pulp_tool tests
+        entry: make lint-ruff-check
         language: system
         pass_filenames: false
         always_run: true
 
       - id: ruff-format
         name: ruff format --check
-        entry: ruff format --check pulp_tool tests
+        entry: make lint-ruff-format
         language: system
         pass_filenames: false
         always_run: true
@@ -60,7 +60,7 @@ repos:
 
       - id: mypy
         name: mypy
-        entry: mypy pulp_tool tests --show-error-codes
+        entry: make lint-mypy
         language: system
         pass_filenames: false
         always_run: true

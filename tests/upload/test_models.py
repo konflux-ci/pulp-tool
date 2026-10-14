@@ -2,10 +2,10 @@
 
 import pytest
 
-from pulp_tool.models.context import UploadContext
+from pulp_tool.models.context import UploadContext, UploadRpmContext
+from pulp_tool.models.repository import RepositoryRefs
 from pulp_tool.models.upload_distribution import DistributionUrlMap
 from pulp_tool.models.upload_labels import UploadLabels
-from tests.support.factories import make_repository_refs, make_upload_rpm_context
 
 
 class TestUploadLabels:
@@ -41,28 +41,93 @@ class TestDistributionUrlMap:
         assert m.to_dict()["rpms"] == "https://example/rpms"
         assert m.get("logs") == "https://example/logs"
 
+    def test_getitem_items_keys(self) -> None:
+        m = DistributionUrlMap.from_dict({"rpms": "https://example/rpms", "logs": "https://example/logs"})
+        assert m["rpms"] == "https://example/rpms"
+        assert list(m.keys()) == ["rpms", "logs"]
+        assert list(m.items()) == [("rpms", "https://example/rpms"), ("logs", "https://example/logs")]
+
 
 class TestRepositoryRefsUploadHelpers:
     def test_rpm_href_for_upload_unsigned(self) -> None:
-        refs = make_repository_refs(rpms_href="/bulk-rpm")
-        ctx = make_upload_rpm_context()
+        refs = RepositoryRefs(
+            rpms_href="/bulk-rpm",
+            rpms_prn="",
+            logs_href="",
+            logs_prn="",
+            sbom_href="",
+            sbom_prn="",
+            artifacts_href="",
+            artifacts_prn="",
+        )
+        ctx = UploadRpmContext(
+            build_id="test-build",
+            date_str="2024-01-01",
+            namespace="test-ns",
+            parent_package="test-pkg",
+            rpm_path="/test/rpms",
+        )
         assert refs.rpm_href_for_upload(ctx) == "/bulk-rpm"
 
     def test_rpm_href_for_upload_signed(self) -> None:
-        refs = make_repository_refs(rpms_signed_href="/signed-rpm")
-        ctx = make_upload_rpm_context(signed_by="key-1")
+        refs = RepositoryRefs(
+            rpms_href="/rpms",
+            rpms_prn="",
+            logs_href="",
+            logs_prn="",
+            sbom_href="",
+            sbom_prn="",
+            artifacts_href="",
+            artifacts_prn="",
+            rpms_signed_href="/signed-rpm",
+        )
+        ctx = UploadRpmContext(
+            build_id="test-build",
+            date_str="2024-01-01",
+            namespace="test-ns",
+            parent_package="test-pkg",
+            rpm_path="/test/rpms",
+            signed_by="key-1",
+        )
         assert refs.rpm_href_for_upload(ctx) == "/signed-rpm"
 
     def test_rpm_href_for_upload_wrong_context_type(self) -> None:
-        refs = make_repository_refs()
+        refs = RepositoryRefs(
+            rpms_href="/rpms",
+            rpms_prn="",
+            logs_href="",
+            logs_prn="",
+            sbom_href="",
+            sbom_prn="",
+            artifacts_href="",
+            artifacts_prn="",
+        )
         with pytest.raises(TypeError, match="UploadRpmContext"):
             refs.rpm_href_for_upload(UploadContext(build_id="b", date_str="d", namespace="n", parent_package="p"))
 
     def test_require_logs_prn_for_upload(self) -> None:
-        refs = make_repository_refs(logs_prn="logs-prn")
+        refs = RepositoryRefs(
+            rpms_href="/rpms",
+            rpms_prn="",
+            logs_href="",
+            logs_prn="logs-prn",
+            sbom_href="",
+            sbom_prn="",
+            artifacts_href="",
+            artifacts_prn="",
+        )
         assert refs.require_logs_prn_for_upload() == "logs-prn"
 
     def test_require_logs_prn_raises_when_empty(self) -> None:
-        refs = make_repository_refs(logs_prn="")
+        refs = RepositoryRefs(
+            rpms_href="/rpms",
+            rpms_prn="",
+            logs_href="",
+            logs_prn="",
+            sbom_href="",
+            sbom_prn="",
+            artifacts_href="",
+            artifacts_prn="",
+        )
         with pytest.raises(ValueError, match="logs repository PRN"):
             refs.require_logs_prn_for_upload()

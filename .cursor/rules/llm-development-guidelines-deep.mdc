@@ -31,7 +31,7 @@ make test                         # full suite; loop until green
 | Tool | Config / script |
 |------|-----------------|
 | Ruff (E/W/F/I/S) | `pyproject.toml` `[tool.ruff]` |
-| Pylint (errors only) | `config/pylintrc` (+ matching `[tool.pylint.messages_control]` in `pyproject.toml`) |
+| Pylint (errors only) | `make lint-pylint` → `scripts/run-pylint.sh full`; pre-commit → `run-pylint.sh staged`; `config/pylintrc` |
 | Mypy | `pyproject.toml` |
 | yamllint | `config/yamllint.yml` |
 | hadolint | `scripts/run-hadolint.sh` (DL3041/DL3013 ignored) |

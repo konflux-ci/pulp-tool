@@ -115,17 +115,17 @@ We use multiple linting tools:
 - **pip-audit** / **Bandit**: Dependency CVE audit (`make audit`) and SAST (`make bandit`, HIGH severity); weekly **security-scan** workflow uploads Bandit SARIF to GitHub Security
 
 ```bash
-# Run Python linters (same commands as CI python-lint job)
+# Run Python linters (same as CI python-lint job — all invoke Makefile targets)
 make lint
 
-# Or individually:
-ruff check pulp_tool/ tests/
-ruff format --check pulp_tool/ tests/
-pylint --rcfile=config/pylintrc pulp_tool/ tests/ --errors-only -j 0
-mypy pulp_tool/ tests/ --show-error-codes
+# Or individually (also what pre-commit ruff/mypy hooks call):
+make lint-ruff-check
+make lint-ruff-format
+make lint-pylint    # scripts/run-pylint.sh full — pylint --errors-only -j "${PYLINT_JOBS:-0}"
+make lint-mypy
 ```
 
-**Pre-commit matches GitHub PR CI** for full-tree checks (`make pre-commit-ci`). On each commit, **pylint** runs only on staged `pulp_tool/` and `tests/` Python files (`scripts/run-pylint-precommit.sh` uses `-j 1` for small diffs, up to `-j 4` for larger ones; set `PYLINT_JOBS=0` to match CI). **pip-audit** runs only when `uv.lock` or `pyproject.toml` change (reuses `.audit-venv`, skips if those files are unchanged since the last successful audit). Pre-push hooks run `make test-diff-coverage` and Checkton (install with `pre-commit install --hook-type pre-push`). Run everything locally:
+**Single source of truth:** `Makefile` `LINT_PY_TARGETS` (`pulp_tool tests`), `scripts/run-pylint.sh`, and [`.github/workflows/python-diff-lint.yml`](.github/workflows/python-diff-lint.yml) / [`.pre-commit-config.yaml`](.pre-commit-config.yaml) all use these targets. Pylint defaults to **`-j 0`** (override with `PYLINT_JOBS` if needed). On commit, the pylint hook runs `scripts/run-pylint.sh staged` on staged paths only (full tree when many files change). **pip-audit** runs only when `uv.lock` or `pyproject.toml` change (reuses `.audit-venv`, skips if those files are unchanged since the last successful audit). Pre-push hooks run `make test-diff-coverage` and Checkton (install with `pre-commit install --hook-type pre-push`). Run everything locally:
 
 ```bash
 make pre-commit-ci
@@ -237,6 +237,14 @@ def test_upload_content_success():
 - [ ] CHANGELOG.md is updated
 - [ ] Documentation (e.g. README.md) is updated if needed
 - [ ] Commits follow the commit message conventions
+
+### One commit per pull request
+
+Keep **`main`** history readable: each merged PR should contribute **one** commit on `main` (squash merge on GitHub, or a single commit on the PR branch).
+
+- **While working:** prefer updating that single commit (`git commit --amend` after hook fixes, or `git reset --soft origin/main` then one new commit) instead of stacking `fix tests`, `docs changelog`, or `chore lint` commits.
+- **Before opening or updating a PR:** the branch should be **one** commit ahead of the base (unless you intentionally split work across multiple PRs).
+- **Do not** merge a PR branch with many small commits when one squashed commit tells the story.
 
 ### Commit Messages
 

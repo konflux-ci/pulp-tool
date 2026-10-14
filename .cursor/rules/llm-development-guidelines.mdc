@@ -14,6 +14,7 @@ alwaysApply: true
 
 ## Pull requests and CHANGELOG
 
+- **One commit per PR branch** before merge: do not stack many small commits (`fix lint`, `docs`, follow-ups). Fold changes into a single commit (`git reset --soft origin/main` + one commit, or amend the existing PR commit when hooks adjust files and the branch is not shared). See [CONTRIBUTING.md § One commit per pull request](../../CONTRIBUTING.md#one-commit-per-pull-request).
 - **Do not** paste a full PR body every turn. If the turn might become a PR, **ask once** if the user wants paste-ready PR text.
 - **After they confirm:** load **drafting-pulp-tool-pr** skill — PR text follows `.github/PULL_REQUEST_TEMPLATE.md` verbatim; include suggested commit (`Assisted-By:` + `Signed-off-by:` per `.github/commit-message-template.txt`) and **`CHANGELOG.md`** under `[Unreleased]` when notable — **same turn**.
 - **No** `CHANGELOG` edits on every debug fix unless the user asks.

@@ -66,3 +66,12 @@ class TestRpmRepoLayout:
         assert per_arch.repository_name("my-build", "x86_64") == "x86_64"
         scoped = RpmRepoLayout(mode=RpmRepoLayoutMode.PER_ARCH_BUILD_SCOPED)
         assert scoped.repository_name("my-build", "x86_64") == "my-build/x86_64"
+
+    def test_repository_name_rejects_build_rpms_mode(self) -> None:
+        layout = RpmRepoLayout(mode=RpmRepoLayoutMode.BUILD_RPMS)
+        with pytest.raises(ValueError, match="per-arch layout"):
+            layout.repository_name("my-build", "x86_64")
+
+    def test_distribution_cache_type_build_rpms_mode(self) -> None:
+        layout = RpmRepoLayout(mode=RpmRepoLayoutMode.BUILD_RPMS)
+        assert layout.distribution_cache_type("my-build", "x86_64") == "rpm_arch:x86_64"

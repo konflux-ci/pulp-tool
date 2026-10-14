@@ -98,23 +98,29 @@ test-unit:
 test-integration:
 	python3 -m pytest -v -m integration
 
-# Linting
+# Linting (mirrors .github/workflows/python-diff-lint.yml and .pre-commit-config.yaml)
+LINT_PY_TARGETS := pulp_tool tests
+
 lint: lint-ruff lint-pylint lint-mypy
 
-lint-ruff:
-	python3 -m ruff check pulp_tool/ tests/
-	python3 -m ruff format --check pulp_tool/ tests/
+lint-ruff: lint-ruff-check lint-ruff-format
+
+lint-ruff-check:
+	python3 -m ruff check $(LINT_PY_TARGETS)
+
+lint-ruff-format:
+	python3 -m ruff format --check $(LINT_PY_TARGETS)
 
 lint-pylint:
-	python3 -m pylint --rcfile=config/pylintrc pulp_tool/ tests/ --errors-only -j 0
+	./scripts/run-pylint.sh full
 
 lint-mypy:
-	python3 -m mypy pulp_tool/ tests/ --show-error-codes
+	python3 -m mypy $(LINT_PY_TARGETS) --show-error-codes
 
 # Formatting
 format:
-	python3 -m ruff format pulp_tool/ tests/
-	python3 -m ruff check --fix pulp_tool/ tests/
+	python3 -m ruff format $(LINT_PY_TARGETS)
+	python3 -m ruff check --fix $(LINT_PY_TARGETS)
 
 # Run all checks
 check: lint test

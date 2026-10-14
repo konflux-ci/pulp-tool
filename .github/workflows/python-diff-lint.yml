@@ -46,16 +46,16 @@ jobs:
           make lock-check
 
       - name: Ruff lint
-        run: ruff check pulp_tool tests
+        run: make lint-ruff-check
 
       - name: Ruff format
-        run: ruff format --check pulp_tool tests
+        run: make lint-ruff-format
 
       - name: Pylint (errors only)
-        run: pylint --rcfile=config/pylintrc pulp_tool tests --errors-only -j 0
+        run: make lint-pylint
 
       - name: Mypy
-        run: mypy pulp_tool tests --show-error-codes
+        run: make lint-mypy
 
   test-diff-coverage:
     name: Tests and diff coverage (100%)
