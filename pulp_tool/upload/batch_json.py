@@ -10,11 +10,8 @@ Key Functions:
     - collect_results(): Gather and upload results JSON (implemented in ``upload_collect``)
     - Konflux result helpers live in ``upload_collect``
 
-Program/library entry points:
-    - **CLI and Konflux** use :class:`pulp_tool.utils.pulp_helper.PulpHelper` (``setup_repositories``,
- ``process_uploads``) as the primary orchestration API.
-    - :class:`UploadService` is a thin wrapper for tests and programmatic use; it delegates to
-      the same ``PulpHelper`` / ``UploadOrchestrator`` path as the CLI.
+Production entry: **CLI and Konflux** use :class:`pulp_tool.utils.pulp_helper.PulpHelper`
+(``setup_repositories``, ``process_uploads``) only; there is no supported library API beyond that.
 """
 
 import json

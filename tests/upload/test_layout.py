@@ -5,7 +5,7 @@ from unittest.mock import patch
 import pytest
 
 from pulp_tool.models.context import UploadRpmContext
-from pulp_tool.models.rpm_repo_layout import RpmRepoLayout, RpmRepoLayoutMode, target_arch_repository_name
+from pulp_tool.models.rpm_repo_layout import RpmRepoLayout, RpmRepoLayoutMode
 
 
 class TestRpmRepoLayout:
@@ -61,6 +61,8 @@ class TestRpmRepoLayout:
             with pytest.raises(ValueError, match="Invalid build ID"):
                 layout.repository_name("raw", "x86_64")
 
-    def test_target_arch_repository_name_helper(self) -> None:
-        assert target_arch_repository_name("my-build", "x86_64", build_scoped=False) == "x86_64"
-        assert target_arch_repository_name("my-build", "x86_64", build_scoped=True) == "my-build/x86_64"
+    def test_repository_name_matches_build_scoped_modes(self) -> None:
+        per_arch = RpmRepoLayout(mode=RpmRepoLayoutMode.PER_ARCH)
+        assert per_arch.repository_name("my-build", "x86_64") == "x86_64"
+        scoped = RpmRepoLayout(mode=RpmRepoLayoutMode.PER_ARCH_BUILD_SCOPED)
+        assert scoped.repository_name("my-build", "x86_64") == "my-build/x86_64"

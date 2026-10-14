@@ -44,7 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **Upload layout:** consolidate upload orchestration, batch JSON, artifacts, results collection, and SBOM handling under **`pulp_tool/upload/`**; **`PulpHelper`** still owns repo setup and delegates to the upload package; **`UploadService`** remains a thin programmatic entry ([ADR 0003](docs/adr/0003-upload-domain-and-layout-models.md))
+- **Upload layout:** consolidate upload orchestration, batch JSON, artifacts, results collection, and SBOM handling under **`pulp_tool/upload/`**; **`PulpHelper`** owns repo setup and is the only supported upload entry (CLI/Konflux); no library re-exports from **`utils`** / **`services`** ([ADR 0003](docs/adr/0003-upload-domain-and-layout-models.md))
 - **`RpmRepoLayout`**, **`UploadLabels`**, and **`DistributionUrlMap`** replace ad hoc boolean threading and untyped label/distribution dicts in the upload path; RPM distribution URL building lives in **`pulp_tool/api/pulp_client/distribution_urls.py`**
 - Tests: upload coverage moved to **`tests/upload/`** with shared factories in **`tests/support/factories.py`**; **`docs/ARCHITECTURE.md`**, **`tests/README.md`**, and **changing-pulp-upload** skill updated
 - **Pre-commit pylint:** cap parallel workers in **`scripts/run-pylint-precommit.sh`** (`-j 1` for small staged diffs, up to `-j 4` for larger runs; override with **`PYLINT_JOBS`**) to reduce local CPU use; CI and **`make lint`** still use **`-j 0`**

@@ -3,10 +3,9 @@
 from unittest.mock import Mock, patch
 
 from pulp_tool.models.artifacts import ArtifactData
-from pulp_tool.models.context import PullContext, UploadRpmContext
+from pulp_tool.models.context import PullContext
 from pulp_tool.models.pulp_results import PulpResultsDocument
 from pulp_tool.services.pull_service import PullService, validate_pull_side_tag_context
-from pulp_tool.upload import UploadService
 
 
 class TestPullService:
@@ -238,121 +237,3 @@ class TestPullService:
         result = PullService().run(context, distribution_client=Mock(), max_workers=1)
         assert not result.success
         assert "signature NOT OK" in result.error_messages[0]
-
-
-class TestUploadService:
-    """Test UploadService class."""
-
-    def test_upload_service_init(self) -> None:
-        """Test UploadService initialization."""
-        mock_client = Mock()
-        service = UploadService(mock_client, parent_package="test-pkg")
-        assert service.client == mock_client
-        assert service.helper is not None
-
-    def test_upload_service_init_no_parent_package(self) -> None:
-        """Test UploadService initialization without parent_package."""
-        mock_client = Mock()
-        service = UploadService(mock_client)
-        assert service.client == mock_client
-        assert service.helper is not None
-
-    @patch("pulp_tool.upload.service.PulpHelper")
-    @patch("pulp_tool.upload.service.logging")
-    def test_setup_repositories(self, mock_logging, mock_helper_class) -> None:
-        """Test setup_repositories method."""
-        mock_client = Mock()
-        service = UploadService(mock_client)
-        from pulp_tool.models.repository import RepositoryRefs
-
-        mock_repos = RepositoryRefs(
-            rpms_href="/test/",
-            rpms_prn="",
-            logs_href="",
-            logs_prn="",
-            sbom_href="",
-            sbom_prn="",
-            artifacts_href="",
-            artifacts_prn="",
-        )
-        service.helper.setup_repositories.return_value = mock_repos
-        result = service.setup_repositories("test-build")
-        assert result == mock_repos
-        service.helper.setup_repositories.assert_called_once_with("test-build")
-        assert mock_logging.info.call_count >= 2
-
-    @patch("pulp_tool.upload.service.PulpHelper")
-    @patch("pulp_tool.upload.service.logging")
-    def test_upload_artifacts(self, mock_logging, mock_helper_class) -> None:
-        """Test upload_artifacts method."""
-        mock_client = Mock()
-        service = UploadService(mock_client)
-        from pulp_tool.models.repository import RepositoryRefs
-
-        mock_repos = RepositoryRefs(
-            rpms_href="/test/",
-            rpms_prn="",
-            logs_href="",
-            logs_prn="",
-            sbom_href="",
-            sbom_prn="",
-            artifacts_href="",
-            artifacts_prn="",
-        )
-        context = UploadRpmContext(
-            build_id="test-build",
-            date_str="2024-01-01 00:00:00",
-            namespace="test-ns",
-            parent_package="test-pkg",
-            rpm_path="/test/rpms",
-            sbom_path="/test/sbom.json",
-        )
-        service.helper.process_uploads.return_value = "https://example.com/results.json"
-        result = service.upload_artifacts(context, mock_repos)
-        assert result == "https://example.com/results.json"
-        service.helper.process_uploads.assert_called_once_with(
-            mock_client, context, mock_repos, pulp_helper=service.helper
-        )
-        assert mock_logging.info.call_count >= 2
-
-    @patch("pulp_tool.upload.service.PulpHelper")
-    @patch("pulp_tool.upload.service.logging")
-    def test_upload_artifacts_no_results(self, mock_logging, mock_helper_class) -> None:
-        """Test upload_artifacts when no results JSON URL is returned."""
-        mock_client = Mock()
-        service = UploadService(mock_client)
-        from pulp_tool.models.repository import RepositoryRefs
-
-        mock_repos = RepositoryRefs(
-            rpms_href="/test/",
-            rpms_prn="",
-            logs_href="",
-            logs_prn="",
-            sbom_href="",
-            sbom_prn="",
-            artifacts_href="",
-            artifacts_prn="",
-        )
-        context = UploadRpmContext(
-            build_id="test-build",
-            date_str="2024-01-01 00:00:00",
-            namespace="test-ns",
-            parent_package="test-pkg",
-            rpm_path="/test/rpms",
-            sbom_path="/test/sbom.json",
-        )
-        service.helper.process_uploads.return_value = None
-        result = service.upload_artifacts(context, mock_repos)
-        assert result is None
-        mock_logging.error.assert_called_once()
-
-    @patch("pulp_tool.upload.service.PulpHelper")
-    def test_get_distribution_urls(self, mock_helper_class) -> None:
-        """Test get_distribution_urls method."""
-        mock_client = Mock()
-        service = UploadService(mock_client)
-        mock_urls = {"rpms": "https://example.com/rpms", "logs": "https://example.com/logs"}
-        service.helper.get_distribution_urls.return_value = mock_urls
-        result = service.get_distribution_urls("test-build")
-        assert result == mock_urls
-        service.helper.get_distribution_urls.assert_called_once_with("test-build")

@@ -8,9 +8,10 @@ from typing import TYPE_CHECKING
 
 from ..models.context import UploadRpmContext
 from ..models.pulp_results import PulpResultsDocument
+from ..upload.artifacts import create_labels
 from ..upload.batch_json import process_uploads_from_results_json
 from ..upload.results import write_konflux_oci_results
-from ..utils import PulpHelper, create_labels
+from ..utils import PulpHelper
 from ..utils.correlation import resolve_correlation_id
 from ..utils.oci_pull import is_oci_artifact_reference, normalize_oci_artifact_reference
 from ..utils.pulp_results_oci_publish import sync_pulp_results_with_oci_registry

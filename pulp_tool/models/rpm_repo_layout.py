@@ -84,9 +84,3 @@ class RpmRepoLayout(KonfluxBaseModel):
         if self.mode == RpmRepoLayoutMode.PER_ARCH:
             return f"rpm_arch:{arch_key}"
         return f"rpm_arch:{arch_key}"
-
-
-def target_arch_repository_name(build_id: str, arch: str, *, build_scoped: bool) -> str:
-    """Backward-compatible helper; prefer :meth:`RpmRepoLayout.repository_name`."""
-    mode = RpmRepoLayoutMode.PER_ARCH_BUILD_SCOPED if build_scoped else RpmRepoLayoutMode.PER_ARCH
-    return RpmRepoLayout(mode=mode).repository_name(build_id, arch)

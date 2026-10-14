@@ -13,8 +13,9 @@ from ..models.pulp_results import (
     PulpResultsDocument,
     SideTagRpmTransfer,
 )
+from ..upload.artifacts import create_labels
 from ..upload.results import write_konflux_oci_results
-from ..utils import create_labels, determine_build_id
+from ..utils import determine_build_id
 from ..utils.pulp_results_oci_publish import sync_pulp_results_with_oci_registry
 from ..utils.snapshot_update import update_snapshot_pulp_results_manifest
 

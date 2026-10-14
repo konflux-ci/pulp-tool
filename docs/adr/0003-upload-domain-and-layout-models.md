@@ -17,8 +17,8 @@ Konflux Tekton tasks depend on stable CLI flags and a single orchestration path 
 1. **`pulp_tool/upload/`** owns the upload pipeline (artifacts, SBOM, batch JSON, results gather, directory orchestration). Repository setup remains on `PulpHelper` / `RepositoryManager`.
 2. **`RpmRepoLayout`** (Pydantic, frozen) is the single interpreter for RPM repository naming modes (`build_rpms`, `per_arch`, `per_arch_build_scoped`). `UploadRpmContext.rpm_repo_layout()` is the only production entry from CLI flags.
 3. **Upload DTOs** (`UploadLabels`, `DistributionUrlMap`, `UploadPlan`) use `KonfluxBaseModel`. Models validate and compute paths; they do not perform HTTP.
-4. **Aggressive imports:** old module paths are removed in the same change series; no long-lived re-export shims.
-5. **`UploadService`** remains a thin delegator for programmatic callers and tests, forwarding to `pulp_tool.upload`.
+4. **Aggressive imports:** old module paths are removed in the same change series; no re-export shims in `pulp_tool.utils` or `pulp_tool.services`.
+5. **CLI-only surface:** Konflux and operators invoke `pulp-tool` commands; upload behavior is reached via `PulpHelper` → `pulp_tool.upload`, not a supported Python library API.
 
 ## Consequences
 

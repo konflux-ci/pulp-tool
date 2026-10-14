@@ -294,7 +294,7 @@ class TestEdgeCases:
 
     def test_create_labels_edge_cases(self) -> None:
         """Test create_labels function with edge cases."""
-        from pulp_tool.utils import create_labels
+        from pulp_tool.upload.artifacts import create_labels
 
         labels = create_labels("", "", "", "", "")
         assert labels["build_id"] == ""

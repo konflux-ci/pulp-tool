@@ -303,7 +303,7 @@ class TestUploadAndGetResultsUrl:
         args.build_id = "test-build"
         args.namespace = "test-namespace"
         args.parent_package = "test-package"
-        with patch("pulp_tool.utils.create_labels", return_value={"build_id": "test-build"}):
+        with patch("pulp_tool.upload.results.create_labels", return_value={"build_id": "test-build"}):
             with pytest.raises(Exception):
                 _upload_and_get_results_url(
                     mock_pulp_client,

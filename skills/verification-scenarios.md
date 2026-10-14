@@ -7,7 +7,7 @@ Baseline failure modes and how each skill addresses them. Re-run when editing sk
 | RED (without skill) | GREEN (with skill) |
 |---------------------|-------------------|
 | Change `--sbom-path` default without checking release pipeline | Checklist requires both Tekton YAMLs; table shows flag differences |
-| Duplicate upload logic in CLI layer | Red flag: keep logic in `PulpHelper` / `UploadService` |
+| Duplicate upload logic in CLI layer | Red flag: keep logic in `PulpHelper` → `pulp_tool.upload` |
 | Assume upstream tasks are frozen | Rationalization row + step 2 re-open GitHub YAML |
 
 ## changing-pulp-container

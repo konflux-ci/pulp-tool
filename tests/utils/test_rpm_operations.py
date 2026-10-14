@@ -11,7 +11,7 @@ import httpx
 import pytest
 
 from pulp_tool.models.pulp_results import PulpResultsDocument
-from pulp_tool.utils import upload_rpms_logs
+from pulp_tool.upload.artifacts import upload_rpms_logs
 from pulp_tool.utils.rpm_operations import (
     calculate_sha256_checksum,
     parse_rpm_filename_to_nvr,

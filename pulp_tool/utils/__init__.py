@@ -3,7 +3,6 @@ Utility modules for Konflux Pulp operations.
 """
 
 from ..models.repository import RepositoryRefs
-from ..upload.artifacts import create_labels, upload_artifacts_to_repository, upload_log, upload_rpms, upload_rpms_logs
 
 # Shared utility modules
 from . import (
@@ -51,11 +50,6 @@ __all__ = [
     "validate_build_id",
     "validate_file_path",
     "validate_repository_setup",
-    "create_labels",
-    "upload_artifacts_to_repository",
-    "upload_rpms",
-    "upload_rpms_logs",
-    "upload_log",
     "create_file_content_and_wait",
     "wait_for_successful_task",
     "get_pulp_content_base_url",

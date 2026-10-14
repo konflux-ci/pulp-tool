@@ -11,7 +11,7 @@ description: >-
 
 ## Overview
 
-Downstream Tekton pipelines invoke `pulp-tool upload` with fixed paths and flags. Changes must stay compatible with **both** call sites. **Source of truth:** [CLAUDE.md](../../docs/CLAUDE.md). **Code map:** [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) — upload behavior lives under `pulp_tool/upload/`; `PulpHelper` sets up repos and delegates; `UploadService` is a thin programmatic entry.
+Downstream Tekton pipelines invoke `pulp-tool upload` with fixed paths and flags. Changes must stay compatible with **both** call sites. **Source of truth:** [CLAUDE.md](../../docs/CLAUDE.md). **Code map:** [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) — upload behavior lives under `pulp_tool/upload/`; only the CLI (via `PulpHelper`) is the supported entry.
 
 ## Workflow
 
@@ -38,7 +38,7 @@ Before merge, verify (extend tests where applicable):
 
 - Changing a default flag without checking **both** Tekton scripts
 - Assuming one pipeline’s flags apply to the other (`--sbom-path` is import-to-quay only)
-- Duplicating upload logic outside `pulp_tool/upload/` (called from `PulpHelper` / `UploadService`)
+- Duplicating upload logic outside `PulpHelper` → `pulp_tool/upload/`
 - Skipping upstream YAML review (“we only changed tests” on upload paths)
 
 ## Common rationalizations

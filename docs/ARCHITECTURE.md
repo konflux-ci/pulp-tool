@@ -45,7 +45,6 @@ flowchart TB
   subgraph s2["Orchestration"]
     PH["PulpHelper"]
     UP["pulp_tool/upload (pipeline, batch_json, results)"]
-    US["UploadService"]
   end
   subgraph s3["HTTP"]
     PC["PulpClient (httpx)"]
@@ -59,8 +58,8 @@ flowchart TB
   end
   CLI --> EP --> PH
   PH --> UP
-  UP --> US
   PH --> PC --> PulpAPI
+  UP --> PC
   T1 --> CLI
   T2 --> CLI
 ```
@@ -78,7 +77,7 @@ flowchart TB
 | CLI | `pulp_tool/cli/` | Commands; shared helpers in `cli/runner_helpers.py` (OCI temp dirs, auth config, results JSON paths) |
 | HTTP client | `pulp_tool/api/pulp_client/` | Session, chunked GET, RPM/content queries, repository ops |
 | Other API surface | `pulp_tool/api/` (`artifacts/`, `content/`, `distributions/`, `repositories/`, `tasks/`) | Typed calls aligned with Pulp endpoints |
-| Upload domain | `pulp_tool/upload/` | `pipeline`, `artifacts`, `batch_json`, `results`, `sbom`, `service` |
+| Upload domain | `pulp_tool/upload/` | `pipeline`, `artifacts`, `batch_json`, `results`, `sbom` (CLI entry via `PulpHelper` only) |
 | Orchestration | `pulp_tool/utils/pulp_helper.py` | Repo/distribution setup; delegates uploads to `pulp_tool.upload` |
 | Services | `pulp_tool/services/` | `pull_service.run`; `search_by_service`; `update_build` (non-upload) |
 | Pull | `pulp_tool/pull/` | Download / transfer helpers; **`pull` CLI** delegates to **`PullService.run`** |
@@ -92,7 +91,7 @@ flowchart TB
 | Container | `container/Dockerfile`, `.tekton/pulp-tool-container-build-*.yaml` | Konflux Tekton → upstream `docker-build-oci-ta` (`buildah-oci-ta`); **changing-pulp-container** skill + [reference.md](../skills/changing-pulp-container/reference.md) |
 | Tests | `tests/` (see [tests/README.md](../tests/README.md)), `tests/support/` | Fixtures, TLS helpers |
 
-**Invariant:** `UploadService` delegates to **`PulpHelper`**; do not maintain a second upload implementation.
+**Invariant:** production upload behavior is **CLI → `PulpHelper` → `pulp_tool.upload`** only; do not add a second orchestration path or library re-exports.
 
 ---
 
@@ -123,7 +122,7 @@ No application database: state is on Pulp and in generated JSON artifacts.
 
 ## 6. Architecture invariants
 
-1. **Single orchestration path** to production upload behavior: CLI and `UploadService` go through `PulpHelper` / shared helpers.
+1. **Single orchestration path** to production upload behavior: CLI commands go through `PulpHelper` → `pulp_tool.upload`.
 2. **Konflux contracts** (flags, paths, skip-vs-fail) must stay aligned with linked upstream task YAMLs when changing `upload` or the image.
 3. **Labels and APIs:** Pulpcore forbids `,`, `(`, and `)` in label **values**; `signed_by` replaces `,` with `:` and maps parentheses to `[` / `]` before upload and before RPM queries, so `pulp_label_select` is usually applied server-side together with checksum or NVR filters. Client-side label matching remains a fallback when a query cannot be expressed safely.
 4. **Merge gate:** PR diffs require **100% diff coverage** (`make test-diff-coverage`), not only line coverage in unchanged code.

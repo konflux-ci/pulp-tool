@@ -79,7 +79,7 @@ pulp-tool --config /etc/rok-access/cli.toml \
 | **`upload` flags (in task)** | `--parent-package`, `--sbom-path`, `--artifact-results` | `--rpm-path` only |
 | **SBOM** | `--sbom-path` … `oras-staging/sbom-merged.json` when Pulp runs | no `--sbom-path` in script |
 
-**Where to change code:** [ARCHITECTURE.md](ARCHITECTURE.md) (code map, data flow, Konflux diagram). Do not duplicate upload logic outside `PulpHelper` / `UploadService`.
+**Where to change code:** [ARCHITECTURE.md](ARCHITECTURE.md) (code map, data flow, Konflux diagram). Do not duplicate upload logic outside `PulpHelper` → `pulp_tool.upload`.
 
 ---
 
