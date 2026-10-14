@@ -51,7 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`update-build`** with digest-pinned **`--results-json`**: ORAS **`attach`** to the subject manifest (referrer artifact); **`upload-build`** / side-tag without attach subject still **`oras push`** to **`--oci-storage`**
 - Digest-pinned OCI **`pull`** / **`load_results_document`**: **`oras discover`** for attached **`pulp_results`** referrers; select newest attached JSON by document **`last_updated`** (schema **`version`** unchanged across mutations)
 - **`PulpResultsDocument`** package ([`pulp_tool/models/pulp_results/`](pulp_tool/models/pulp_results/)): in-place mutations; removed **`PulpResultsModel`** / **`ArtifactJsonResponse`** aliases; [`results.py`](pulp_tool/models/results.py) holds upload/download DTOs only
-- **Internal refactor:** shared [`cli/runner_helpers.py`](pulp_tool/cli/runner_helpers.py); **`PullService.run`** orchestrates **`pull`** (including side-tag); [`search_by_service.py`](pulp_tool/services/search_by_service.py) for **`search-by`**; upload-from-JSON **`UploadPlan`** pipeline in **`upload_service`**; [`upload_collect_public`](pulp_tool/services/upload_collect_public.py) entry for **`collect_results`**; [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) service map updated
+- **Internal refactor:** shared [`cli/runner_helpers.py`](pulp_tool/cli/runner_helpers.py); **`PullService.run`** orchestrates **`pull`** (including side-tag); [`search_by_service.py`](pulp_tool/services/search_by_service.py) for **`search-by`**; upload-from-JSON **`UploadPlan`** pipeline in **`pulp_tool/upload/batch_json.py`**; **`collect_results`** in **`pulp_tool/upload/results.py`**; [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) service map updated
 - Side-tag publish serializes canonical JSON and uses unified mutation helpers
 - E2e ORAS checks use Tekton **`--artifact-results`** files (not embedded **`oci_manifest`** in JSON)
 - Live e2e **`test_update_build_oras_live`**: `upload-build` + **`update-build`** against real Pulp and ORAS when **`--oci-storage`** is set
@@ -63,7 +63,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
-- Legacy upload modules **`pulp_tool/utils/uploads.py`**, **`upload_orchestrator.py`**, and **`pulp_tool/services/upload_service.py`**, **`upload_collect*.py`**, **`upload_common.py`** (imports point at **`pulp_tool/upload/`**)
+- Legacy upload modules **`pulp_tool/utils/uploads.py`**, **`upload_orchestrator.py`**, and **`pulp_tool/services/upload_service.py`**, **`upload_collect*.py`**, **`upload_common.py`** (imports point at **`pulp_tool/upload/`**) ([be51c5c](https://github.com/konflux-ci/pulp-tool/commit/be51c5c))
 - **`PulpResultsModel`** and **`ArtifactJsonResponse`** type aliases (use **`PulpResultsDocument`**)
 - Removed **`pulp_tool/models/pulp_results/legacy.py`** and dict-era public helpers; use **`PulpResultsDocument`** methods only
 - Non-ORAS Tekton **`--artifact-results`** (Pulp distribution URL + digest without **`--oci-storage`**) and **`cli.oci_storage`** in config
