@@ -12,10 +12,13 @@ from typing import Any
 import httpx
 
 from ...models.pulp_label_values import normalize_signed_by_value_for_pulp
-from ...utils.artifact_detection import rpm_packages_letter_and_basename
 from ...utils.constants import DEFAULT_CHUNK_SIZE, SUPPORTED_ARCHITECTURES
 from ...utils.rpm_operations import parse_rpm_filename_to_nvr
-from ...utils.validation import sanitize_build_id_for_repository, validate_build_id
+from .distribution_urls import (
+    build_rpm_distribution_url,
+    build_rpm_packages_url_for_arch,
+    rpm_distribution_base_url_from_labels,
+)
 from .helpers import EMPTY_RESPONSE_REQUEST, dedupe_results_by_pulp_href
 
 
@@ -105,21 +108,12 @@ class PulpClientContentQueryMixin:
         target_arch_repo_build_scoped: bool = False,
     ) -> str:
         """Build RPM distribution base URL when using ``--target-arch-repo`` (per-arch base paths)."""
-        base_url_str = str(self.config["base_url"]).rstrip("/")
-        pulp_content = f"{base_url_str}/api/pulp-content/"
-        ns = self.namespace if isinstance(self.namespace, str) else ""
-        arch = (labels.get("arch") or "").strip() or "noarch"
-        arch_seg = sanitize_build_id_for_repository(arch)
-        if not validate_build_id(arch_seg):
-            arch_seg = "noarch"
-        if target_arch_repo_build_scoped:
-            build_id = (labels.get("build_id") or "").strip()
-            if build_id:
-                from ...utils.repository_manager import target_arch_repository_name
-
-                path_seg = target_arch_repository_name(build_id, arch_seg, build_scoped=True)
-                return f"{pulp_content}{ns}/{path_seg}/"
-        return f"{pulp_content}{ns}/{arch_seg}/"
+        return rpm_distribution_base_url_from_labels(
+            base_url=str(self.config["base_url"]),
+            namespace=self.namespace if isinstance(self.namespace, str) else "",
+            labels=labels,
+            target_arch_repo_build_scoped=target_arch_repo_build_scoped,
+        )
 
     def _build_rpm_packages_url_for_arch(
         self,
@@ -130,21 +124,14 @@ class PulpClientContentQueryMixin:
         target_arch_repo_build_scoped: bool = False,
     ) -> str:
         """Build RPM content URL under per-arch distribution (namespace/arch/Packages/...)."""
-        base_url_str = str(self.config["base_url"]).rstrip("/")
-        pulp_content_base_url = f"{base_url_str}/api/pulp-content"
-        ns = self.namespace if isinstance(self.namespace, str) else ""
-        path_seg = arch
-        if target_arch_repo_build_scoped and labels:
-            build_id = (labels.get("build_id") or "").strip()
-            if build_id:
-                from ...utils.repository_manager import target_arch_repository_name
-
-                path_seg = target_arch_repository_name(build_id, arch, build_scoped=True)
-        base = f"{pulp_content_base_url}/{ns}/{path_seg}/"
-        filename, first_letter = rpm_packages_letter_and_basename(relative_path)
-        if filename:
-            return f"{base}Packages/{first_letter}/{filename}"
-        return relative_path
+        return build_rpm_packages_url_for_arch(
+            base_url=str(self.config["base_url"]),
+            namespace=self.namespace if isinstance(self.namespace, str) else "",
+            arch=arch,
+            relative_path=relative_path,
+            labels=labels,
+            target_arch_repo_build_scoped=target_arch_repo_build_scoped,
+        )
 
     def _build_rpm_distribution_url(
         self,
@@ -156,36 +143,15 @@ class PulpClientContentQueryMixin:
         target_arch_repo_build_scoped: bool = False,
     ) -> str:
         """Build distribution URL for RPM artifacts (Packages/<lowercase-first-of-basename>/<basename>)."""
-        labels = labels or {}
-        if target_arch_repo:
-            arch = (labels.get("arch") or "").strip()
-            if arch and arch in SUPPORTED_ARCHITECTURES:
-                return self._build_rpm_packages_url_for_arch(
-                    arch,
-                    relative_path,
-                    labels=labels,
-                    target_arch_repo_build_scoped=target_arch_repo_build_scoped,
-                )
-            rpms_url = self._rpm_distribution_base_url_from_labels(
-                labels,
-                target_arch_repo_build_scoped=target_arch_repo_build_scoped,
-            )
-            filename, first_letter = rpm_packages_letter_and_basename(relative_path)
-            if filename:
-                return f"{rpms_url}Packages/{first_letter}/{filename}"
-            return relative_path
-        if labels.get("signed_by") and distribution_urls.get("rpms_signed"):
-            rpms_url = distribution_urls["rpms_signed"]
-            if rpms_url:
-                filename, first_letter = rpm_packages_letter_and_basename(relative_path)
-                if filename:
-                    return f"{rpms_url}Packages/{first_letter}/{filename}"
-        rpms_url = distribution_urls.get("rpms", "")
-        if rpms_url:
-            filename, first_letter = rpm_packages_letter_and_basename(relative_path)
-            if filename:
-                return f"{rpms_url}Packages/{first_letter}/{filename}"
-        return relative_path
+        return build_rpm_distribution_url(
+            base_url=str(self.config["base_url"]),
+            namespace=self.namespace if isinstance(self.namespace, str) else "",
+            relative_path=relative_path,
+            distribution_urls=distribution_urls,
+            labels=labels,
+            target_arch_repo=target_arch_repo,
+            target_arch_repo_build_scoped=target_arch_repo_build_scoped,
+        )
 
     @staticmethod
     def _build_file_distribution_url(

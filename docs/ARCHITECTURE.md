@@ -44,8 +44,8 @@ flowchart TB
   end
   subgraph s2["Orchestration"]
     PH["PulpHelper"]
-    UO["UploadOrchestrator"]
-    US["UploadService / upload_collect"]
+    UP["pulp_tool/upload (pipeline, batch_json, results)"]
+    US["UploadService"]
   end
   subgraph s3["HTTP"]
     PC["PulpClient (httpx)"]
@@ -58,14 +58,14 @@ flowchart TB
     T2["push-artifacts-to-storage"]
   end
   CLI --> EP --> PH
-  PH --> UO
-  UO --> US
+  PH --> UP
+  UP --> US
   PH --> PC --> PulpAPI
   T1 --> CLI
   T2 --> CLI
 ```
 
-**Upload data path:** CLI → `PulpHelper.setup_repositories` / `process_uploads` → `UploadOrchestrator` + `upload_service` / `upload_collect` → `PulpClient` → Pulp.
+**Upload data path:** CLI → `PulpHelper.setup_repositories` / `process_uploads` → `pulp_tool.upload.pipeline` + `batch_json` / `results` → `PulpClient` → Pulp. Layout and upload DTOs: `RpmRepoLayout`, `UploadLabels`, `DistributionUrlMap` (see [ADR 0003](adr/0003-upload-domain-and-layout-models.md)).
 
 **Konflux:** Tasks invoke the same CLI with mounted config and `/var/workdir/results`; see [CLAUDE.md](CLAUDE.md) for exact flags and guardrails.
 
@@ -78,8 +78,9 @@ flowchart TB
 | CLI | `pulp_tool/cli/` | Commands; shared helpers in `cli/runner_helpers.py` (OCI temp dirs, auth config, results JSON paths) |
 | HTTP client | `pulp_tool/api/pulp_client/` | Session, chunked GET, RPM/content queries, repository ops |
 | Other API surface | `pulp_tool/api/` (`artifacts/`, `content/`, `distributions/`, `repositories/`, `tasks/`) | Typed calls aligned with Pulp endpoints |
-| Orchestration | `pulp_tool/utils/pulp_helper.py`, `upload_orchestrator.py` | Repo setup, upload pipelines |
-| Services | `pulp_tool/services/` | `upload_service` + `upload_collect` (Konflux results); `pull_service.run`; `search_by_service`; `upload_collect_public.collect_results` |
+| Upload domain | `pulp_tool/upload/` | `pipeline`, `artifacts`, `batch_json`, `results`, `sbom`, `service` |
+| Orchestration | `pulp_tool/utils/pulp_helper.py` | Repo/distribution setup; delegates uploads to `pulp_tool.upload` |
+| Services | `pulp_tool/services/` | `pull_service.run`; `search_by_service`; `update_build` (non-upload) |
 | Pull | `pulp_tool/pull/` | Download / transfer helpers; **`pull` CLI** delegates to **`PullService.run`** |
 | Results document | `pulp_tool/models/pulp_results/` (`document.py`, `normalize.py`, `lineage.py`, …) | Canonical **`PulpResultsDocument`**: in-place mutations; wire JSON uses **`pulp_labels`** only |
 | Results JSON I/O | `pulp_tool/utils/results_json_io.py` | Local path or digest-pinned OCI ref → load/normalize document |

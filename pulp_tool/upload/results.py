@@ -20,16 +20,20 @@ from ..models.pulp_results import PulpResultsDocument
 if TYPE_CHECKING:
     from ..api.pulp_client import PulpClient  # pragma: no cover
 
-from ..utils import PulpHelper, create_labels
 from ..utils.constants import (
     RESULTS_JSON_FILENAME,
     SUPPORTED_ARCHITECTURES,
     results_json_rpm_arch_distribution_key,
 )
+from ..utils.pulp_helper import PulpHelper
 from ..utils.pulp_results_oci_publish import sync_pulp_results_with_oci_registry
 from ..utils.pulp_tasks import create_file_content_and_wait
 from ..utils.response_utils import content_find_results_from_response
-from .upload_common import _distribution_urls_for_context
+from .artifacts import create_labels
+
+
+def _distribution_urls_for_context(helper: PulpHelper, build_id: str, context: UploadContext) -> dict[str, str]:
+    return helper.get_distribution_urls_for_upload_context(build_id, context)
 
 
 def _serialize_results_to_json(results: dict[str, Any]) -> str:
@@ -122,7 +126,7 @@ def _upload_and_get_results_url(
             logging.info("Results JSON uploaded to Pulp and ORAS")
             results_json_url = _extract_results_url(client, context, task_response)
             if konflux_paths:
-                _write_konflux_oci_results(oci_ref, konflux_paths[0], konflux_paths[1])
+                write_konflux_oci_results(oci_ref, konflux_paths[0], konflux_paths[1])
         else:
             task_response = create_file_content_and_wait(
                 client,
@@ -238,16 +242,22 @@ def _populate_results_model(
     """Populate results model with artifacts from content results."""
     repository_helper = PulpHelper(client, parent_package=context.parent_package)
     distribution_urls = _distribution_urls_for_context(repository_helper, context.build_id, context)
-    target_arch_repo = bool(getattr(context, "target_arch_repo", False))
-    target_arch_repo_build_scoped = bool(getattr(context, "target_arch_repo_build_scoped", False))
+    layout = context.rpm_repo_layout() if hasattr(context, "rpm_repo_layout") else None
+    if layout is None:
+        from ..models.rpm_repo_layout import RpmRepoLayout
+
+        layout = RpmRepoLayout.from_target_arch_flags(
+            bool(getattr(context, "target_arch_repo", False)),
+            bool(getattr(context, "target_arch_repo_build_scoped", False)),
+        )
 
     client.build_results_structure(
         results_model,
         content_results,
         file_info_map,
         distribution_urls,
-        target_arch_repo=target_arch_repo,
-        target_arch_repo_build_scoped=target_arch_repo_build_scoped,
+        target_arch_repo=layout.target_arch_repo,
+        target_arch_repo_build_scoped=layout.target_arch_repo_build_scoped,
         merge=True,
     )
 
@@ -270,17 +280,21 @@ def _add_distributions_to_results(
     target_arch_repo = bool(getattr(context, "target_arch_repo", False))
     target_arch_repo_build_scoped = bool(getattr(context, "target_arch_repo_build_scoped", False))
     if target_arch_repo and results_model.artifacts:
-        from ..utils.repository_manager import target_arch_repository_name
+        from ..models.rpm_repo_layout import RpmRepoLayout
 
+        layout = (
+            context.rpm_repo_layout()
+            if hasattr(context, "rpm_repo_layout")
+            else RpmRepoLayout.from_target_arch_flags(target_arch_repo, target_arch_repo_build_scoped)
+        )
         arch_urls: dict[str, str] = {}
         for info in results_model.artifacts.values():
             arch = (info.pulp_labels.get("arch") or "").strip()
             if arch in SUPPORTED_ARCHITECTURES:
-                base_path = (
-                    target_arch_repository_name(context.build_id, arch, build_scoped=target_arch_repo_build_scoped)
-                    if target_arch_repo_build_scoped
-                    else arch
-                )
+                if layout.target_arch_repo_build_scoped:
+                    base_path = layout.repository_name(context.build_id, arch)
+                else:
+                    base_path = arch
                 arch_urls[arch] = repository_helper.distribution_url_for_base_path(base_path)
         for arch in sorted(arch_urls.keys()):
             dist_key = results_json_rpm_arch_distribution_key(arch)
@@ -416,7 +430,7 @@ def _konflux_results_from_oci_ref(oci_ref: str) -> tuple[str, str]:
     return image_url, _format_sha256_digest(digest)
 
 
-def _write_konflux_oci_results(oci_ref: str, url_path: str, digest_path: str) -> tuple[str, str]:
+def write_konflux_oci_results(oci_ref: str, url_path: str, digest_path: str) -> tuple[str, str]:
     """Write Konflux ``PULP-IMAGE_URL`` / ``PULP-IMAGE_DIGEST`` files from an ORAS-published manifest ref."""
     image_url, digest = _konflux_results_from_oci_ref(oci_ref)
     _write_konflux_results(image_url, digest, url_path.strip(), digest_path.strip())
@@ -506,7 +520,7 @@ __all__ = [
     "_add_distributions_to_results",
     "_find_artifact_content",
     "_parse_oci_reference",
-    "_write_konflux_oci_results",
+    "write_konflux_oci_results",
     "_konflux_results_from_oci_ref",
     "_handle_sbom_results",
 ]

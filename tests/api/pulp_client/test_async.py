@@ -259,7 +259,7 @@ class TestPulpClientErrorPaths:
 
     def test_rpm_distribution_base_url_falls_back_to_noarch_when_invalid(self, mock_pulp_client) -> None:
         """Invalid sanitized arch segment uses noarch in per-arch URL (defensive path)."""
-        with patch("pulp_tool.api.pulp_client.content_query.validate_build_id", return_value=False):
+        with patch("pulp_tool.api.pulp_client.distribution_urls.validate_build_id", return_value=False):
             labels = {"arch": "x86_64"}
             base = mock_pulp_client._rpm_distribution_base_url_from_labels(labels)
         assert base == "https://pulp.example.com/api/pulp-content/test-domain/noarch/"

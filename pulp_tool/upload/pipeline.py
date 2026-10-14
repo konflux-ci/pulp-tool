@@ -18,33 +18,16 @@ from ..models.context import UploadFilesContext, UploadRpmContext
 from ..models.pulp_results import PulpResultsDocument
 from ..models.repository import RepositoryRefs
 from ..models.results import RpmUploadResult
-from .artifact_detection import detect_arch_from_filepath, group_rpm_paths_by_arch
-from .constants import ARCH_DETECT_WARNING_MSG, ARCHITECTURE_THREAD_PREFIX, SUPPORTED_ARCHITECTURES
-from .error_handling import handle_generic_error
-from .pulp_tasks import create_file_content_and_wait
-from .uploads import RPM_FILE_PATTERN, create_labels, upload_log, upload_rpms, upload_rpms_logs
-from .validation import validate_file_path
+from ..utils.artifact_detection import detect_arch_from_filepath, group_rpm_paths_by_arch
+from ..utils.constants import ARCH_DETECT_WARNING_MSG, ARCHITECTURE_THREAD_PREFIX, SUPPORTED_ARCHITECTURES
+from ..utils.error_handling import handle_generic_error
+from ..utils.pulp_tasks import create_file_content_and_wait
+from ..utils.validation import validate_file_path
+from .artifacts import RPM_FILE_PATTERN, create_labels, upload_log, upload_rpms, upload_rpms_logs
 
 if TYPE_CHECKING:
     from ..api.pulp_client import PulpClient
-    from .pulp_helper import PulpHelper
-
-
-def _use_signed_rpm_repository(context: UploadRpmContext) -> bool:
-    """True when RPMs should use the signed aggregate repo (not per-arch target repo)."""
-    signed_by = getattr(context, "signed_by", None)
-    return bool(signed_by and str(signed_by).strip()) and not context.target_arch_repo
-
-
-def _rpm_repository_href_for_upload(context: UploadRpmContext, repositories: RepositoryRefs) -> str:
-    """Return the RPM repository href for uploads (signed repo when ``signed_by`` is set)."""
-    if _use_signed_rpm_repository(context):
-        if not repositories.rpms_signed_href:
-            raise ValueError("signed_by requires signed RPM repository href")
-        return repositories.rpms_signed_href
-    if not repositories.rpms_href:
-        raise ValueError("RPM repository href is required but not found")
-    return repositories.rpms_href
+    from ..utils.pulp_helper import PulpHelper
 
 
 class UploadOrchestrator:
@@ -119,7 +102,7 @@ class UploadOrchestrator:
                 arch_rpm_href = pulp_helper.ensure_rpm_repository_for_arch(
                     args.build_id,
                     arch,
-                    target_arch_repo_build_scoped=bool(getattr(args, "target_arch_repo_build_scoped", False)),
+                    layout=args.rpm_repo_layout(),
                 )
             else:
                 arch_rpm_href = rpm_href
@@ -263,8 +246,10 @@ class UploadOrchestrator:
             URL of the uploaded results JSON, or None if upload failed
         """
         # Import here to avoid circular import
-        from ..services.upload_service import collect_results, process_uploads_from_results_json, upload_sbom
-        from .pulp_helper import PulpHelper as PulpHelperCls
+        from ..utils.pulp_helper import PulpHelper as PulpHelperCls
+        from .batch_json import process_uploads_from_results_json
+        from .results import collect_results
+        from .sbom import upload_sbom
 
         if args.results_json:
             upload_out = process_uploads_from_results_json(client, args, repositories, pulp_helper=pulp_helper)
@@ -275,9 +260,9 @@ class UploadOrchestrator:
         if args.target_arch_repo:
             if pulp_helper is None:
                 raise ValueError("target_arch_repo requires PulpHelper for per-arch RPM repositories")
-        elif not _use_signed_rpm_repository(args) and not repositories.rpms_href:
+        elif not args.uses_signed_aggregate_rpm_repo() and not repositories.rpms_href:
             raise ValueError("RPM repository href is required but not found")
-        elif _use_signed_rpm_repository(args) and not repositories.rpms_signed_href:
+        elif args.uses_signed_aggregate_rpm_repo() and not repositories.rpms_signed_href:
             raise ValueError("signed_by requires signed RPM repository href")
 
         # Get date_str from args
@@ -288,7 +273,7 @@ class UploadOrchestrator:
 
         repo_helper = pulp_helper or PulpHelperCls(client, parent_package=args.parent_package)
         distribution_urls = repo_helper.get_distribution_urls_for_upload_context(args.build_id, args)
-        rpm_href = "" if args.target_arch_repo else _rpm_repository_href_for_upload(args, repositories)
+        rpm_href = "" if args.target_arch_repo else repositories.rpm_href_for_upload(args)
 
         # Process each architecture - now updates results_model internally
         processed_uploads = self.process_architecture_uploads(
@@ -327,7 +312,7 @@ class UploadOrchestrator:
                         root_rpm_href = pulp_helper.ensure_rpm_repository_for_arch(
                             args.build_id,
                             arch,
-                            target_arch_repo_build_scoped=bool(getattr(args, "target_arch_repo_build_scoped", False)),
+                            layout=args.rpm_repo_layout(),
                         )
                     else:
                         root_rpm_href = rpm_href
@@ -399,8 +384,9 @@ class UploadOrchestrator:
             URL of the uploaded results JSON, or None if upload failed
         """
         # Import here to avoid circular import
-        from ..services.upload_service import collect_results, upload_sbom
-        from .pulp_helper import PulpHelper as PulpHelperCls
+        from ..utils.pulp_helper import PulpHelper as PulpHelperCls
+        from .results import collect_results
+        from .sbom import upload_sbom
 
         # Create unified results model
         results_model = PulpResultsDocument(build_id=context.build_id, repositories=repositories)

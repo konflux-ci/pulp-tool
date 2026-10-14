@@ -20,23 +20,27 @@ Program/library entry points:
 import json
 import logging
 import os
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from pydantic import Field
+
 from ..models.artifacts import ExtraArtifactRef
-from ..models.context import UploadContext, UploadRpmContext
+from ..models.base import KonfluxBaseModel
+from ..models.context import UploadRpmContext
 from ..models.pulp_results import PulpResultsDocument
 from ..models.repository import RepositoryRefs
 
 if TYPE_CHECKING:
     from ..api.pulp_client import PulpClient
 
-from ..utils import PulpHelper, create_labels, validate_file_path
 from ..utils.constants import SBOM_EXTENSIONS, SUPPORTED_ARCHITECTURES
 from ..utils.path_utils import resolve_path_under_base
+from ..utils.pulp_helper import PulpHelper
 from ..utils.pulp_tasks import create_file_content_and_wait
-from .upload_collect import (
+from ..utils.validation import validate_file_path
+from .artifacts import create_labels, upload_log, upload_rpms
+from .results import (
     _add_distributions_to_results,
     _build_artifact_map,
     _extract_results_url,
@@ -48,167 +52,15 @@ from .upload_collect import (
     _save_results_to_folder,
     _serialize_results_to_json,
     _upload_and_get_results_url,
+    collect_results,
 )
-from .upload_collect_public import collect_results
-from .upload_common import _distribution_urls_for_context
+from .sbom import upload_sbom
 
 # ============================================================================
 # Constants
 # ============================================================================
 
 MAX_LOG_LINE_LENGTH = 114
-
-
-class UploadService:
-    """
-    High-level service for upload operations.
-
-    This service provides a clean interface for upload operations,
-    coordinating between repositories, distributions, and content uploads.
-    """
-
-    def __init__(self, pulp_client: "PulpClient", parent_package: str | None = None) -> None:
-        """
-        Initialize the upload service.
-
-        Args:
-            pulp_client: PulpClient instance for API interactions
-            parent_package: Optional parent package name for distribution paths
-        """
-        self.client = pulp_client
-        self.helper = PulpHelper(pulp_client, parent_package=parent_package)
-
-    def setup_repositories(self, build_id: str) -> RepositoryRefs:
-        """
-        Set up all required repositories for a build.
-
-        Args:
-            build_id: Build identifier
-
-        Returns:
-            RepositoryRefs containing all repository identifiers
-        """
-        logging.info("Setting up repositories for build: %s", build_id)
-        repositories = self.helper.setup_repositories(build_id)
-        logging.info("Repository setup completed")
-        return repositories
-
-    def upload_artifacts(self, context: UploadRpmContext, repositories: RepositoryRefs) -> str | None:
-        """
-        Upload all artifacts (RPMs, logs, SBOMs) and collect results.
-
-        This method orchestrates the complete upload process including:
-        - Processing architecture-specific uploads
-        - Uploading SBOM files
-        - Collecting and uploading results JSON
-
-        Args:
-            context: UploadRpmContext with all required parameters
-            repositories: Repository references for upload targets
-
-        Returns:
-            URL of the uploaded results JSON, or None if upload failed
-        """
-        logging.info("Starting upload process for build: %s", context.build_id)
-        results_json_url = self.helper.process_uploads(self.client, context, repositories, pulp_helper=self.helper)
-
-        if not results_json_url:
-            logging.error("Upload completed but results JSON was not created")
-            return None
-
-        logging.info("Upload completed successfully. Results JSON URL: %s", results_json_url)
-        return results_json_url
-
-    def get_distribution_urls(self, build_id: str) -> dict[str, str]:
-        """
-        Get distribution URLs for all repository types.
-
-        Args:
-            build_id: Build identifier
-
-        Returns:
-            Dictionary mapping repository types to distribution URLs
-        """
-        return self.helper.get_distribution_urls(build_id)
-
-
-# ============================================================================
-# SBOM and Results Functions
-# ============================================================================
-
-
-def upload_sbom(
-    client: "PulpClient",
-    context: UploadContext,
-    sbom_repository_prn: str,
-    date: str,
-    results_model: PulpResultsDocument,
-    sbom_path: str,
-    *,
-    distribution_urls: dict[str, str] | None = None,
-    target_arch_repo: bool = False,
-    target_arch_repo_build_scoped: bool = False,
-) -> list[str]:
-    """
-    Upload SBOM file to repository.
-
-    Args:
-        client: PulpClient instance for API interactions
-        context: Upload context containing metadata
-        sbom_repository_prn: SBOM repository PRN
-        date: Build date string
-        results_model: PulpResultsDocument to update with upload counts
-        sbom_path: Path to the SBOM file to upload
-
-    Returns:
-        List of created resource hrefs from the upload task
-    """
-    if not os.path.exists(sbom_path):
-        logging.error("SBOM file not found: %s", sbom_path)
-        raise FileNotFoundError(f"SBOM file not found: {sbom_path}")
-
-    if not sbom_repository_prn or not str(sbom_repository_prn).strip():
-        raise ValueError(
-            "Cannot upload SBOM: SBOM repository PRN is empty. "
-            "Ensure the SBOM repository is created when uploading SBOM files."
-        )
-
-    logging.warning("Uploading SBOM: %s", sbom_path)
-    labels = create_labels(context.build_id, "", context.namespace, context.parent_package, date)
-    validate_file_path(sbom_path, "SBOM")
-
-    task_response = create_file_content_and_wait(
-        client,
-        sbom_repository_prn,
-        sbom_path,
-        build_id=context.build_id,
-        pulp_label=labels,
-        operation=f"upload SBOM {sbom_path}",
-    )
-    logging.debug("SBOM uploaded successfully: %s", sbom_path)
-
-    # Update upload counts
-    results_model.increment_counts(sboms=1)
-
-    if distribution_urls is not None:
-        rel_path: str | None = None
-        if task_response.result and isinstance(task_response.result, dict):
-            rel_path = task_response.result.get("relative_path")
-        if not rel_path:
-            rel_path = os.path.basename(sbom_path)
-        client.add_uploaded_artifact_to_results_model(
-            results_model,
-            local_path=sbom_path,
-            labels=labels,
-            is_rpm=False,
-            distribution_urls=distribution_urls,
-            target_arch_repo=target_arch_repo,
-            target_arch_repo_build_scoped=target_arch_repo_build_scoped,
-            file_relative_path=rel_path,
-        )
-
-    # Return the created resources from the task
-    return task_response.created_resources
 
 
 def _classify_artifact_from_key(key: str) -> str:
@@ -259,14 +111,13 @@ def scan_results_json_for_log_and_sbom_keys(results_json_path: str) -> tuple[boo
     return has_logs, has_sbom
 
 
-@dataclass
-class UploadPlan:
+class UploadPlan(KonfluxBaseModel):
     """Resolved local paths and labels for batch upload from a results document."""
 
-    rpms_by_arch: dict[str, list[str]] = field(default_factory=dict)
-    logs_to_upload: list[tuple[str, str]] = field(default_factory=list)
-    sboms_to_upload: list[str] = field(default_factory=list)
-    artifacts_to_upload: list[tuple[str, dict[str, str]]] = field(default_factory=list)
+    rpms_by_arch: dict[str, list[str]] = Field(default_factory=dict)
+    logs_to_upload: list[tuple[str, str]] = Field(default_factory=list)
+    sboms_to_upload: list[str] = Field(default_factory=list)
+    artifacts_to_upload: list[tuple[str, dict[str, str]]] = Field(default_factory=list)
 
 
 def _infer_arch_from_key(key: str, arch_hint: str) -> str:
@@ -370,8 +221,6 @@ def _execute_upload_plan(
     rpm_href: str,
     date_str: str,
 ) -> list[str]:
-    from ..utils.uploads import upload_log, upload_rpms
-
     created_resources: list[str] = []
     logs_prn = repositories.logs_prn
     sbom_prn = repositories.sbom_prn
@@ -379,11 +228,7 @@ def _execute_upload_plan(
 
     for arch, rpm_list in plan.rpms_by_arch.items():
         arch_href = (
-            helper.ensure_rpm_repository_for_arch(
-                context.build_id,
-                arch,
-                target_arch_repo_build_scoped=bool(context.target_arch_repo_build_scoped),
-            )
+            helper.ensure_rpm_repository_for_arch(context.build_id, arch, layout=context.rpm_repo_layout())
             if context.target_arch_repo
             else rpm_href
         )
@@ -537,7 +382,7 @@ def process_uploads_from_results_json(
 
 
 __all__ = [
-    "UploadService",
+    "UploadPlan",
     "upload_sbom",
     "collect_results",
     "process_uploads_from_results_json",
@@ -554,5 +399,4 @@ __all__ = [
     "_find_artifact_content",
     "_parse_oci_reference",
     "_handle_sbom_results",
-    "_distribution_urls_for_context",
 ]

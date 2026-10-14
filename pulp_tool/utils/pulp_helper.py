@@ -17,10 +17,11 @@ from ..models.results import RpmUploadResult
 
 if TYPE_CHECKING:
     from ..api.pulp_client import PulpClient
+    from ..models.rpm_repo_layout import RpmRepoLayout
 
+from ..upload.pipeline import UploadOrchestrator
 from .distribution_manager import DistributionManager
 from .repository_manager import RepositoryManager
-from .upload_orchestrator import UploadOrchestrator
 from .validation.side_tag import side_tag_distribution_base_path
 
 
@@ -165,14 +166,15 @@ class PulpHelper:
         build_id: str,
         arch: str,
         *,
+        layout: "RpmRepoLayout | None" = None,
         target_arch_repo_build_scoped: bool = False,
     ) -> str:
         """Create or get RPM repository for ``target_arch_repo`` mode (base_path = arch or build/arch)."""
-        return self._repository_manager.ensure_rpm_repository_for_arch(
-            build_id,
-            arch,
-            target_arch_repo_build_scoped=target_arch_repo_build_scoped,
-        )
+        from ..models.rpm_repo_layout import RpmRepoLayout
+
+        if layout is None:
+            layout = RpmRepoLayout.from_target_arch_flags(True, target_arch_repo_build_scoped)
+        return self._repository_manager.ensure_rpm_repository_for_arch(build_id, arch, layout=layout)
 
     def ensure_side_tag_rpm_repository(self, build_id: str, side_tag: str) -> tuple[str, str]:
         """

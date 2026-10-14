@@ -3,6 +3,7 @@ Utility modules for Konflux Pulp operations.
 """
 
 from ..models.repository import RepositoryRefs
+from ..upload.artifacts import create_labels, upload_artifacts_to_repository, upload_log, upload_rpms, upload_rpms_logs
 
 # Shared utility modules
 from . import (
@@ -20,7 +21,6 @@ from .logger import WrappingFormatter, get_logger, setup_logging
 from .pulp_helper import PulpHelper
 from .pulp_tasks import create_file_content_and_wait, wait_for_successful_task
 from .session import create_session_with_retry
-from .uploads import create_labels, upload_artifacts_to_repository, upload_log, upload_rpms, upload_rpms_logs
 from .url import get_pulp_content_base_url
 from .validation.build_id import (
     determine_build_id,

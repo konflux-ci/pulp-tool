@@ -25,11 +25,11 @@ from ..models.repository import RepositoryRefs
 if TYPE_CHECKING:
     from ..api.pulp_client import PulpClient  # pragma: no cover
 
+from ..models.rpm_repo_layout import RpmRepoLayout
 from .constants import (
     API_TYPES,
     REPOSITORY_TYPES,
     SIGNED_REPOSITORY_TYPES,
-    SUPPORTED_ARCHITECTURES,
 )
 from .validation import (
     sanitize_build_id_for_repository,
@@ -37,21 +37,6 @@ from .validation import (
     validate_build_id,
     validate_repository_setup,
 )
-
-
-def target_arch_repository_name(build_id: str, arch: str, *, build_scoped: bool) -> str:
-    """Pulp repository/distribution name for ``--target-arch-repo`` (optionally under ``{build_id}/``)."""
-    arch_name = arch.strip()
-    if arch_name not in SUPPORTED_ARCHITECTURES:
-        raise ValueError(f"Unsupported architecture for RPM repository: {arch}")
-    if not build_scoped:
-        return arch_name
-    if not build_id or not isinstance(build_id, str) or not build_id.strip():
-        raise ValueError(f"Invalid build ID: {build_id}")
-    sanitized_build_id = sanitize_build_id_for_repository(build_id)
-    if not validate_build_id(sanitized_build_id):
-        raise ValueError(f"Invalid build ID: {build_id} (sanitized: {sanitized_build_id})")
-    return f"{sanitized_build_id}/{arch_name}"
 
 
 @dataclass(frozen=True)
@@ -276,6 +261,7 @@ class RepositoryManager:
         build_id: str,
         arch: str,
         *,
+        layout: RpmRepoLayout | None = None,
         target_arch_repo_build_scoped: bool = False,
     ) -> str:
         """
@@ -283,14 +269,15 @@ class RepositoryManager:
 
         Used with ``target_arch_repo`` so RPM URLs are
         ``/api/pulp-content/{namespace}/{arch}/Packages/...`` instead of ``.../{build}/rpms/...``.
-        When ``target_arch_repo_build_scoped`` is True, repository and distribution use
-        ``{build_id}/{arch}`` (for isolated e2e runs).
+        When layout is build-scoped, repository and distribution use ``{build_id}/{arch}``.
         """
-        full_name = target_arch_repository_name(
-            build_id,
-            arch,
-            build_scoped=target_arch_repo_build_scoped,
-        )
+        from ..models.rpm_repo_layout import RpmRepoLayoutMode
+
+        if layout is None:
+            layout = RpmRepoLayout.from_target_arch_flags(True, target_arch_repo_build_scoped)
+        if layout.mode == RpmRepoLayoutMode.BUILD_RPMS:
+            raise ValueError("ensure_rpm_repository_for_arch requires per-arch layout")
+        full_name = layout.repository_name(build_id, arch)
         sanitized_build_id = sanitize_build_id_for_repository(build_id)
         self._validate_full_name(full_name, full_name, "rpm")
         new_repository = RepositoryRequest(name=full_name, autopublish=True)
@@ -298,11 +285,7 @@ class RepositoryManager:
         if not new_distribution.base_path or not new_distribution.base_path.strip():
             raise ValueError(f"Invalid distribution base_path for arch repository {arch}")
 
-        cache_type = (
-            f"rpm_arch:{sanitized_build_id}:{arch.strip()}"
-            if target_arch_repo_build_scoped
-            else f"rpm_arch:{arch.strip()}"
-        )
+        cache_type = layout.distribution_cache_type(build_id, arch)
         _prn, repository_href = self._create_or_get_repository_impl(
             new_repository,
             new_distribution,

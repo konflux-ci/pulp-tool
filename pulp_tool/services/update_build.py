@@ -8,8 +8,8 @@ from typing import TYPE_CHECKING
 
 from ..models.context import UploadRpmContext
 from ..models.pulp_results import PulpResultsDocument
-from ..services.upload_collect import _write_konflux_oci_results
-from ..services.upload_service import process_uploads_from_results_json
+from ..upload.batch_json import process_uploads_from_results_json
+from ..upload.results import write_konflux_oci_results
 from ..utils import PulpHelper, create_labels
 from ..utils.correlation import resolve_correlation_id
 from ..utils.oci_pull import is_oci_artifact_reference, normalize_oci_artifact_reference
@@ -126,7 +126,7 @@ def run_update_build(
     )
 
     url_path, digest_path = context.artifact_results.split(",", 1)
-    _write_konflux_oci_results(oci_ref, url_path.strip(), digest_path.strip())
+    write_konflux_oci_results(oci_ref, url_path.strip(), digest_path.strip())
     logging.info("update-build published pulp_results.json to %s", oci_ref)
     return oci_ref
 

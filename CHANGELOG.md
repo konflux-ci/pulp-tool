@@ -44,6 +44,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Upload layout:** consolidate upload orchestration, batch JSON, artifacts, results collection, and SBOM handling under **`pulp_tool/upload/`**; **`PulpHelper`** still owns repo setup and delegates to the upload package; **`UploadService`** remains a thin programmatic entry ([ADR 0003](docs/adr/0003-upload-domain-and-layout-models.md))
+- **`RpmRepoLayout`**, **`UploadLabels`**, and **`DistributionUrlMap`** replace ad hoc boolean threading and untyped label/distribution dicts in the upload path; RPM distribution URL building lives in **`pulp_tool/api/pulp_client/distribution_urls.py`**
+- Tests: upload coverage moved to **`tests/upload/`** with shared factories in **`tests/support/factories.py`**; **`docs/ARCHITECTURE.md`**, **`tests/README.md`**, and **changing-pulp-upload** skill updated
+- **Pre-commit pylint:** cap parallel workers in **`scripts/run-pylint-precommit.sh`** (`-j 1` for small staged diffs, up to `-j 4` for larger runs; override with **`PYLINT_JOBS`**) to reduce local CPU use; CI and **`make lint`** still use **`-j 0`**
 - **`update-build`** with digest-pinned **`--results-json`**: ORAS **`attach`** to the subject manifest (referrer artifact); **`upload-build`** / side-tag without attach subject still **`oras push`** to **`--oci-storage`**
 - Digest-pinned OCI **`pull`** / **`load_results_document`**: **`oras discover`** for attached **`pulp_results`** referrers; select newest attached JSON by document **`last_updated`** (schema **`version`** unchanged across mutations)
 - **`PulpResultsDocument`** package ([`pulp_tool/models/pulp_results/`](pulp_tool/models/pulp_results/)): in-place mutations; removed **`PulpResultsModel`** / **`ArtifactJsonResponse`** aliases; [`results.py`](pulp_tool/models/results.py) holds upload/download DTOs only
@@ -59,6 +63,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- Legacy upload modules **`pulp_tool/utils/uploads.py`**, **`upload_orchestrator.py`**, and **`pulp_tool/services/upload_service.py`**, **`upload_collect*.py`**, **`upload_common.py`** (imports point at **`pulp_tool/upload/`**)
 - **`PulpResultsModel`** and **`ArtifactJsonResponse`** type aliases (use **`PulpResultsDocument`**)
 - Removed **`pulp_tool/models/pulp_results/legacy.py`** and dict-era public helpers; use **`PulpResultsDocument`** methods only
 - Non-ORAS Tekton **`--artifact-results`** (Pulp distribution URL + digest without **`--oci-storage`**) and **`cli.oci_storage`** in config

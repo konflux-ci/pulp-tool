@@ -1,6 +1,13 @@
 """Repository-related models for Konflux Pulp."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from .base import KonfluxBaseModel
+
+if TYPE_CHECKING:
+    from .context import UploadRpmContext
 
 
 class RepositoryRefs(KonfluxBaseModel):
@@ -42,6 +49,28 @@ class RepositoryRefs(KonfluxBaseModel):
     sbom_signed_prn: str = ""
     artifacts_signed_href: str = ""
     artifacts_signed_prn: str = ""
+
+    def rpm_href_for_upload(self, context: "UploadRpmContext") -> str:
+        """Return RPM repository href for directory upload (signed aggregate or bulk ``rpms``)."""
+        from .context import UploadRpmContext
+
+        if not isinstance(context, UploadRpmContext):
+            raise TypeError("context must be UploadRpmContext")
+        if context.uses_signed_aggregate_rpm_repo():
+            if not self.rpms_signed_href:
+                raise ValueError("signed_by requires signed RPM repository href")
+            return self.rpms_signed_href
+        if not self.rpms_href:
+            raise ValueError("RPM repository href is required but not found")
+        return self.rpms_href
+
+    def require_logs_prn_for_upload(self) -> str:
+        if not self.logs_prn or not str(self.logs_prn).strip():
+            raise ValueError(
+                "Log files are present but logs repository PRN is empty. "
+                "Create the logs repository when uploading logs (do not set skip_logs_repo)."
+            )
+        return self.logs_prn
 
 
 class RepositoryInfo(KonfluxBaseModel):

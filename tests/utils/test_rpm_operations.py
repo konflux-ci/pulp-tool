@@ -170,7 +170,7 @@ class TestRPMUtilities:
         with (
             patch("glob.glob", return_value=[temp_rpm_file]),
             patch(
-                "pulp_tool.utils.uploads.upload_rpms_parallel",
+                "pulp_tool.upload.artifacts.upload_rpms_parallel",
                 return_value=([(temp_rpm_file, "/pulp/api/v3/content/rpm/packages/12345/")], []),
             ),
             patch.object(mock_pulp_client, "add_content") as mock_add,

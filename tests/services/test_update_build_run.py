@@ -69,7 +69,7 @@ def test_run_update_build_happy_path(tmp_path: Path) -> None:
             "pulp_tool.services.update_build.sync_pulp_results_with_oci_registry",
             return_value=("quay.io/r@sha256:ab", MagicMock()),
         ),
-        patch("pulp_tool.services.update_build._write_konflux_oci_results"),
+        patch("pulp_tool.services.update_build.write_konflux_oci_results"),
     ):
         mock_helper.return_value.setup_repositories.return_value = _repos()
         ref = run_update_build(
@@ -111,7 +111,7 @@ def test_run_update_build_passes_attach_subject_for_oci_results_json(tmp_path: P
             "pulp_tool.services.update_build.sync_pulp_results_with_oci_registry",
             return_value=("quay.io/r@sha256:attached", MagicMock()),
         ) as mock_sync,
-        patch("pulp_tool.services.update_build._write_konflux_oci_results"),
+        patch("pulp_tool.services.update_build.write_konflux_oci_results"),
     ):
         mock_helper.return_value.setup_repositories.return_value = _repos()
         run_update_build(
@@ -225,7 +225,7 @@ def test_run_update_build_logs_correlation_id(tmp_path: Path, caplog) -> None:
             "pulp_tool.services.update_build.sync_pulp_results_with_oci_registry",
             return_value=("quay.io/r@sha256:ab", MagicMock()),
         ),
-        patch("pulp_tool.services.update_build._write_konflux_oci_results"),
+        patch("pulp_tool.services.update_build.write_konflux_oci_results"),
         patch("pulp_tool.services.update_build.resolve_correlation_id", return_value="update-build-cid"),
     ):
         mock_helper.return_value.setup_repositories.return_value = _repos()
@@ -260,7 +260,7 @@ def test_run_update_build_non_model_upload_outcome(tmp_path: Path) -> None:
             "pulp_tool.services.update_build.sync_pulp_results_with_oci_registry",
             return_value=("quay.io/r@sha256:cd", MagicMock()),
         ),
-        patch("pulp_tool.services.update_build._write_konflux_oci_results"),
+        patch("pulp_tool.services.update_build.write_konflux_oci_results"),
         patch("pulp_tool.services.update_build.resolve_correlation_id", return_value="cid"),
     ):
         mock_helper.return_value.setup_repositories.return_value = _repos()

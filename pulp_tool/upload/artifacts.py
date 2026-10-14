@@ -15,12 +15,13 @@ import httpx
 from ..models.context import UploadContext
 from ..models.pulp_results import PulpResultsDocument
 from ..models.results import RpmUploadResult
-from .constants import SUPPORTED_ARCHITECTURES
-from .error_handling import handle_generic_error
-from .pulp_tasks import create_file_content_and_wait, wait_for_successful_task
-from .rpm_operations import upload_rpms_parallel
-from .rpm_overwrite import remove_rpms_matching_local_files_from_repository
-from .validation import validate_file_path
+from ..models.upload_labels import UploadLabels
+from ..utils.constants import SUPPORTED_ARCHITECTURES
+from ..utils.error_handling import handle_generic_error
+from ..utils.pulp_tasks import create_file_content_and_wait, wait_for_successful_task
+from ..utils.rpm_operations import upload_rpms_parallel
+from ..utils.rpm_overwrite import remove_rpms_matching_local_files_from_repository
+from ..utils.validation import validate_file_path
 
 if TYPE_CHECKING:
     from ..api.pulp_client import PulpClient
@@ -44,15 +45,13 @@ def create_labels(build_id: str, arch: str, namespace: str, parent_package: str 
     Returns:
         Dictionary containing standard labels for Pulp content
     """
-    labels = {
-        "date": date,
-        "build_id": build_id,
-        "arch": arch,
-        "namespace": namespace,
-    }
-    if parent_package:
-        labels["parent_package"] = parent_package
-    return labels
+    return UploadLabels.from_upload_context(
+        build_id=build_id,
+        arch=arch,
+        namespace=namespace,
+        parent_package=parent_package,
+        date=date,
+    ).to_pulp_dict()
 
 
 def upload_log(

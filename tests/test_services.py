@@ -6,7 +6,7 @@ from pulp_tool.models.artifacts import ArtifactData
 from pulp_tool.models.context import PullContext, UploadRpmContext
 from pulp_tool.models.pulp_results import PulpResultsDocument
 from pulp_tool.services.pull_service import PullService, validate_pull_side_tag_context
-from pulp_tool.services.upload_service import UploadService
+from pulp_tool.upload import UploadService
 
 
 class TestPullService:
@@ -257,8 +257,8 @@ class TestUploadService:
         assert service.client == mock_client
         assert service.helper is not None
 
-    @patch("pulp_tool.services.upload_service.PulpHelper")
-    @patch("pulp_tool.services.upload_service.logging")
+    @patch("pulp_tool.upload.service.PulpHelper")
+    @patch("pulp_tool.upload.service.logging")
     def test_setup_repositories(self, mock_logging, mock_helper_class) -> None:
         """Test setup_repositories method."""
         mock_client = Mock()
@@ -281,8 +281,8 @@ class TestUploadService:
         service.helper.setup_repositories.assert_called_once_with("test-build")
         assert mock_logging.info.call_count >= 2
 
-    @patch("pulp_tool.services.upload_service.PulpHelper")
-    @patch("pulp_tool.services.upload_service.logging")
+    @patch("pulp_tool.upload.service.PulpHelper")
+    @patch("pulp_tool.upload.service.logging")
     def test_upload_artifacts(self, mock_logging, mock_helper_class) -> None:
         """Test upload_artifacts method."""
         mock_client = Mock()
@@ -315,8 +315,8 @@ class TestUploadService:
         )
         assert mock_logging.info.call_count >= 2
 
-    @patch("pulp_tool.services.upload_service.PulpHelper")
-    @patch("pulp_tool.services.upload_service.logging")
+    @patch("pulp_tool.upload.service.PulpHelper")
+    @patch("pulp_tool.upload.service.logging")
     def test_upload_artifacts_no_results(self, mock_logging, mock_helper_class) -> None:
         """Test upload_artifacts when no results JSON URL is returned."""
         mock_client = Mock()
@@ -346,7 +346,7 @@ class TestUploadService:
         assert result is None
         mock_logging.error.assert_called_once()
 
-    @patch("pulp_tool.services.upload_service.PulpHelper")
+    @patch("pulp_tool.upload.service.PulpHelper")
     def test_get_distribution_urls(self, mock_helper_class) -> None:
         """Test get_distribution_urls method."""
         mock_client = Mock()

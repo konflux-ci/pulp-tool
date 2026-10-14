@@ -10,7 +10,7 @@ from httpx import HTTPError
 from pulp_tool.models import RepositoryRefs
 from pulp_tool.models.context import UploadRpmContext
 from pulp_tool.models.pulp_results import PulpResultsDocument
-from pulp_tool.services.upload_service import upload_sbom
+from pulp_tool.upload.sbom import upload_sbom
 
 
 class TestUploadSbom:
@@ -42,8 +42,8 @@ class TestUploadSbom:
         results_model = PulpResultsDocument(build_id="test-build", repositories=repositories)
         with (
             patch("os.path.exists", return_value=True),
-            patch("pulp_tool.services.upload_service.validate_file_path"),
-            patch("pulp_tool.services.upload_service.create_labels", return_value={"build_id": "test-build"}),
+            patch("pulp_tool.upload.sbom.validate_file_path"),
+            patch("pulp_tool.upload.sbom.create_labels", return_value={"build_id": "test-build"}),
             patch("builtins.open", mock_open(read_data="test sbom content")),
         ):
             upload_sbom(mock_pulp_client, args, "test-repo", "2024-01-01", results_model, args.sbom_path)
@@ -65,7 +65,7 @@ class TestUploadSbom:
             artifacts_prn="artifacts-prn",
         )
         results_model = PulpResultsDocument(build_id="test-build", repositories=repositories)
-        with patch("os.path.exists", return_value=True), patch("pulp_tool.services.upload_service.validate_file_path"):
+        with patch("os.path.exists", return_value=True), patch("pulp_tool.upload.sbom.validate_file_path"):
             with pytest.raises(ValueError, match="SBOM repository PRN is empty"):
                 upload_sbom(mock_pulp_client, args, "", "2024-01-01", results_model, "/tmp/x.json")
 
@@ -100,7 +100,7 @@ class TestUploadSbom:
         results_model = PulpResultsDocument(build_id="test-build", repositories=repositories)
         with (
             patch("os.path.exists", return_value=True),
-            patch("pulp_tool.services.upload_service.validate_file_path"),
+            patch("pulp_tool.upload.sbom.validate_file_path"),
             patch("builtins.open", mock_open(read_data="{}")),
         ):
             upload_sbom(mock_pulp_client, args, "sbom-prn", "2024-01-01", results_model, "/tmp/sbom.json")
@@ -138,8 +138,8 @@ class TestUploadSbom:
         results_model = PulpResultsDocument(build_id="test-build", repositories=repositories)
         with (
             patch("os.path.exists", return_value=True),
-            patch("pulp_tool.services.upload_service.validate_file_path"),
-            patch("pulp_tool.services.upload_service.create_labels", return_value={"build_id": "test-build"}),
+            patch("pulp_tool.upload.sbom.validate_file_path"),
+            patch("pulp_tool.upload.sbom.create_labels", return_value={"build_id": "test-build"}),
             patch("builtins.open", mock_open(read_data="{}")),
             patch.object(mock_pulp_client, "add_uploaded_artifact_to_results_model") as mock_add,
         ):
@@ -200,8 +200,8 @@ class TestUploadSbom:
         results_model = PulpResultsDocument(build_id="test-build", repositories=repositories)
         with (
             patch("os.path.exists", return_value=True),
-            patch("pulp_tool.services.upload_service.validate_file_path"),
-            patch("pulp_tool.services.upload_service.create_labels", return_value={"build_id": "test-build"}),
+            patch("pulp_tool.upload.sbom.validate_file_path"),
+            patch("pulp_tool.upload.sbom.create_labels", return_value={"build_id": "test-build"}),
             patch("builtins.open", mock_open(read_data="test sbom content")),
             pytest.raises(HTTPError),
         ):

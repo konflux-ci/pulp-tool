@@ -105,7 +105,7 @@ class TestUploadFunctionality:
         httpx_mock.get(re.compile(".*/tasks/12345/")).mock(
             return_value=httpx.Response(200, json={"pulp_href": "/pulp/api/v3/tasks/12345/", "state": "completed"})
         )
-        with patch("pulp_tool.utils.uploads.upload_artifacts_to_repository") as mock_upload:
+        with patch("pulp_tool.upload.artifacts.upload_artifacts_to_repository") as mock_upload:
             mock_upload.return_value = (1, [])
             _upload_sboms_and_logs(mock_pulp_client, pulled_artifacts, repositories, upload_info)
             assert upload_info.uploaded_counts.sboms == 1

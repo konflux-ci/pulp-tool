@@ -1,11 +1,17 @@
 """Context and configuration models for Konflux Pulp operations."""
 
+from __future__ import annotations
+
 from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 from pydantic import ConfigDict, Field, field_validator
 
 from .base import KonfluxBaseModel
 from .pulp_label_values import normalize_signed_by_value_for_pulp
+
+if TYPE_CHECKING:
+    from .rpm_repo_layout import RpmRepoLayout
 
 
 class UploadContext(KonfluxBaseModel):
@@ -85,6 +91,16 @@ class UploadRpmContext(UploadContext):
         if not stripped:
             return None
         return normalize_signed_by_value_for_pulp(stripped)
+
+    def rpm_repo_layout(self) -> RpmRepoLayout:
+        """RPM repository naming layout derived from ``--target-arch-repo*`` flags."""
+        from .rpm_repo_layout import RpmRepoLayout
+
+        return RpmRepoLayout.from_context(self)
+
+    def uses_signed_aggregate_rpm_repo(self) -> bool:
+        """True when RPMs use signed aggregate ``rpms-signed`` (not per-arch target repo)."""
+        return bool(self.signed_by and self.signed_by.strip()) and not self.target_arch_repo
 
 
 class PullContext(KonfluxBaseModel):

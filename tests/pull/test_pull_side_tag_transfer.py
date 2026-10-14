@@ -152,7 +152,7 @@ class TestPublishSideTagResults:
                 "pulp_tool.pull.publish.sync_pulp_results_with_oci_registry",
                 return_value=("quay.io/ns/repo@sha256:final", Mock()),
             ),
-            patch("pulp_tool.pull.publish._write_konflux_oci_results") as mock_write,
+            patch("pulp_tool.pull.publish.write_konflux_oci_results") as mock_write,
             patch("pulp_tool.pull.publish.update_snapshot_pulp_results_manifest") as mock_snapshot,
         ):
             publish_side_tag_results(
@@ -222,7 +222,7 @@ class TestPublishSideTagResults:
                 "pulp_tool.pull.publish.sync_pulp_results_with_oci_registry",
                 return_value=("quay.io/ns/repo@sha256:final", Mock()),
             ),
-            patch("pulp_tool.pull.publish._write_konflux_oci_results"),
+            patch("pulp_tool.pull.publish.write_konflux_oci_results"),
             patch("pulp_tool.pull.publish.update_snapshot_pulp_results_manifest") as mock_snapshot,
         ):
             publish_side_tag_results(

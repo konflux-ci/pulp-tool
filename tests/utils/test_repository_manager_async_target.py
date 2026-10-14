@@ -14,7 +14,6 @@ from pulp_tool.utils.repository_manager import (
     RepositoryApiOps,
     RepositoryManager,
     _resource_log_label,
-    target_arch_repository_name,
 )
 
 
@@ -314,9 +313,16 @@ class TestRepositoryManagerTargetArchRepo:
         assert result.rpms_href == ""
         assert result.rpms_prn == ""
 
-    def test_target_arch_repository_name_build_scoped(self) -> None:
-        assert target_arch_repository_name("my-build", "x86_64", build_scoped=False) == "x86_64"
-        assert target_arch_repository_name("my-build", "x86_64", build_scoped=True) == "my-build/x86_64"
+    def test_ensure_rpm_repository_for_arch_rejects_build_rpms_layout(self) -> None:
+        from pulp_tool.models.rpm_repo_layout import RpmRepoLayout, RpmRepoLayoutMode
+
+        manager = RepositoryManager(Mock())
+        with pytest.raises(ValueError, match="per-arch layout"):
+            manager.ensure_rpm_repository_for_arch(
+                "test-build",
+                "x86_64",
+                layout=RpmRepoLayout(mode=RpmRepoLayoutMode.BUILD_RPMS),
+            )
 
     def test_ensure_rpm_repository_for_arch(self) -> None:
         """ensure_rpm_repository_for_arch creates arch-named repo and returns href."""
@@ -373,8 +379,8 @@ class TestRepositoryManagerTargetArchRepo:
         with pytest.raises(ValueError, match="Invalid build ID"):
             manager.ensure_rpm_repository_for_arch("", "x86_64", target_arch_repo_build_scoped=True)
         with (
-            patch("pulp_tool.utils.repository_manager.sanitize_build_id_for_repository", return_value="bad"),
-            patch("pulp_tool.utils.repository_manager.validate_build_id", return_value=False),
+            patch("pulp_tool.models.rpm_repo_layout.sanitize_build_id_for_repository", return_value="bad"),
+            patch("pulp_tool.models.rpm_repo_layout.validate_build_id", return_value=False),
         ):
             with pytest.raises(ValueError, match="Invalid build ID"):
                 manager.ensure_rpm_repository_for_arch("raw", "x86_64", target_arch_repo_build_scoped=True)

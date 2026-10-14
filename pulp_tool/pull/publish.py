@@ -13,7 +13,7 @@ from ..models.pulp_results import (
     PulpResultsDocument,
     SideTagRpmTransfer,
 )
-from ..services.upload_collect import _write_konflux_oci_results
+from ..upload.results import write_konflux_oci_results
 from ..utils import create_labels, determine_build_id
 from ..utils.pulp_results_oci_publish import sync_pulp_results_with_oci_registry
 from ..utils.snapshot_update import update_snapshot_pulp_results_manifest
@@ -77,7 +77,7 @@ def publish_side_tag_results(
 
     if artifact_results and "," in artifact_results:
         url_path, digest_path = artifact_results.split(",", 1)
-        _write_konflux_oci_results(oci_ref, url_path, digest_path)
+        write_konflux_oci_results(oci_ref, url_path, digest_path)
 
     snapshot_path = (getattr(context, "snapshot_path", None) or "").strip()
     if snapshot_path:

@@ -125,7 +125,7 @@ pylint --rcfile=config/pylintrc pulp_tool/ tests/ --errors-only -j 0
 mypy pulp_tool/ tests/ --show-error-codes
 ```
 
-**Pre-commit matches GitHub PR CI** for full-tree checks (`make pre-commit-ci`). On each commit, **pylint** runs only on staged `pulp_tool/` and `tests/` Python files (parallel `-j 0`); **pip-audit** runs only when `uv.lock` or `pyproject.toml` change (reuses `.audit-venv`, skips if those files are unchanged since the last successful audit). Pre-push hooks run `make test-diff-coverage` and Checkton (install with `pre-commit install --hook-type pre-push`). Run everything locally:
+**Pre-commit matches GitHub PR CI** for full-tree checks (`make pre-commit-ci`). On each commit, **pylint** runs only on staged `pulp_tool/` and `tests/` Python files (`scripts/run-pylint-precommit.sh` uses `-j 1` for small diffs, up to `-j 4` for larger ones; set `PYLINT_JOBS=0` to match CI). **pip-audit** runs only when `uv.lock` or `pyproject.toml` change (reuses `.audit-venv`, skips if those files are unchanged since the last successful audit). Pre-push hooks run `make test-diff-coverage` and Checkton (install with `pre-commit install --hook-type pre-push`). Run everything locally:
 
 ```bash
 make pre-commit-ci

@@ -18,11 +18,11 @@ import httpx
 from ..api import PulpClient
 from ..cli.runner_helpers import PullRunnerError, resolve_results_json_local_path
 from ..models.context import UploadRpmContext
-from ..services.upload_service import scan_results_json_for_log_and_sbom_keys
+from ..upload.artifacts import rpm_directory_has_log_files
+from ..upload.batch_json import scan_results_json_for_log_and_sbom_keys
 from ..utils import PulpHelper, setup_logging
 from ..utils.error_handling import handle_generic_error, handle_http_error
 from ..utils.oci_storage_resolve import resolve_oci_storage
-from ..utils.uploads import rpm_directory_has_log_files
 
 
 def _extract_build_id_namespace_from_results_json(results_json_path: Path) -> tuple[str, str]:

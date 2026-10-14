@@ -212,7 +212,8 @@ class TestPulpHelperRepositoryOperations:
             helper._repository_manager, "ensure_rpm_repository_for_arch", return_value="/rpm/href/"
         ) as mock_ensure:
             assert helper.ensure_rpm_repository_for_arch("my-build", "s390x") == "/rpm/href/"
-        mock_ensure.assert_called_once_with("my-build", "s390x", target_arch_repo_build_scoped=False)
+        mock_ensure.assert_called_once()
+        assert mock_ensure.call_args.kwargs.get("layout") is not None
 
     def test_create_or_get_repository_invalid_type(self, mock_pulp_client) -> None:
         """Test create_or_get_repository method with invalid type."""
