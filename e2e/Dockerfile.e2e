@@ -14,7 +14,7 @@ RUN dnf install -y rpm-sign ima-evm-utils-libs && dnf clean all && \
     /usr/local/sbin/bundle-rpmsign.sh && \
     LD_LIBRARY_PATH=/opt/rpmsign/lib64 /opt/rpmsign/usr/bin/rpmsign --version
 
-FROM registry.access.redhat.com/ubi10/ubi-minimal:10.2-1789645153
+FROM registry.access.redhat.com/ubi10/ubi-minimal:10.2-1791891203
 
 # Skip microdnf update — metadata refresh is a common Konflux failure point.
 # rust/cargo/gcc/python3-devel: build rpm-rs from sdist when no wheel matches (e.g. arm64).

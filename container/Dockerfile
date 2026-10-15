@@ -8,7 +8,7 @@
 # ORAS CLI + select-oci-auth (Konflux release-service-utils pattern).
 FROM quay.io/konflux-ci/oras:latest@sha256:1cc659b4d30536ec98300ac551739ef36dee345a7dcfe06129fd78abdc3688ac AS oras
 
-FROM registry.access.redhat.com/ubi10/ubi-minimal:10.2-1789645153 AS builder
+FROM registry.access.redhat.com/ubi10/ubi-minimal:10.2-1791891203 AS builder
 
 ARG VERSION=1.0.0
 ARG RELEASE=1
@@ -34,7 +34,7 @@ RUN uv export --frozen --no-dev --no-emit-project -o /tmp/requirements.txt && \
         --prefix=/app/install --no-deps . && \
     rm -rf /root/.cache /root/.local /tmp/requirements.txt
 
-FROM registry.access.redhat.com/ubi10/ubi-minimal:10.2-1789645153
+FROM registry.access.redhat.com/ubi10/ubi-minimal:10.2-1791891203
 
 # Konflux passes VERSION/RELEASE via build-args-file (container/pulp-tool-container.build-args).
 ARG VERSION=1.0.0
