@@ -146,6 +146,7 @@ clean:
 	rm -rf .pytest_cache
 	rm -rf .mypy_cache
 	rm -rf .ruff_cache
+	rm -rf .pylint.d
 	rm -rf .audit-venv/
 	rm -f coverage.xml
 	rm -f .coverage

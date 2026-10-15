@@ -288,6 +288,8 @@ The e2e test suite runs automatically on pull requests via Konflux Tekton pipeli
 3. **post-test-validation**
    - Run `post-test-validation.py` to verify repository content (uses pre-installed `pulp-cli`)
 
+**Pod resources:** `stepTemplate.computeResources` caps each step at **2Gi** memory (request and limit) and **250m** CPU request, matching the release pipeline [`push-artifacts-to-storage`](https://github.com/konflux-ci/release-service-catalog/blob/development/tasks/managed/push-artifacts-to-storage/push-artifacts-to-storage.yaml) step that runs `pulp-tool upload`.
+
 **ORAS:** Task param **`ociStorage`** (pipeline default matches Konflux artifact storage for `pulp-e2e-testing`) is passed as **`--oci-storage`** to `test-pulp-tool.py`, `post-test-validation.py`, and `post-test-cleanup.py` so all steps agree on whether ORAS/side-tag repos were created.
 
 ### Task: [`post-test-cleanup`](../.tekton/tasks/post-test-cleanup.yaml)

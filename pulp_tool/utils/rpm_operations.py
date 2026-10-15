@@ -10,7 +10,7 @@ import logging
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from .constants import DEFAULT_MAX_WORKERS
+from .client_limits import max_upload_workers
 
 
 def calculate_sha256_checksum(file_path: str) -> str:
@@ -192,7 +192,7 @@ def upload_rpms_parallel(
 
     path_href_pairs: list[tuple[str, str]] = []
     errors: list[str] = []
-    with ThreadPoolExecutor(thread_name_prefix="upload_rpms", max_workers=DEFAULT_MAX_WORKERS) as executor:
+    with ThreadPoolExecutor(thread_name_prefix="upload_rpms", max_workers=max_upload_workers()) as executor:
         futures = {
             executor.submit(client.upload_content, rpm_path, rpm_labels, file_type="rpm", arch=rpm_arch): rpm_path
             for rpm_path, rpm_labels, rpm_arch in rpm_infos

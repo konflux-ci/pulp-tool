@@ -76,6 +76,34 @@ def test_cached_get_hit_and_miss_with_metrics() -> None:
     assert c._metrics.cached_requests >= 1
 
 
+def test_ttl_cache_evicts_oldest_when_over_max_entries() -> None:
+    """``set`` drops oldest entries when ``max_entries`` is exceeded."""
+    cache = TTLCache(ttl=3600, max_entries=2)
+    with patch("pulp_tool.api.pulp_client.cache.time") as mock_time:
+        mock_time.time.return_value = 1.0
+        cache.set("a", 1)
+        mock_time.time.return_value = 2.0
+        cache.set("b", 2)
+        mock_time.time.return_value = 3.0
+        cache.set("c", 3)
+        assert cache.size() == 2
+        assert cache.get("a") is None
+        assert cache.get("b") == 2
+        assert cache.get("c") == 3
+
+
+def test_ttl_cache_prune_expired_on_set() -> None:
+    """``set`` removes expired keys before inserting."""
+    cache = TTLCache(ttl=10, max_entries=10)
+    with patch("pulp_tool.api.pulp_client.cache.time") as mock_time:
+        mock_time.time.return_value = 0.0
+        cache.set("stale", "x")
+        mock_time.time.return_value = 100.0
+        cache.set("fresh", "y")
+        assert cache.size() == 1
+        assert cache.get("fresh") == "y"
+
+
 def test_cached_get_does_not_store_failed_response() -> None:
     """Only successful responses are cached (``is_success`` branch)."""
 

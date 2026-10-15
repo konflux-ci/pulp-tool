@@ -47,6 +47,7 @@ import httpx
 
 from ...exceptions import PulpToolConfigError, PulpToolHTTPError
 from ...utils import create_session_with_retry
+from ...utils.client_limits import get_cache_max_entries, get_cache_ttl, http_max_connections
 from ...utils.constants import DEFAULT_CHUNK_SIZE, RED_HAT_SSO_TOKEN_URL
 from ...utils.correlation import CORRELATION_HEADER, resolve_correlation_id
 from ...utils.session import RetryingAsyncClient
@@ -61,7 +62,7 @@ from ..distributions.rpm import RpmDistributionMixin
 from ..repositories.file import FileRepositoryMixin
 from ..repositories.rpm import RpmRepositoryMixin
 from ..tasks.operations import TaskMixin
-from .cache import CACHE_TTL, PerformanceMetrics, TTLCache, cached_get
+from .cache import PerformanceMetrics, TTLCache, cached_get
 from .chunked_get import chunked_get, chunked_get_async
 from .content_query import PulpClientContentQueryMixin
 from .repository import get_single_resource_by_name
@@ -143,11 +144,16 @@ class PulpClient(
         self._cert_temp_dir: tempfile.TemporaryDirectory | None = None
         self._cert_paths: tuple[str, str] | None = None
         self.session = self._create_session()
+        cache_ttl = get_cache_ttl()
         # Initialize cache for GET requests
-        self._get_cache = TTLCache(ttl=CACHE_TTL)
+        self._get_cache = TTLCache(ttl=cache_ttl, max_entries=get_cache_max_entries())
         # Initialize performance metrics tracker
         self._metrics = PerformanceMetrics()
-        logging.debug("PulpClient initialized with request caching enabled (TTL: %ds)", CACHE_TTL)
+        logging.debug(
+            "PulpClient initialized with request caching enabled (TTL: %ds, max_entries: %d)",
+            cache_ttl,
+            get_cache_max_entries(),
+        )
 
     def _require_client_cert_files_if_configured(self) -> None:
         """
@@ -193,7 +199,7 @@ class PulpClient(
         self._require_client_cert_files_if_configured()
         # Pass cert to Client constructor if available, otherwise auth will be added per-request
         cert = self.cert if self.config.get("cert") else None
-        return create_session_with_retry(cert=cert, extra_headers=self.headers)
+        return create_session_with_retry(cert=cert, extra_headers=self.headers, max_connections=http_max_connections())
 
     def _get_async_session(self) -> httpx.AsyncClient:
         """Get or create async session with optimized configuration."""
@@ -201,11 +207,10 @@ class PulpClient(
             self._require_client_cert_files_if_configured()
             cert = self.cert if self.config.get("cert") else None
 
-            # Create async client with same configuration as sync client
-            # Increased limits for concurrent chunked requests
+            max_conn = http_max_connections()
             limits = httpx.Limits(
-                max_keepalive_connections=20,
-                max_connections=100,  # Match sync client's connection pool
+                max_connections=max_conn,
+                max_keepalive_connections=max(1, max_conn // 4),
             )
             timeout = httpx.Timeout(self.timeout, connect=10.0)
 
@@ -257,11 +262,33 @@ class PulpClient(
             self._async_session = RetryingAsyncClient(**client_kwargs)  # type: ignore[arg-type]
         return self._async_session
 
+    def invalidate_get_cache(self) -> None:
+        """Clear cached GET responses (e.g. after repository mutations)."""
+        if hasattr(self, "_get_cache"):
+            self._get_cache.clear()
+
+    def _close_async_session_sync(self) -> None:
+        """Close the async httpx client when no event loop is running."""
+        if not self._async_session or self._async_session.is_closed:
+            self._async_session = None
+            return
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            asyncio.run(self.async_close())
+            self._async_session = None
+        else:
+            logging.warning(
+                "PulpClient.close() called with an open async session while an event loop is running; "
+                "await async_close() explicitly"
+            )
+
     def close(self) -> None:
         """Close the session and release all connections."""
         if hasattr(self, "session") and self.session:
             self.session.close()
             logging.debug("PulpClient session closed and connections released")
+        self._close_async_session_sync()
         # Clear cache on close
         if hasattr(self, "_get_cache"):
             cache_size = self._get_cache.size()
@@ -284,6 +311,7 @@ class PulpClient(
         if self._async_session and not self._async_session.is_closed:
             await self._async_session.aclose()
             logging.debug("PulpClient async session closed and connections released")
+        self._async_session = None
 
     def _run_async(self, coro) -> Any:
         """
@@ -851,7 +879,7 @@ class PulpClient(
         Returns:
             Response object from the operation
         """
-        return repository_operation_impl(
+        response = repository_operation_impl(
             self,
             operation,
             repo_type,
@@ -861,6 +889,9 @@ class PulpClient(
             publication=publication,
             distribution_href=distribution_href,
         )
+        if operation in ("create_repo", "create_distro", "update_distro") and response.is_success:
+            self.invalidate_get_cache()
+        return response
 
 
 __all__ = ["DEFAULT_TIMEOUT", "PulpClient"]

@@ -945,8 +945,7 @@ class RepositoryManager:
                 - {repo_type}_prn: Repository PRN for each type
                 - {repo_type}_href: Repository href for RPM repositories (None for file repos)
         """
-        # Run the async version and return results
-        return asyncio.run(
+        return self.client._run_async(
             self._setup_repositories_impl_async(
                 build_id,
                 signed_by=signed_by,

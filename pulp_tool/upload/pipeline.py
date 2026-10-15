@@ -19,6 +19,7 @@ from ..models.pulp_results import PulpResultsDocument
 from ..models.repository import RepositoryRefs
 from ..models.results import RpmUploadResult
 from ..utils.artifact_detection import detect_arch_from_filepath, group_rpm_paths_by_arch
+from ..utils.client_limits import arch_upload_worker_count
 from ..utils.constants import ARCH_DETECT_WARNING_MSG, ARCHITECTURE_THREAD_PREFIX, SUPPORTED_ARCHITECTURES
 from ..utils.error_handling import handle_generic_error
 from ..utils.pulp_tasks import create_file_content_and_wait
@@ -198,7 +199,8 @@ class UploadOrchestrator:
 
         # Process architectures in parallel for better performance
         with ThreadPoolExecutor(
-            thread_name_prefix=ARCHITECTURE_THREAD_PREFIX, max_workers=len(existing_archs)
+            thread_name_prefix=ARCHITECTURE_THREAD_PREFIX,
+            max_workers=arch_upload_worker_count(len(existing_archs)),
         ) as executor:
             # Submit all architecture processing tasks
             future_to_arch = self._submit_architecture_tasks(

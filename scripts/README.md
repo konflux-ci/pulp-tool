@@ -48,7 +48,7 @@ For full CI parity (yamllint, shellcheck, hadolint, codespell, pip-audit, checkt
 
 ### `run-pylint-precommit.sh` / `run-pip-audit-precommit.sh`
 
-Used by pre-commit for faster local hooks: scoped parallel pylint; pip-audit with a persistent `.audit-venv` and skip when lockfiles are unchanged. `make audit` calls the pip-audit script with `--force`.
+Used by pre-commit for faster local hooks: pylint on staged paths only (full tree when many files change); default **`-j 1`** in `run-pylint.sh` (override `PYLINT_JOBS`). pip-audit uses a persistent `.audit-venv` and skips when lockfiles are unchanged. `make audit` calls the pip-audit script with `--force`.
 
 ### `update-deps.sh`
 

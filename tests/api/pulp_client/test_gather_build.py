@@ -262,6 +262,16 @@ class TestPulpClient:
         assert result.status_code == 201
         assert result.json()["pulp_href"] == "/pulp/api/v3/repositories/rpm/rpm/12345/"
 
+    def test_repository_operation_create_repo_invalidates_get_cache(self, mock_pulp_client, httpx_mock) -> None:
+        """Mutating repository operations clear the GET cache."""
+        httpx_mock.post("https://pulp.example.com/pulp/api/v3/test-domain/api/v3/repositories/rpm/rpm/").mock(
+            return_value=httpx.Response(201, json={"pulp_href": "/pulp/api/v3/repositories/rpm/rpm/12345/"})
+        )
+        mock_pulp_client._get_cache.set("seed", httpx.Response(200, json={"cached": True}))
+        new_repo = RpmRepositoryRequest(name="test-repo", autopublish=True)
+        mock_pulp_client.repository_operation("create_repo", "rpm", repository_data=new_repo)
+        assert mock_pulp_client._get_cache.size() == 0
+
     def test_repository_operation_create_repo_missing_data(self, mock_pulp_client) -> None:
         with pytest.raises(ValueError, match="Repository data is required for 'create_repo' operations"):
             mock_pulp_client.repository_operation("create_repo", "rpm", repository_data=None)

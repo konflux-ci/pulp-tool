@@ -18,6 +18,32 @@ from pulp_tool.models.pulp_results import PulpResultsDocument
 class TestPulpClientAsync:
     """Test PulpClient async methods."""
 
+    def test_close_tears_down_async_session(self, mock_config) -> None:
+        """``close()`` closes a cached async client when no loop is running."""
+
+        async def _open_session(client: PulpClient) -> None:
+            session = client._get_async_session()
+            assert not session.is_closed
+
+        client = PulpClient(mock_config)
+        asyncio.run(_open_session(client))
+        assert client._async_session is not None
+        client.close()
+        assert client._async_session is None
+
+    def test_close_warns_when_async_session_open_inside_running_loop(self, mock_config) -> None:
+        """``close()`` logs when an event loop is already running."""
+
+        async def _run() -> None:
+            client = PulpClient(mock_config)
+            client._get_async_session()
+            with patch("pulp_tool.api.pulp_client.client.logging.warning") as mock_warning:
+                client.close()
+                mock_warning.assert_called_once()
+                assert "event loop is running" in str(mock_warning.call_args)
+
+        asyncio.run(_run())
+
     def test_prepare_async_kwargs_with_auth(self, mock_config) -> None:
         """Test _prepare_async_kwargs with auth configured (lines 762-764)."""
         config_oauth = {k: v for k, v in mock_config.items() if k not in ("cert", "key")}

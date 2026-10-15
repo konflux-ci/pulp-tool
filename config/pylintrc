@@ -2,8 +2,8 @@
 
 [MAIN]
 
-# Pickle collected data for later comparisons.
-persistent=no
+# Pickle collected data for later comparisons (cache under .pylint.d/).
+persistent=yes
 
 [MESSAGES CONTROL]
 

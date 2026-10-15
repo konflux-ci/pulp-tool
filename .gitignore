@@ -1,5 +1,8 @@
 # .gitignore for pulp-tool Python package
 
+# Pylint incremental cache (config/pylintrc persistent=yes)
+.pylint.d/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

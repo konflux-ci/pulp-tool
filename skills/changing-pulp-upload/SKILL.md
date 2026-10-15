@@ -33,6 +33,7 @@ Before merge, verify (extend tests where applicable):
 - [ ] Config/TLS/paths assumed in containers; image entrypoint and invocation (image *build*: **changing-pulp-container**)
 - [ ] RPM discovery under `--rpm-path`
 - [ ] Both pipelines still match (config path, flags, workspace `/var/workdir/results`, `oras-staging/` where used)
+- [ ] If changing `PulpClient` pools, GET cache, or upload concurrency: update [`pulp_tool/utils/client_limits.py`](../../pulp_tool/utils/client_limits.py), tests under `tests/utils/test_client_limits.py`, and [ARCHITECTURE.md § Memory and Konflux pods](../../docs/ARCHITECTURE.md)
 
 ## Red flags — stop and re-read CLAUDE.md
 

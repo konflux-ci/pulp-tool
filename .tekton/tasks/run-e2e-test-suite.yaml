@@ -22,6 +22,13 @@ spec:
   stepTemplate:
     image: $(params.e2e-image)
     imagePullPolicy: Always
+    # Match release-service-catalog push-artifacts-to-storage (pulp-tool upload step).
+    computeResources:
+      limits:
+        memory: 2Gi
+      requests:
+        memory: 2Gi
+        cpu: 250m
     securityContext:
       allowPrivilegeEscalation: false
       capabilities:

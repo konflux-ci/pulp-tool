@@ -248,6 +248,7 @@ class TestRepositoryManagerSetupRepositoriesAsync:
         """Test _setup_repositories_impl calls async version (line 453)."""
         mock_client = Mock()
         mock_client.namespace = "test-namespace"
+        mock_client._run_async = Mock()
         manager = RepositoryManager(mock_client)
         mock_repositories = {
             "rpms_prn": "test-rpms-prn",
@@ -256,7 +257,8 @@ class TestRepositoryManagerSetupRepositoriesAsync:
             "sbom_prn": "test-sbom-prn",
             "artifacts_prn": "test-artifacts-prn",
         }
-        with patch.object(manager, "_setup_repositories_impl_async", return_value=mock_repositories) as mock_async:
+        mock_client._run_async.return_value = mock_repositories
+        with patch.object(manager, "_setup_repositories_impl_async") as mock_async:
             result = manager._setup_repositories_impl("test-build")
             mock_async.assert_called_once_with(
                 "test-build",
@@ -266,6 +268,7 @@ class TestRepositoryManagerSetupRepositoriesAsync:
                 skip_logs_repo=False,
                 skip_sbom_repo=False,
             )
+            mock_client._run_async.assert_called_once()
             assert result == mock_repositories
 
 

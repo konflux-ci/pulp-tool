@@ -69,15 +69,30 @@ class PerformanceMetrics:
 class TTLCache:
     """Simple time-to-live cache for GET requests."""
 
-    def __init__(self, ttl: int = CACHE_TTL):
+    def __init__(self, ttl: int = CACHE_TTL, max_entries: int | None = None):
         """
         Initialize TTL cache.
 
         Args:
             ttl: Time to live in seconds for cache entries
+            max_entries: Maximum number of entries (None = unbounded)
         """
         self._cache: dict[str, tuple[Any, float]] = {}
         self._ttl = ttl
+        self._max_entries = max_entries
+
+    def _prune_expired(self) -> None:
+        now = time.time()
+        expired = [key for key, (_, ts) in self._cache.items() if now - ts >= self._ttl]
+        for key in expired:
+            del self._cache[key]
+
+    def _evict_if_over_capacity(self) -> None:
+        if self._max_entries is None:
+            return
+        while len(self._cache) > self._max_entries:
+            oldest_key = next(iter(self._cache))
+            del self._cache[oldest_key]
 
     def get(self, key: str) -> Any | None:
         """
@@ -104,7 +119,9 @@ class TTLCache:
             key: Cache key
             value: Value to cache
         """
+        self._prune_expired()
         self._cache[key] = (value, time.time())
+        self._evict_if_over_capacity()
 
     def clear(self) -> None:
         """Clear all cache entries."""

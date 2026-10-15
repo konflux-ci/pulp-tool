@@ -154,7 +154,29 @@ Formal records: [ADR 0000 — how we record decisions](adr/0000-record-architect
 |------|----------------|
 | **Local / automation** | `pip install` / `pip install -e .`; `pulp-tool` on PATH |
 | **Konflux** | Container image from `.tekton/` build; read-only mounts for config and workspace |
-| **Scale** | Client-side concurrency (`--max-workers`); bounded by Pulp API and network |
+| **Scale** | Client-side concurrency (`--max-workers` for `pull`); upload parallelism via [`pulp_tool/utils/client_limits.py`](../pulp_tool/utils/client_limits.py); bounded by Pulp API and network |
+
+### Memory and Konflux pods
+
+Tekton steps are short-lived: each command should use one `PulpClient` and call **`close()`** in a `finally` block (upload/pull CLIs already do). That releases sync/async HTTP pools and clears the GET response cache.
+
+**What still scales with workload** (not leaks, but peak RSS):
+
+- Parallel RPM uploads (per-architecture thread pool × per-arch RPM workers).
+- Chunked Pulp GET queries that merge large `results` lists in memory.
+- `PulpResultsDocument` and artifact metadata built during upload.
+
+**Default limits** (override with `PULP_TOOL_*` environment variables):
+
+| Setting | Default | Env variable |
+|---------|---------|----------------|
+| HTTP connection pool (`PulpClient` sync + async) | 24 | `PULP_TOOL_HTTP_MAX_CONNECTIONS` |
+| GET cache max entries | 64 | `PULP_TOOL_GET_CACHE_MAX_ENTRIES` |
+| GET cache TTL (seconds) | 300 | `PULP_TOOL_GET_CACHE_TTL` |
+| Parallel RPM uploads per architecture | 2 | `PULP_TOOL_MAX_UPLOAD_WORKERS` |
+| Parallel architecture upload threads | 3 (capped by arch dirs present) | `PULP_TOOL_MAX_ARCH_UPLOAD_WORKERS` |
+
+`pull` honors global `--max-workers` but caps concurrent downloads to the HTTP connection budget. Raise env values on larger workers if upload or pull becomes CPU/network bound.
 
 ---
 

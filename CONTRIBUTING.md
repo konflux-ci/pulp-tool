@@ -121,11 +121,11 @@ make lint
 # Or individually (also what pre-commit ruff/mypy hooks call):
 make lint-ruff-check
 make lint-ruff-format
-make lint-pylint    # scripts/run-pylint.sh full — pylint --errors-only -j "${PYLINT_JOBS:-0}"
+make lint-pylint    # scripts/run-pylint.sh full — pylint --errors-only -j "${PYLINT_JOBS:-1}"
 make lint-mypy
 ```
 
-**Single source of truth:** `Makefile` `LINT_PY_TARGETS` (`pulp_tool tests`), `scripts/run-pylint.sh`, and [`.github/workflows/python-diff-lint.yml`](.github/workflows/python-diff-lint.yml) / [`.pre-commit-config.yaml`](.pre-commit-config.yaml) all use these targets. Pylint defaults to **`-j 0`** (override with `PYLINT_JOBS` if needed). On commit, the pylint hook runs `scripts/run-pylint.sh staged` on staged paths only (full tree when many files change). **pip-audit** runs only when `uv.lock` or `pyproject.toml` change (reuses `.audit-venv`, skips if those files are unchanged since the last successful audit). Pre-push hooks run `make test-diff-coverage` and Checkton (install with `pre-commit install --hook-type pre-push`). Run everything locally:
+**Single source of truth:** `Makefile` `LINT_PY_TARGETS` (`pulp_tool tests`), `scripts/run-pylint.sh`, and [`.github/workflows/python-diff-lint.yml`](.github/workflows/python-diff-lint.yml) / [`.pre-commit-config.yaml`](.pre-commit-config.yaml) all use these targets. Pylint defaults to **`-j 1`** (import-heavy tree; override with `PYLINT_JOBS=2` or `PYLINT_JOBS=0` if needed). On commit, the pylint hook runs `scripts/run-pylint.sh staged` on staged paths only (full tree when many files change). **pip-audit** runs only when `uv.lock` or `pyproject.toml` change (reuses `.audit-venv`, skips if those files are unchanged since the last successful audit). Pre-push hooks run `make test-diff-coverage` and Checkton (install with `pre-commit install --hook-type pre-push`). Run everything locally:
 
 ```bash
 make pre-commit-ci

@@ -264,7 +264,10 @@ def download_artifacts_concurrently(
     )
     total_artifacts = len(download_tasks)
 
-    logging.debug("Starting download of %d artifacts with %d workers", total_artifacts, max_workers)
+    from ..utils.client_limits import effective_pull_workers
+
+    workers = effective_pull_workers(max_workers)
+    logging.debug("Starting download of %d artifacts with %d workers", total_artifacts, workers)
 
     # Initialize artifact storage structure
     pulled_artifacts = PulledArtifacts()
@@ -280,7 +283,7 @@ def download_artifacts_concurrently(
         )
 
     logging.info("Downloading %d artifact(s)", total_artifacts)
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+    with ThreadPoolExecutor(max_workers=workers) as executor:
         # Submit all download tasks
         future_to_artifact = {
             executor.submit(distribution_client.pull_data_async, task.to_tuple()): task.artifact_name
