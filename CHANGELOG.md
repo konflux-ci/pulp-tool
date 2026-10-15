@@ -30,7 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
-- **`pull`**: allowlisted `arch` on download tasks, `base_dir` resolved-path check for artifact save paths, and per-download byte cap (`PULP_TOOL_MAX_DOWNLOAD_BYTES`, default ~400 MiB)
+- **`pull`**: allowlisted `arch` on download tasks, `base_dir` resolved-path check for artifact save paths, and per-download byte cap (`PULP_TOOL_MAX_DOWNLOAD_BYTES`, default 2 GiB)
 - **`pull --verify-rpm-gpg`** / **`--gpg-keyring`** (and `cli.verify_rpm_gpg` / `cli.gpg_keyring` on transfer config): optional `rpm --checksig` after SHA256 verification, before transfer re-upload
 - CI: blocking **Bandit** (HIGH) with SARIF upload on `security-scan`; **`make bandit`** for local runs
 - Konflux **pulp-tool-container**: pin `container-build-catalog` pipeline `revision` to a full commit SHA (Renovate `tekton` updates); runtime image installs **`rpm`** for GPG checks
@@ -45,6 +45,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`pull`:** allow source-built SDK RPMs larger than 400 MiB by raising the default per-artifact download limit to 2 GiB.
 - **`upload` / `upload-build`:** `--target-arch-repo-build-scoped` (requires `--target-arch-repo`) names RPM repositories and distributions `{build_id}/{arch}` instead of global `{arch}` for isolated concurrent uploads; e2e uses this flag so validation and cleanup remain run-scoped
 
 ### Changed

@@ -176,6 +176,36 @@ class TestDistributionClient:
         with pytest.raises(PulpToolError, match="Content-Length"):
             client.pull_data("big.rpm", "https://example.com/big.rpm", "x86_64", "rpm")
 
+    def test_pull_data_allows_source_built_sdk_rpm_size_by_default(self, monkeypatch, tmp_path) -> None:
+        """The default cap accepts the reported size of a source-built SDK RPM."""
+        monkeypatch.delenv("PULP_TOOL_MAX_DOWNLOAD_BYTES", raising=False)
+        file_path = tmp_path / "sdk.rpm"
+        transport = httpx.MockTransport(
+            lambda _request: httpx.Response(200, content=b"rpm", headers={"content-length": "936950007"})
+        )
+        with (
+            httpx.Client(transport=transport) as session,
+            patch.object(DistributionClient, "_create_session", return_value=session),
+            patch("pulp_tool.utils.path_utils.get_artifact_save_path", return_value=str(file_path)),
+        ):
+            client = DistributionClient(cert="cert.pem", key="key.pem")
+            assert client.pull_data("sdk.rpm", "https://example.com/sdk.rpm", "x86_64", "rpm") == str(file_path)
+        assert file_path.read_bytes() == b"rpm"
+
+    def test_pull_data_rejects_content_length_above_default_limit(self, monkeypatch) -> None:
+        """The higher default still rejects artifacts beyond the byte cap."""
+        monkeypatch.delenv("PULP_TOOL_MAX_DOWNLOAD_BYTES", raising=False)
+        transport = httpx.MockTransport(
+            lambda _request: httpx.Response(200, content=b"rpm", headers={"content-length": "2147483649"})
+        )
+        with (
+            httpx.Client(transport=transport) as session,
+            patch.object(DistributionClient, "_create_session", return_value=session),
+        ):
+            client = DistributionClient(cert="cert.pem", key="key.pem")
+            with pytest.raises(PulpToolError, match="Content-Length 2147483649 exceeds download limit 2147483648"):
+                client.pull_data("too-big.rpm", "https://example.com/too-big.rpm", "x86_64", "rpm")
+
     def test_pull_data_streaming_byte_cap_deletes_partial(self, monkeypatch) -> None:
         """When Content-Length is absent, enforce cap while reading chunks."""
         monkeypatch.setenv("PULP_TOOL_MAX_DOWNLOAD_BYTES", "3")
