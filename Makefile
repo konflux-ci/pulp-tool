@@ -25,7 +25,7 @@ help:
 	@echo "  make lock         - Regenerate uv.lock from pyproject.toml (uv lock)"
 	@echo "  make lock-check   - Fail if pyproject.toml and uv.lock are out of sync"
 	@echo "  make release-please [BUMP=major|minor|bugfix]  - Open/update release PR (Release Please; gh auth or GITHUB_TOKEN)"
-	@echo "  make release-publish [BUMP=major|minor|bugfix] - Push v* tag from manifest or bumped version (git only; triggers release.yml)"
+	@echo "  make release-publish [BUMP=major|minor|bugfix] - Push v* tag + Release Please label sync (git + gh; triggers release.yml)"
 	@echo "  Release remote: RELEASE_GIT_REMOTE=upstream (default origin; see docs/releasing.md)"
 	@echo ""
 	@echo "  Diff coverage base: COMPARE_BRANCH=origin/main (override for e.g. origin/release-1.0)"

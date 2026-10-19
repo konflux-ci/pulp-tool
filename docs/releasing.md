@@ -21,7 +21,7 @@ Canonical order: **`make release-please`** → **`make release-publish`** → **
 | Phase | What happens | Automation |
 |-------|----------------|------------|
 | **1. Release Please** | Open/update Release PR, curate changelog, merge to `main`, wait for container build | `make release-please` + human merge; **`pulp-tool-container-on-push`** on push to `main` |
-| **2. Publish (Python)** | Cut `vX.Y.Z` tag; GitHub Release + PyPI | `make release-publish` → **`release.yml`** |
+| **2. Publish (Python)** | Cut `vX.Y.Z` tag; clear Release Please `autorelease` labels; GitHub Release + PyPI | `make release-publish` → **`release.yml`** |
 | **3. Konflux release** | Promote the built image to downstream registries/consumers | **Manual** Release Plan in Konflux / App Studio ([Konflux releasing](https://konflux-ci.dev/docs/releasing/)) |
 
 ```mermaid
@@ -90,7 +90,8 @@ Release Please does **not** run in GitHub Actions for this repository. Maintaine
 |-------------|--------|
 | **Node.js + npm** | For `npx release-please@…` on **`make release-please`** (or install globally: `npm i -g release-please`) |
 | **GitHub CLI (`gh`)** or **token** | **`make release-please`** calls the GitHub API to open/update the release PR. Use `gh auth login` (recommended) or set `GITHUB_TOKEN` / `GH_TOKEN` with **contents** and **pull-requests** write. There is no token-free mode for this step. |
-| **Git push access** | **`make release-publish`** only runs `git tag` + `git push` (SSH or HTTPS); no GitHub API token |
+| **Git push access** | **`make release-publish`** runs `git tag` + `git push` (SSH or HTTPS) |
+| **GitHub CLI (`gh`) or token** | **`make release-publish`** also updates `autorelease` labels on the merged release PR (`gh auth login` or `GITHUB_TOKEN` / `GH_TOKEN` with issues write) so the next **`make release-please`** can open a new Release PR |
 | **Clean `main` checkout** | `git checkout main && git pull <remote> main` before `make release-please` (use `upstream` when `RELEASE_GIT_REMOTE=upstream`) |
 
 **Configuration files**
@@ -256,7 +257,9 @@ Container images are **not** rebuilt on tag push; they are produced when the rel
 | No Release Please PR | Run `make release-please` on up-to-date `main`; ensure commits since last tag warrant a release; try `--dry-run --debug` |
 | `release-please` / `npx` not found | Install Node.js/npm or `npm i -g release-please` |
 | Token errors on `make release-please` | Run `gh auth login` or set `GITHUB_TOKEN` with contents + pull-requests write; Release Please cannot open PRs without GitHub API auth |
-| `make release-publish` auth failed | Configure git push (SSH key or HTTPS credential helper); this step does not use `GITHUB_TOKEN` |
+| `make release-publish` git push failed | Configure git push (SSH key or HTTPS credential helper) for `RELEASE_GIT_REMOTE` |
+| `make release-publish` label sync failed | Run `gh auth login` or set `GITHUB_TOKEN` / `GH_TOKEN`. If the tag is already on the remote, run **`./scripts/release-please.sh sync-release-labels`** (uses [`.release-please-manifest.json`](../.release-please-manifest.json)), then **`make release-please`** |
+| Untagged merged release PRs / `make release-please` aborts | Merged release PR still has **`autorelease: pending`** while **`vX.Y.Z`** already exists — run **`./scripts/release-please.sh sync-release-labels`** on up-to-date **`main`**, then **`make release-please`** |
 | Tag not created after release PR merge | Run `make release-publish` locally — tagging is not automatic on merge |
 | Wrong tag version on publish | Ensure the release PR is merged and run publish **after** the script pulls `main` (it reads `.release-please-manifest.json` from the synced tree, not a stale local copy). Delete a mistaken tag on the remote if needed before re-publishing. |
 | Tag pushed to fork by mistake | Use `RELEASE_GIT_REMOTE=upstream make release-publish` (or `git push upstream vX.Y.Z`); PyPI expects tags on `konflux-ci/pulp-tool` |

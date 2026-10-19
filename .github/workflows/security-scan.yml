@@ -26,7 +26,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
-          python-version: '3.14'
+          python-version: '3.15'
 
       # pip-audit: fail on new OSV/PyPI advisories. Pygments CVE-2026-4539 (dev-only via pytest/diff-cover):
       # no release >2.19.2 on PyPI yet — remove these --ignore-vuln flags when pyproject pins pygments>=2.19.3.

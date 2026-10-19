@@ -4,9 +4,10 @@
 # Usage:
 #   ./scripts/release-please.sh pr [-- extra release-please flags]
 #   ./scripts/release-please.sh publish
+#   ./scripts/release-please.sh sync-release-labels
 #
 # pr:      uses release-please release-pr (GitHub API — needs gh login or a token)
-# publish: git tag + push from .release-please-manifest.json (git credentials only)
+# publish: git tag + push, then mark the merged release PR complete for Release Please
 #
 # Optional BUMP=major|minor|bugfix overrides conventional-commit semver inference:
 # pr passes --release-as with the bumped version; publish tags that version.
@@ -82,13 +83,18 @@ Commands:
   pr        Create or update the release pull request (run on main after feature merges).
             Also syncs container/pulp-tool-container.build-args, VERSION, and pulp_tool/_version.py
             on the release PR branch.
-  publish   Create and push v* tag from .release-please-manifest.json (triggers release.yml)
-            Optional BUMP=major|minor|bugfix tags a bumped version instead of the manifest.
+  publish   Create and push v* tag from .release-please-manifest.json (triggers release.yml),
+            then update autorelease labels on the merged release PR so the next release-pr
+            run can open a new Release PR. Optional BUMP=major|minor|bugfix tags a bumped
+            version instead of the manifest.
+  sync-release-labels  Update autorelease labels only (no tag). Uses the version in
+            .release-please-manifest.json — for recovery when the tag was pushed earlier.
 
 Authentication:
   pr        release-please talks to the GitHub API. Provide GITHUB_TOKEN/GH_TOKEN, or run
             `gh auth login` — the script uses `gh auth token` when no token env var is set.
-  publish   plain git tag push only (SSH or HTTPS git credentials; no GitHub API token)
+  publish   git tag push (SSH or HTTPS) plus GitHub API via `gh` (or GITHUB_TOKEN/GH_TOKEN)
+            to clear autorelease: pending on the merged release PR
 
 Environment:
   BUMP or RELEASE_BUMP        Optional bump kind for pr (--release-as) or publish (tag):
@@ -237,6 +243,55 @@ sync_container_build_args_to_release_pr() {
   fi
 }
 
+ensure_release_please_tagged_label() {
+  local repo_url="$1"
+  gh label create "autorelease: tagged" --repo "$repo_url" \
+    --color "0E8A16" --description "Release Please: release completed" 2>/dev/null || true
+}
+
+mark_merged_release_pr_tagged() {
+  local version="$1"
+  local repo_url="$2"
+
+  if ! command -v gh >/dev/null 2>&1; then
+    echo "Install gh to mark the merged release PR complete for Release Please." >&2
+    exit 1
+  fi
+  if [[ -z "$(resolve_github_token || true)" ]]; then
+    echo "release-publish needs GitHub API access to update autorelease labels." >&2
+    echo "Run 'gh auth login' or set GITHUB_TOKEN / GH_TOKEN (issues: write)." >&2
+    exit 1
+  fi
+
+  ensure_release_please_tagged_label "$repo_url"
+
+  local pr_number=""
+  pr_number="$(gh search issues --repo "$repo_url" \
+    "is:pr is:merged label:\"autorelease: pending\" \"release ${version}\"" \
+    --json number,title \
+    --jq '[.[] | select(.title | test(": release [0-9]"))][0].number // empty' 2>/dev/null || true)"
+
+  if [[ -z "$pr_number" ]]; then
+    local pending_count="0"
+    pending_count="$(gh search issues --repo "$repo_url" \
+      'is:pr is:merged label:"autorelease: pending"' \
+      --json number --jq 'length' 2>/dev/null || echo "0")"
+    if [[ "$pending_count" != "0" ]]; then
+      echo "Warning: ${pending_count} merged release PR(s) still have autorelease: pending" \
+        "but none matched release ${version} in the title." >&2
+      echo "Update labels on the release PR manually, then re-run make release-please." >&2
+      exit 1
+    fi
+    echo "No merged release PR with autorelease: pending (already marked complete)."
+    return 0
+  fi
+
+  echo "Marking merged release PR #${pr_number} complete for Release Please (v${version})..."
+  gh issue edit "$pr_number" --repo "$repo_url" \
+    --remove-label "autorelease: pending" \
+    --add-label "autorelease: tagged"
+}
+
 publish_git_tag() {
   local version tag manifest_version=""
 
@@ -274,6 +329,17 @@ publish_git_tag() {
   git tag "$tag"
   git push "$RELEASE_GIT_REMOTE" "$tag"
   echo "Pushed ${tag} to ${RELEASE_GIT_REMOTE}. release.yml should start on GitHub Actions."
+
+  local repo_url=""
+  repo_url="$(resolve_repo_url)"
+  mark_merged_release_pr_tagged "$version" "$repo_url"
+}
+
+sync_release_labels_only() {
+  local version repo_url
+  version="$(read_manifest_version)"
+  repo_url="$(resolve_repo_url)"
+  mark_merged_release_pr_tagged "$version" "$repo_url"
 }
 
 run_release_pr_command() {
@@ -336,8 +402,15 @@ case "$cmd" in
   pr|release-pr)
     run_release_pr_command "${extra_args[@]}"
     ;;
-  publish|github-release|tag)
+  publish|tag)
     publish_git_tag
+    ;;
+  sync-release-labels|sync-labels)
+    sync_release_labels_only
+    ;;
+  github-release)
+    echo "The github-release command is deprecated; use publish (tag + label sync) or sync-release-labels." >&2
+    exit 1
     ;;
   -h|--help|help)
     usage

@@ -75,9 +75,12 @@ gh auth login
 ./scripts/release-please.sh pr
 make release-please
 
-# After merging the release PR — push v* tag (git credentials only)
+# After merging the release PR — push v* tag and sync Release Please labels
 ./scripts/release-please.sh publish
 make release-publish
+
+# Tag already pushed? Sync autorelease labels only (recovery)
+./scripts/release-please.sh sync-release-labels
 
 # Canonical repo on upstream (fork on origin):
 RELEASE_GIT_REMOTE=upstream make release-please
@@ -93,7 +96,7 @@ make release-publish BUMP=minor
 BUMP=major ./scripts/release-please.sh pr
 ```
 
-`make release-please` needs GitHub API access (`gh auth login` or a token). `make release-publish` uses plain `git tag` / `git push` only. Optional **`BUMP=major`**, **`BUMP=minor`**, or **`BUMP=bugfix`** (alias **`patch`**) bumps from [`.release-please-manifest.json`](../.release-please-manifest.json): on **`pr`**, passes **`--release-as`** to Release Please; on **`publish`**, tags the bumped version instead of the manifest value. Set **`RELEASE_GIT_REMOTE`** (default `origin`) when the release target is not `origin` — see [docs/releasing.md](../docs/releasing.md#fork-and-upstream-remotes).
+`make release-please` and `make release-publish` need GitHub API access (`gh auth login` or a token) for Release Please PRs and autorelease labels; publish also needs `git tag` / `git push` on **`RELEASE_GIT_REMOTE`**. Optional **`BUMP=major`**, **`BUMP=minor`**, or **`BUMP=bugfix`** (alias **`patch`**) bumps from [`.release-please-manifest.json`](../.release-please-manifest.json): on **`pr`**, passes **`--release-as`** to Release Please; on **`publish`**, tags the bumped version instead of the manifest value. Set **`RELEASE_GIT_REMOTE`** (default `origin`) when the release target is not `origin` — see [docs/releasing.md](../docs/releasing.md#fork-and-upstream-remotes).
 
 ## Usage
 

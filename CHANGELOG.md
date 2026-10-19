@@ -46,6 +46,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`make release-publish`:** after pushing the `v*` tag, sync `autorelease: pending` → `autorelease: tagged` on the merged release PR so **`make release-please`** is not blocked by “untagged, merged release PRs”. Recovery without re-tagging: **`./scripts/release-please.sh sync-release-labels`**.
 - **`pull`:** allow source-built SDK RPMs larger than 400 MiB by raising the default per-artifact download limit to 2 GiB.
 - **`upload` / `upload-build`:** `--target-arch-repo-build-scoped` (requires `--target-arch-repo`) names RPM repositories and distributions `{build_id}/{arch}` instead of global `{arch}` for isolated concurrent uploads; e2e uses this flag so validation and cleanup remain run-scoped
 
