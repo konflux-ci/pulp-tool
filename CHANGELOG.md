@@ -5,88 +5,46 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.3.1](https://github.com/konflux-ci/pulp-tool/compare/v1.3.0...v1.3.1) (2026-10-27)
+## [Unreleased]
 
+## [1.3.1](https://github.com/konflux-ci/pulp-tool/compare/v1.3.0...v1.3.1) (2026-10-27)
 
 ### Fixed
 
-* **upload:** ORAS-attach pulp_results on upload-build ([078edd4](https://github.com/konflux-ci/pulp-tool/commit/078edd43e1a07152603269fb3f3f58691cee3076))
-* **upload:** ORAS-attach pulp_results on upload-build ([5e8b48a](https://github.com/konflux-ci/pulp-tool/commit/5e8b48a3a95fb234e3af6792c9eaa18d56e2c261))
+- **`upload-build`** with **`--oci-storage`**: ORAS-**attach** `pulp_results.json` to the manifest already at `ociStorage` (import-to-quay RPM push) instead of **`oras push`**, so RPM blobs at that ref are not replaced; **`PULP-IMAGE_*`** digest is the attached referrer ([5e8b48a](https://github.com/konflux-ci/pulp-tool/commit/5e8b48a))
+
+### Changed
+
+- Dev **`uv.lock`**: bump certifi, filelock, setuptools, and virtualenv for **`pip-audit`** / security-scan advisories; pin audit tooling (`pip`, `uv`); remove legacy Pygments CVE ignores ([75e30a9](https://github.com/konflux-ci/pulp-tool/commit/75e30a9))
 
 ## [1.3.0](https://github.com/konflux-ci/pulp-tool/compare/v1.2.0...v1.3.0) (2026-10-19)
 
-
 ### Added
 
-* **pull,upload:** side-tag transfer, upload-build ORAS, and Konflux OCI integration ([#242](https://github.com/konflux-ci/pulp-tool/issues/242)) ([91defa2](https://github.com/konflux-ci/pulp-tool/commit/91defa28570112c0968053ec991e1c22b7cf0f88))
-* **results:** canonical pulp_results.json and update-build command ([3f6abc5](https://github.com/konflux-ci/pulp-tool/commit/3f6abc5b049cb6cb0efa871f497cf35d293ab736))
-* **results:** canonical pulp_results.json and update-build command ([3750e5a](https://github.com/konflux-ci/pulp-tool/commit/3750e5a73f6c896d171b0e5b82cec4c5e6394fcb))
-* **upload:** add target-arch-repo-build-scoped for per-build arch RPM repos ([bd5228b](https://github.com/konflux-ci/pulp-tool/commit/bd5228b1298c29035af9d970814666090b8ee6b2))
-* **upload:** target-arch-repo-build-scoped for concurrent e2e ([3da88a2](https://github.com/konflux-ci/pulp-tool/commit/3da88a2692dd5f788bdc3a58437ee78737288cd9))
-
-
-### Fixed
-
-* **pull:** raise default artifact download limit ([#263](https://github.com/konflux-ci/pulp-tool/issues/263)) ([a1048d9](https://github.com/konflux-ci/pulp-tool/commit/a1048d939741f43fea0538dafd1e60989ddd70f4))
-* **pull:** use global side-tag RPM repository path ([58e0f8f](https://github.com/konflux-ci/pulp-tool/commit/58e0f8f05a2898a2f8a1ce9364d0c698845cfc4c))
-* **pull:** use global side-tag RPM repository path ([2283d10](https://github.com/konflux-ci/pulp-tool/commit/2283d10928b118a43b887f99e0259e1d4e4d0160))
-* **security:** Glasswing CI hardening and pull integrity checks ([932d6f8](https://github.com/konflux-ci/pulp-tool/commit/932d6f87e7692da1692d339769d9c8261fa180c8))
-* **upload,e2e:** require completed Pulp tasks and extend pulp-content wait ([34d2254](https://github.com/konflux-ci/pulp-tool/commit/34d2254d4ff2f91494f69d1104bec8e70cee6e6a))
-
-
-### Changed
-
-* **client:** bound PulpClient memory and fix pylint defaults ([#261](https://github.com/konflux-ci/pulp-tool/issues/261)) ([5ade4a3](https://github.com/konflux-ci/pulp-tool/commit/5ade4a3206a285c937d872f34352b600c52e2413))
-
-## [1.2.0](https://github.com/konflux-ci/pulp-tool/compare/v1.1.0...v1.2.0) (2026-09-18)
-
-
-### Added
-
-* **constants:** add ppc64 to SUPPORTED_ARCHITECTURES ([2d0186a](https://github.com/konflux-ci/pulp-tool/commit/2d0186aaa355f4cadfe224b1357369caf48ee236))
-* **constants:** add ppc64 to SUPPORTED_ARCHITECTURES ([49bb42e](https://github.com/konflux-ci/pulp-tool/commit/49bb42e2c10ff8a8262e102771fe43259cd023d4))
-
-
-### Fixed
-
-* **config:** remove invalid cicd_pipeline_visibility exclusion ([c43bb0d](https://github.com/konflux-ci/pulp-tool/commit/c43bb0d03af30e86b6581a78df000211d861da72))
-* **config:** remove invalid cicd_pipeline_visibility exclusion ([5cc38d7](https://github.com/konflux-ci/pulp-tool/commit/5cc38d78759edecba29a5065f6ed5c4d7eddecab))
-* **upload:** use 30-minute timeout for large multipart uploads ([d7b357d](https://github.com/konflux-ci/pulp-tool/commit/d7b357de74d2088d4ab9664010b51da263c9699f))
-* **upload:** use 30-minute timeout for large multipart uploads ([b4cb414](https://github.com/konflux-ci/pulp-tool/commit/b4cb414257eee4c62043dcd8d3998d78193816a0))
-
-## [Unreleased]
-
-### Changed
-
-- **`upload-build`** with **`--oci-storage`**: ORAS-**attach** `pulp_results.json` to the manifest already at `ociStorage` (import-to-quay RPM push) instead of **`oras push`**, so RPM blobs at that ref are not replaced; **`PULP-IMAGE_*`** digest is the attached referrer
-- Dev **`uv.lock`**: bump certifi, filelock, setuptools, and virtualenv for **`pip-audit`** / security-scan advisories; pin audit tooling (`pip`, `uv`); remove legacy Pygments CVE ignores ([c971f3d](https://github.com/konflux-ci/pulp-tool/commit/c971f3d))
-- **Container base images:** bump `ubi10/ubi-minimal` from `10.2-1789645153` to `10.2-1791891203` in `container/Dockerfile`, `e2e/Dockerfile.e2e`, and `e2e/Dockerfile.e2e-cleanup`.
-- **PulpClient memory defaults for Konflux pods:** HTTP connection pools default to 24 (was 100 on `PulpClient`); GET cache is bounded (64 entries, TTL still 300s); RPM upload parallelism defaults to 2 workers per architecture and up to 3 parallel architecture threads. Override via `PULP_TOOL_HTTP_MAX_CONNECTIONS`, `PULP_TOOL_GET_CACHE_MAX_ENTRIES`, `PULP_TOOL_GET_CACHE_TTL`, `PULP_TOOL_MAX_UPLOAD_WORKERS`, and `PULP_TOOL_MAX_ARCH_UPLOAD_WORKERS`. `close()` now also tears down the async httpx session; repository create/update clears the GET cache.
-- **Pylint performance:** default **`PYLINT_JOBS=1`** (was `0` auto-parallel, which regressed on this import-heavy tree); **`persistent=yes`** cache in **`config/pylintrc`** (`.pylint.d/`, cleared by **`make clean`**).
-
-### Security
-
-- **`pull`**: allowlisted `arch` on download tasks, `base_dir` resolved-path check for artifact save paths, and per-download byte cap (`PULP_TOOL_MAX_DOWNLOAD_BYTES`, default 2 GiB)
-- **`pull --verify-rpm-gpg`** / **`--gpg-keyring`** (and `cli.verify_rpm_gpg` / `cli.gpg_keyring` on transfer config): optional `rpm --checksig` after SHA256 verification, before transfer re-upload
-- CI: blocking **Bandit** (HIGH) with SARIF upload on `security-scan`; **`make bandit`** for local runs
-- Konflux **pulp-tool-container**: pin `container-build-catalog` pipeline `revision` to a full commit SHA (Renovate `tekton` updates); runtime image installs **`rpm`** for GPG checks
-
-### Added
-
+- **pull / upload-build:** side-tag transfer, Konflux OCI integration, and ORAS publish of `pulp_results.json` ([#242](https://github.com/konflux-ci/pulp-tool/issues/242)) ([91defa2](https://github.com/konflux-ci/pulp-tool/commit/91defa28570112c0968053ec991e1c22b7cf0f88))
 - Canonical **`pulp_results.json`** schema via **`PulpResultsDocument`**: document-level **`version`** (JSON schema semver), **`last_updated`**, `build_id`, `namespace`, `cluster`, per-artifact **`pulp_labels`** and **`distributions`** only (no artifact **`labels`**, integer **`version`**, embedded **`oci_manifest`**, or **`cli.oci_storage`** config fallback)
 - Shared OCI/local loader **`resolve_results_json_path`** / **`load_results_document`** ([`pulp_tool/utils/results_json_io.py`](pulp_tool/utils/results_json_io.py)) for **`pull`**, **`upload-build`**, **`search-by`**, and **`update-build`**
 - **`update-build`** command and service: mutate versioned results after signing/BTS; required **`--results-json`**, **`--artifact-results`**, and **`--oci-storage`**; in-process ORAS pull/push; correlation ID logging (NF2)
 - Expanded Konflux contracts in [`docs/CLAUDE.md`](docs/CLAUDE.md), [`docs/cli-reference.md`](docs/cli-reference.md), [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 - Golden JSON fixture test for **`PulpResultsDocument.to_canonical_json()`** on-wire shape ([`tests/fixtures/pulp_results_golden.json`](tests/fixtures/pulp_results_golden.json))
-
-### Fixed
-
-- **`make release-publish`:** after pushing the `v*` tag, sync `autorelease: pending` → `autorelease: tagged` on the merged release PR so **`make release-please`** is not blocked by “untagged, merged release PRs”. Recovery without re-tagging: **`./scripts/release-please.sh sync-release-labels`**.
-- **`pull`:** allow source-built SDK RPMs larger than 400 MiB by raising the default per-artifact download limit to 2 GiB.
-- **`upload` / `upload-build`:** `--target-arch-repo-build-scoped` (requires `--target-arch-repo`) names RPM repositories and distributions `{build_id}/{arch}` instead of global `{arch}` for isolated concurrent uploads; e2e uses this flag so validation and cleanup remain run-scoped
+- E2e harness: CLI validation smoke, live read-only error paths (auth, 404 `pulp_results`, bad checksum, pull filters, bad local/OCI refs), and live mutating errors (empty `--rpm-path`, bad `--results-json`, missing `upload-files` path, duplicate `create-repository`) with isolated build IDs and in-test `pulp` cleanup; documented in `e2e/README.md` ([ec3d824](https://github.com/konflux-ci/pulp-tool/commit/ec3d824))
+- `upload-build` command (`upload` remains a compatibility alias): ORAS publish of `pulp_results.json` via **`--oci-storage`** (Konflux `ociStorage`); with comma-separated `--artifact-results`, Tekton files get OCI image URL (without digest) and `sha256:` digest matching import-to-quay `PULP-IMAGE_*` results ([2a3f5c8](https://github.com/konflux-ci/pulp-tool/commit/2a3f5c8)) — config **`cli.oci_storage`** and non-ORAS Tekton result files were removed later in this release (see **Removed** above)
+- `pull --oci-storage` for side-tag ORAS publish (flag overrides transfer config) ([2a3f5c8](https://github.com/konflux-ci/pulp-tool/commit/2a3f5c8))
+- `pull --side-tag` (with `--transfer-dest`): extra ROK RPM repo/distribution, versioned `pulp_results.json` merge, ORAS push, `--artifact-results` Tekton outputs, and optional `--snapshot-path` (`pulpResultsOciManifest`) for trusted-artifact release workspaces ([2a3f5c8](https://github.com/konflux-ci/pulp-tool/commit/2a3f5c8))
+- `pulp-tool-container` image: ORAS CLI, `jq`, and Konflux `select-oci-auth` for registry auth (`oras --registry-config`); e2e ORAS tests when e2e **`--oci-storage`** is set (Konflux `ociStorage` param) ([2a3f5c8](https://github.com/konflux-ci/pulp-tool/commit/2a3f5c8))
+- `pull --artifact-location` accepts an OCI manifest reference (`registry/repo@sha256:…` or `oci:…`); `pulp_results.json` is fetched with ORAS (`select-oci-auth`) before artifact download ([6e0cb3f](https://github.com/konflux-ci/pulp-tool/commit/6e0cb3f))
+- Konflux e2e: side-tag pull transfer from HTTPS `pulp_results.json` or OCI manifest ref, with run-scoped `--side-tag` names and Tekton-style `--artifact-results` ([6e0cb3f](https://github.com/konflux-ci/pulp-tool/commit/6e0cb3f))
+- E2e distribution URL verification: after `test_upload_full`, HTTP GET of RPM, SBOM, and `pulp_results.json` distribution URLs with Basic Auth from `pulp-access` `cli.toml` and SHA256 checks against upload metadata (`e2e/distribution_fetch.py`)
+- E2e distribution fetch: wall-clock polling via `E2E_DISTRIBUTION_FETCH_MAX_WAIT_S` (default 300s) for pulp-content propagation; optional `E2E_DISTRIBUTION_FETCH_ATTEMPTS` cap; SBOM vs `pulp_results.json` probe logging on failure ([34d2254](https://github.com/konflux-ci/pulp-tool/commit/34d2254))
+- E2e large RPM upload: `pre-test.py` builds a **> 300 MiB** RPM (`--large-rpm-size-mb`, default 301 MiB incompressible payload); e2e uploads to Pulp and verifies via `search-by --checksums` ([b4cb414](https://github.com/konflux-ci/pulp-tool/commit/b4cb414))
+- `UPLOAD_CONTENT_TIMEOUT` (30 minutes) for multipart RPM and file uploads ([b4cb414](https://github.com/konflux-ci/pulp-tool/commit/b4cb414))
+- Unit test for `scripts/sync-container-build-args.sh` manifest → build-args, `VERSION`, and `pulp_tool/_version.py` output
 
 ### Changed
 
+- **Container base images:** bump `ubi10/ubi-minimal` from `10.2-1789645153` to `10.2-1791891203` in `container/Dockerfile`, `e2e/Dockerfile.e2e`, and `e2e/Dockerfile.e2e-cleanup`.
+- **PulpClient memory defaults for Konflux pods** ([#261](https://github.com/konflux-ci/pulp-tool/issues/261)): HTTP connection pools default to 24 (was 100 on `PulpClient`); GET cache is bounded (64 entries, TTL still 300s); RPM upload parallelism defaults to 2 workers per architecture and up to 3 parallel architecture threads. Override via `PULP_TOOL_HTTP_MAX_CONNECTIONS`, `PULP_TOOL_GET_CACHE_MAX_ENTRIES`, `PULP_TOOL_GET_CACHE_TTL`, `PULP_TOOL_MAX_UPLOAD_WORKERS`, and `PULP_TOOL_MAX_ARCH_UPLOAD_WORKERS`. `close()` now also tears down the async httpx session; repository create/update clears the GET cache ([5ade4a3](https://github.com/konflux-ci/pulp-tool/commit/5ade4a3206a285c937d872f34352b600c52e2413))
+- **Pylint performance:** default **`PYLINT_JOBS=1`** (was `0` auto-parallel, which regressed on this import-heavy tree); **`persistent=yes`** cache in **`config/pylintrc`** (`.pylint.d/`, cleared by **`make clean`**).
 - **Upload layout:** consolidate upload orchestration, batch JSON, artifacts, results collection, and SBOM handling under **`pulp_tool/upload/`**; **`PulpHelper`** owns repo setup and is the only supported upload entry (CLI/Konflux); no library re-exports from **`utils`** / **`services`** ([ADR 0003](docs/adr/0003-upload-domain-and-layout-models.md))
 - **`RpmRepoLayout`**, **`UploadLabels`**, and **`DistributionUrlMap`** replace ad hoc boolean threading and untyped label/distribution dicts in the upload path; RPM distribution URL building lives in **`pulp_tool/api/pulp_client/distribution_urls.py`**
 - Tests: upload coverage moved to **`tests/upload/`** with shared factories in **`tests/support/factories.py`**; **`docs/ARCHITECTURE.md`**, **`tests/README.md`**, and **changing-pulp-upload** skill updated
@@ -99,10 +57,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - E2e ORAS checks use Tekton **`--artifact-results`** files (not embedded **`oci_manifest`** in JSON)
 - Live e2e **`test_update_build_oras_live`**: `upload-build` + **`update-build`** against real Pulp and ORAS when **`--oci-storage`** is set
 - Repository layout: `container/Dockerfile`, `config/` linter configs, agent docs under `docs/AGENTS.md` and `docs/CLAUDE.md` (root stubs retained); CI bot config under `.github/`; expanded `make clean`
-
-### Fixed
-
-- Dev lockfile: **`virtualenv>=21.7.13`** constraint (transitive via **pre-commit**; PYSEC-2026-4011–4014)
+- **Security (Glasswing / supply chain):** Pin GitHub Actions to full commit SHAs; workflow-level least-privilege `permissions` on security scanning; verify hadolint release binaries with published SHA256 in CI and `scripts/run-hadolint.sh` (no `tkn` in this repo); Tekton e2e tasks add defense-in-depth `securityContext` on step templates; `pull` SSRF allowlist, ORAS extraction hardening, and mandatory per-artifact SHA256 verification ([932d6f8](https://github.com/konflux-ci/pulp-tool/commit/932d6f8))
+- Konflux e2e: install `pulp-tool` in [`e2e/Dockerfile.e2e`](e2e/Dockerfile.e2e) at image build time instead of `pip install -e` in the `pulp-tool-test` Tekton step
+- Konflux e2e: [`e2e/Dockerfile.e2e-cleanup`](e2e/Dockerfile.e2e-cleanup) and **build-e2e-cleanup-image** pipeline task; `post-test-cleanup` no longer runs `microdnf`/`pip` at step time
+- Konflux e2e: move runner and cleanup Dockerfiles under [`e2e/`](e2e/)
+- **Breaking:** Side-tag RPM repository and distribution use global path `side-tag-{tag}` (not `{build_id}/side-tag-{tag}`), so multiple source builds can promote into the same side-tag; `origin_build_id` labels record provenance; Konflux e2e validation/cleanup keys updated accordingly; existing build-scoped side-tag repos are not used by new runs ([cea604e](https://github.com/konflux-ci/pulp-tool/commit/cea604e))
+- Maintainer release documentation: canonical flow `make release-please` → `make release-publish` → Konflux release; version-file table; updates in `docs/releasing.md`, `CONTRIBUTING.md`, `README.md`, and agent skills
+- `scripts/sync-container-build-args.sh` (run by `make release-please` on the release PR branch or `make test-container` locally) syncs `container/pulp-tool-container.build-args`, `VERSION`, and `pulp_tool/_version.py` from `.release-please-manifest.json`
+- Konflux `pulp-tool-container` PipelineRuns pass `build-args-file` (`container/pulp-tool-container.build-args`) so image OCI labels and `pulp-tool --version` use the Release Please manifest version instead of hardcoded `Dockerfile` defaults
+- Konflux `pulp-tool-container` PipelineRuns migrated from deprecated `single-arch-build-pipeline` (`olm-operator-konflux-sample`) to `docker-build-oci-ta` (`container-build-catalog`), adding Conforma-required SAST and RPM signature scan tasks and dropping expired `sbom-json-check`
+- Pytest configuration consolidated in `pyproject.toml` only (removed duplicate `.pytest.ini`; 85% coverage threshold unified)
+- **fixing-diff-cover-failures** skill removed; diff-cover loop merged into **troubleshooting-pulp-tool-ci**
+- Bare Konflux `ociStorage` repository strings (no `:tag` or `@digest`) resolve with `:latest` for ORAS push and resolve ([6e0cb3f](https://github.com/konflux-ci/pulp-tool/commit/6e0cb3f))
+- Konflux e2e: run pulp-content HTTP checks in a **deferred verification phase** after all `upload` / `upload-build` / `upload-files` mutations; `pull` tests run afterward. Side-tag source uploads split into `test_upload_side_tag_transfer_source` and `test_upload_side_tag_oci_source`. New `--skip-distribution-verify` flag ([cc19a96](https://github.com/konflux-ci/pulp-tool/commit/cc19a96))
 
 ### Removed
 
@@ -111,45 +78,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Removed **`pulp_tool/models/pulp_results/legacy.py`** and dict-era public helpers; use **`PulpResultsDocument`** methods only
 - Non-ORAS Tekton **`--artifact-results`** (Pulp distribution URL + digest without **`--oci-storage`**) and **`cli.oci_storage`** in config
 
-### Added
-
-- E2e harness: CLI validation smoke, live read-only error paths (auth, 404 `pulp_results`, bad checksum, pull filters, bad local/OCI refs), and live mutating errors (empty `--rpm-path`, bad `--results-json`, missing `upload-files` path, duplicate `create-repository`) with isolated build IDs and in-test `pulp` cleanup; documented in `e2e/README.md` ([ec3d824](https://github.com/konflux-ci/pulp-tool/commit/ec3d824))
-- `upload-build` command (`upload` remains a compatibility alias): ORAS publish of `pulp_results.json` via **`--oci-storage`** (Konflux `ociStorage`); with comma-separated `--artifact-results`, Tekton files get OCI image URL (without digest) and `sha256:` digest matching import-to-quay `PULP-IMAGE_*` results ([2a3f5c8](https://github.com/konflux-ci/pulp-tool/commit/2a3f5c8)) — config **`cli.oci_storage`** and non-ORAS Tekton result files were removed later in this release (see **Removed** above)
-- `pull --oci-storage` for side-tag ORAS publish (flag overrides transfer config) ([2a3f5c8](https://github.com/konflux-ci/pulp-tool/commit/2a3f5c8))
-- `pull --side-tag` (with `--transfer-dest`): extra ROK RPM repo/distribution, versioned `pulp_results.json` merge, ORAS push, `--artifact-results` Tekton outputs, and optional `--snapshot-path` (`pulpResultsOciManifest`) for trusted-artifact release workspaces ([2a3f5c8](https://github.com/konflux-ci/pulp-tool/commit/2a3f5c8))
-- `pulp-tool-container` image: ORAS CLI, `jq`, and Konflux `select-oci-auth` for registry auth (`oras --registry-config`); e2e ORAS tests when e2e **`--oci-storage`** is set (Konflux `ociStorage` param) ([2a3f5c8](https://github.com/konflux-ci/pulp-tool/commit/2a3f5c8))
-- `pull --artifact-location` accepts an OCI manifest reference (`registry/repo@sha256:…` or `oci:…`); `pulp_results.json` is fetched with ORAS (`select-oci-auth`) before artifact download ([6e0cb3f](https://github.com/konflux-ci/pulp-tool/commit/6e0cb3f))
-- Konflux e2e: side-tag pull transfer from HTTPS `pulp_results.json` or OCI manifest ref, with run-scoped `--side-tag` names and Tekton-style `--artifact-results` ([6e0cb3f](https://github.com/konflux-ci/pulp-tool/commit/6e0cb3f))
-- E2e distribution URL verification: after `test_upload_full`, HTTP GET of RPM, SBOM, and `pulp_results.json` distribution URLs with Basic Auth from `pulp-access` `cli.toml` and SHA256 checks against upload metadata (`e2e/distribution_fetch.py`)
-- E2e distribution fetch: wall-clock polling via `E2E_DISTRIBUTION_FETCH_MAX_WAIT_S` (default 300s) for pulp-content propagation; optional `E2E_DISTRIBUTION_FETCH_ATTEMPTS` cap; SBOM vs `pulp_results.json` probe logging on failure ([34d2254](https://github.com/konflux-ci/pulp-tool/commit/34d2254))
-- E2e large RPM upload: `pre-test.py` builds a **> 300 MiB** RPM (`--large-rpm-size-mb`, default 301 MiB incompressible payload); e2e uploads to Pulp and verifies via `search-by --checksums` ([b4cb414](https://github.com/konflux-ci/pulp-tool/commit/b4cb414))
-- `UPLOAD_CONTENT_TIMEOUT` (30 minutes) for multipart RPM and file uploads ([b4cb414](https://github.com/konflux-ci/pulp-tool/commit/b4cb414))
-- `ppc64` architecture support in `SUPPORTED_ARCHITECTURES`, RPM path detection, upload orchestration, and content queries
-
-### Added
-
-- Unit test for `scripts/sync-container-build-args.sh` manifest → build-args, `VERSION`, and `pulp_tool/_version.py` output
-
-### Changed
-
-- **Security (Glasswing / supply chain):** Pin GitHub Actions to full commit SHAs; workflow-level least-privilege `permissions` on security scanning; verify hadolint release binaries with published SHA256 in CI and `scripts/run-hadolint.sh` (no `tkn` in this repo); Tekton e2e tasks add defense-in-depth `securityContext` on step templates; `pull` SSRF allowlist, ORAS extraction hardening, and mandatory per-artifact SHA256 verification ([932d6f8](https://github.com/konflux-ci/pulp-tool/commit/932d6f8))
-- Konflux e2e: install `pulp-tool` in [`e2e/Dockerfile.e2e`](e2e/Dockerfile.e2e) at image build time instead of `pip install -e` in the `pulp-tool-test` Tekton step
-- Konflux e2e: [`e2e/Dockerfile.e2e-cleanup`](e2e/Dockerfile.e2e-cleanup) and **build-e2e-cleanup-image** pipeline task; `post-test-cleanup` no longer runs `microdnf`/`pip` at step time
-- Konflux e2e: move runner and cleanup Dockerfiles under [`e2e/`](e2e/)
-- **Breaking:** Side-tag RPM repository and distribution use global path `side-tag-{tag}` (not `{build_id}/side-tag-{tag}`), so multiple source builds can promote into the same side-tag; `origin_build_id` labels record provenance; Konflux e2e validation/cleanup keys updated accordingly; existing build-scoped side-tag repos are not used by new runs ([cea604e](https://github.com/konflux-ci/pulp-tool/commit/cea604e))
-- Maintainer release documentation: canonical flow `make release-please` → `make release-publish` → Konflux release; version-file table; updates in `docs/releasing.md`, `CONTRIBUTING.md`, `README.md`, and agent skills
-- `scripts/sync-container-build-args.sh` (run by `make release-please` on the release PR branch or `make test-container` locally) syncs `container/pulp-tool-container.build-args`, `VERSION`, and `pulp_tool/_version.py` from `.release-please-manifest.json`
-- `CHANGELOG.md` compare links for `v1.2.0` / `[Unreleased]`
-- Konflux `pulp-tool-container` PipelineRuns pass `build-args-file` (`container/pulp-tool-container.build-args`) so image OCI labels and `pulp-tool --version` use the Release Please manifest version instead of hardcoded `Dockerfile` defaults
-- Konflux `pulp-tool-container` PipelineRuns migrated from deprecated `single-arch-build-pipeline` (`olm-operator-konflux-sample`) to `docker-build-oci-ta` (`container-build-catalog`), adding Conforma-required SAST and RPM signature scan tasks and dropping expired `sbom-json-check`
-- Pytest configuration consolidated in `pyproject.toml` only (removed duplicate `.pytest.ini`; 85% coverage threshold unified)
-- CHANGELOG entries link to implementing commits; `docs/releasing.md` and PR-drafting templates document link preservation when curating releases
-- **fixing-diff-cover-failures** skill removed; diff-cover loop merged into **troubleshooting-pulp-tool-ci**
-- Bare Konflux `ociStorage` repository strings (no `:tag` or `@digest`) resolve with `:latest` for ORAS push and resolve ([6e0cb3f](https://github.com/konflux-ci/pulp-tool/commit/6e0cb3f))
-- Konflux e2e: run pulp-content HTTP checks in a **deferred verification phase** after all `upload` / `upload-build` / `upload-files` mutations; `pull` tests run afterward. Side-tag source uploads split into `test_upload_side_tag_transfer_source` and `test_upload_side_tag_oci_source`. New `--skip-distribution-verify` flag ([cc19a96](https://github.com/konflux-ci/pulp-tool/commit/cc19a96))
-
 ### Fixed
 
+- **`make release-publish`:** after pushing the `v*` tag, sync `autorelease: pending` → `autorelease: tagged` on the merged release PR so **`make release-please`** is not blocked by “untagged, merged release PRs”. Recovery without re-tagging: **`./scripts/release-please.sh sync-release-labels`**.
+- **`pull`:** allow source-built SDK RPMs larger than 400 MiB by raising the default per-artifact download limit to 2 GiB ([#263](https://github.com/konflux-ci/pulp-tool/issues/263)) ([a1048d9](https://github.com/konflux-ci/pulp-tool/commit/a1048d939741f43fea0538dafd1e60989ddd70f4))
+- **`upload` / `upload-build`:** `--target-arch-repo-build-scoped` (requires `--target-arch-repo`) names RPM repositories and distributions `{build_id}/{arch}` instead of global `{arch}` for isolated concurrent uploads; e2e uses this flag so validation and cleanup remain run-scoped
+- Dev lockfile: **`virtualenv>=21.7.13`** constraint (transitive via **pre-commit**; PYSEC-2026-4011–4014)
 - Upload and pull paths now require Pulp tasks to finish with `state == completed` (`wait_for_successful_task`), including `pulp_results.json` and RPM `add_content`, instead of treating failed tasks as success ([34d2254](https://github.com/konflux-ci/pulp-tool/commit/34d2254))
 - Release `push-snapshot` failure resolving `{digest}.src` source container: PipelineRuns set `build-source-image=true` so `source-build-oci-ta` publishes the source image expected when release mapping defaults `pushSourceContainer` to true
 - `upload --signed-by` now stores RPMs in the `rpms-signed` repository (matching `pulp_results.json` distribution URLs and CLI docs); previously RPMs were added to `rpms` while URLs pointed at `rpms-signed`
@@ -157,6 +91,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `pull --transfer-dest` reuses destination `RepositoryRefs` from the initial setup instead of calling `setup_repositories` again during upload (fixes Pulp HTTP 400 unique repository name on side-tag transfer) ([6e0cb3f](https://github.com/konflux-ci/pulp-tool/commit/6e0cb3f))
 - Side-tag ORAS publish reuses the side-tag distribution URL from the upload step instead of creating the side-tag RPM repository twice ([6e0cb3f](https://github.com/konflux-ci/pulp-tool/commit/6e0cb3f))
 - Repository create treats HTTP 400 “name must be unique” as idempotent get-existing, consistent with distribution create ([6e0cb3f](https://github.com/konflux-ci/pulp-tool/commit/6e0cb3f))
+
+### Security
+
+- **`pull`**: allowlisted `arch` on download tasks, `base_dir` resolved-path check for artifact save paths, and per-download byte cap (`PULP_TOOL_MAX_DOWNLOAD_BYTES`, default 2 GiB)
+- **`pull --verify-rpm-gpg`** / **`--gpg-keyring`** (and `cli.verify_rpm_gpg` / `cli.gpg_keyring` on transfer config): optional `rpm --checksig` after SHA256 verification, before transfer re-upload
+- CI: blocking **Bandit** (HIGH) with SARIF upload on `security-scan`; **`make bandit`** for local runs
+- Konflux **pulp-tool-container**: pin `container-build-catalog` pipeline `revision` to a full commit SHA (Renovate `tekton` updates); runtime image installs **`rpm`** for GPG checks
+
+## [1.2.0](https://github.com/konflux-ci/pulp-tool/compare/v1.1.0...v1.2.0) (2026-09-18)
+
+### Added
+
+- **`ppc64`** architecture support in `SUPPORTED_ARCHITECTURES`, RPM path detection, upload orchestration, and content queries ([2d0186a](https://github.com/konflux-ci/pulp-tool/commit/2d0186aaa355f4cadfe224b1357369caf48ee236))
+
+### Fixed
+
+- **`config`:** remove invalid `cicd_pipeline_visibility` exclusion ([c43bb0d](https://github.com/konflux-ci/pulp-tool/commit/c43bb0d03af30e86b6581a78df000211d861da72))
+- **`upload`:** use 30-minute timeout for large multipart uploads ([d7b357d](https://github.com/konflux-ci/pulp-tool/commit/d7b357de74d2088d4ab9664010b51ba263c9699f))
 
 ## [1.1.0] - 2026-08-25
 
@@ -265,7 +217,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `pip-audit` in optional `dev` dependencies, `make audit`, and `security-scan.yml` ([1f74717](https://github.com/konflux-ci/pulp-tool/commit/1f74717))
 - Path traversal fixes for `--results-json` and pull log architecture labels ([7fdeb58](https://github.com/konflux-ci/pulp-tool/commit/7fdeb58))
 
-[Unreleased]: https://github.com/konflux-ci/pulp-tool/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/konflux-ci/pulp-tool/compare/v1.3.1...HEAD
+[1.3.1]: https://github.com/konflux-ci/pulp-tool/compare/v1.3.0...v1.3.1
+[1.3.0]: https://github.com/konflux-ci/pulp-tool/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/konflux-ci/pulp-tool/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/konflux-ci/pulp-tool/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/konflux-ci/pulp-tool/releases/tag/v1.0.0
