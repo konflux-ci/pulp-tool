@@ -124,14 +124,14 @@ class TestApplySideTagTransfer:
                 artifact_key="pkg.rpm",
                 pulp_href="/pulp/new/",
                 sha256="def",
-                distribution_url="https://rok.example/side-tag-mytest/Packages/p/pkg.rpm",
+                distribution_url="https://rok.example/mytest/Packages/p/pkg.rpm",
             )
         ]
         merged = _side_tag_doc(
             source,
             transfers,
             side_tag="mytest",
-            top_level_side_tag_distribution_url="https://rok.example/side-tag-mytest/",
+            top_level_side_tag_distribution_url="https://rok.example/mytest/",
         )
         assert merged["version"] == "1.0.0"
         assert merged["last_updated"] == date.today().isoformat()

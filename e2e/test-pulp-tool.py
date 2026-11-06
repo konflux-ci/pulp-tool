@@ -34,8 +34,6 @@ from distribution_fetch import (
 )
 from distribution_verify_queue import DistributionCheckRunner, DistributionVerifyQueue
 from gpg_sign_rpm import ensure_gpg_keyring, sign_rpm
-
-from pulp_tool.utils.rpm_gpg_verify import RpmGpgVerifyError, verify_rpm_gpg_signature
 from large_upload import (
     LARGE_RPM_ARCH,
     LARGE_RPM_FILENAME,
@@ -66,6 +64,7 @@ from names import (
     REPO_CREATE_REPOSITORY_JSON,
     REPO_E2E_ERROR_DUP,
     e2e_error_upload_repo_names,
+    e2e_transfer_destination_repo_prefix,
     normalize_oci_storage,
     resolve_run_id,
     scoped_base_path,
@@ -74,6 +73,8 @@ from names import (
     side_tag_e2e_name,
 )
 from rpm_variant import TEST2_NOARCH_RPM_NAME, build_test2_noarch_rpm
+
+from pulp_tool.utils.rpm_gpg_verify import RpmGpgVerifyError, verify_rpm_gpg_signature
 
 
 # ANSI color codes
@@ -481,7 +482,7 @@ class E2ETestSuite:
                     self.log_distribution_fetch_diagnostics(
                         pulp_results_content,
                         pulp_results_url=pulp_results_url,
-                        pulp_results_digest=pulp_results_file_digest,
+                        pulp_results_digest=pulp_results_digest,
                         sbom_url=sbom_url,
                         failed_check=label,
                         failed_url=url,
@@ -2562,8 +2563,13 @@ class E2ETestSuite:
             return False
 
         client = distribution_client_from_config(self.config_file)
+        transfer_prefix = e2e_transfer_destination_repo_prefix(
+            source_domain=self.namespace,
+            build_id=build_id,
+        )
         pulp_results_url = (
-            f"{self.base_url}/api/pulp-content/{self.namespace}/{build_id}/artifacts/pulp_results.json"
+            f"{self.base_url}/api/pulp-content/{self.namespace}/"
+            f"{transfer_prefix}/artifacts/pulp_results.json"
         )
         try:
             pulp_results_content = fetch_pulp_results_json(

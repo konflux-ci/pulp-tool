@@ -138,7 +138,7 @@ This is an **input file** (not output) containing references to pre-existing tes
 | `test_upload_gpg_signed_rpm_source` | GPG-sign a test RPM (`gpg` + `rpmsign --addsign`; e2e image bundles Fedora `rpmsign` + deps under `/opt/rpmsign/lib64` via `LD_LIBRARY_PATH`), upload, defer `pulp_results.json` reachability |
 | `test_pull_verify_rpm_gpg` | **`transfer --verify-rpm-gpg --gpg-keyring`** succeeds on signed upload; fails on unsigned `test-upload-minimal` RPMs |
 
-Side-tag RPM repositories in Pulp use the global name `side-tag-<tag>` (see `pull_side_tag_rpm_repo_key` in [`names.py`](names.py)), not `{source_build_id}/side-tag-<tag>`, so multiple builds can target the same run-scoped tag.
+Side-tag RPM repositories in Pulp use the **sanitized `--side-tag` value** as the global base path (see `pull_side_tag_rpm_repo_key` in [`names.py`](names.py)), not under `{source_build_id}/…`, so multiple builds can target the same run-scoped tag.
 
 For release workspaces, pair **`pulp-tool transfer --snapshot-path …`** with **`create-trusted-artifact`** (see release-service-catalog `upload-src-rpm-sbom-attestation`).
 
@@ -176,6 +176,7 @@ Unit tests for e2e helpers live under [`tests/e2e/`](../tests/e2e/). Agent entry
 - **File repositories:** 7 repositories with artifacts, logs, and SBOMs
 - Uses `pulp` CLI to query repository content
 - Checks for both missing and unexpected content
+- **`transfer` mainline destinations** (promoted RPMs/files and `pulp_results.json`): `konflux-<cli.domain>/<build-segment>/{rpms|artifacts|…}` on the same domain as `--config` (reads `cli.domain` from that file; must match [`e2e_transfer_destination_repo_prefix`](names.py)). **Side-tag** RPM repos use the sanitized tag path only (not under that mainline prefix).
 
 **Usage:**
 ```bash

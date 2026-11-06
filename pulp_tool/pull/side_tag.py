@@ -16,6 +16,7 @@ from ..utils import PulpHelper, determine_build_id, extract_metadata_from_artifa
 from ..utils.error_handling import handle_generic_error
 from ..utils.pulp_tasks import wait_for_successful_task
 from ..utils.rpm_operations import calculate_sha256_checksum, upload_rpms_parallel
+from ..utils.validation.side_tag import is_side_tag_rpm_artifact_key
 
 
 def upload_rpms_to_side_tag_repository(
@@ -33,19 +34,29 @@ def upload_rpms_to_side_tag_repository(
     if not side_tag or not pulled_artifacts.rpms:
         return SideTagUploadResult(transfers=[], distribution_base_url="")
 
-    parent_package = extract_metadata_from_artifacts(pulled_artifacts, "parent_package")
-    helper = PulpHelper(pulp_client, parent_package=parent_package)
-    build_id = determine_build_id(context, pulled_artifacts=pulled_artifacts)  # type: ignore[arg-type]
-    side_tag_repo_href, distribution_base_url = helper.ensure_side_tag_rpm_repository(build_id, side_tag)
-
     namespace = context.namespace or extract_metadata_from_artifacts(pulled_artifacts, "namespace")
     cluster = context.cluster
+    build_id = determine_build_id(context, pulled_artifacts=pulled_artifacts)  # type: ignore[arg-type]
 
     rpm_infos: list[tuple[str, dict[str, str], str]] = []
     artifact_keys: list[str] = []
     source_artifacts = artifact_data.artifacts
 
     for artifact_key, artifact_file in pulled_artifacts.rpms.items():
+        if not is_side_tag_rpm_artifact_key(artifact_key):
+            logging.warning(
+                "Skipping side-tag promotion for non-RPM artifact key %r (side-tag repo is RPM-only)",
+                artifact_key,
+            )
+            continue
+        rpm_path = (artifact_file.file or "").strip()
+        if not rpm_path.lower().endswith(".rpm"):
+            logging.warning(
+                "Skipping side-tag promotion for non-RPM file %r (key=%r)",
+                rpm_path,
+                artifact_key,
+            )
+            continue
         source_meta = source_artifacts.get(artifact_key)
         source_dict = source_meta.model_dump() if source_meta is not None else {"labels": artifact_file.labels}
         predecessor = (
@@ -59,8 +70,21 @@ def upload_rpms_to_side_tag_repository(
             build_id=build_id,
             cluster=cluster,
         )
-        rpm_infos.append((artifact_file.file, labels, artifact_file.arch or "noarch"))
+        rpm_infos.append((rpm_path, labels, artifact_file.arch or "noarch"))
         artifact_keys.append(artifact_key)
+
+    if not rpm_infos:
+        logging.warning(
+            "Side-tag %r: no eligible RPM artifacts to promote (side-tag repo is RPM-only); skipping",
+            side_tag,
+        )
+        return SideTagUploadResult(transfers=[], distribution_base_url="")
+
+    parent_package = extract_metadata_from_artifacts(pulled_artifacts, "parent_package")
+    # Side-tag RPM repos use the sanitized tag as the sole global base_path on the destination
+    # domain (not under ``transfer`` mainline ``konflux-<source-domain>/<source-repo>/…``).
+    helper = PulpHelper(pulp_client, parent_package=parent_package, repository_name_prefix=None)
+    side_tag_repo_href, distribution_base_url = helper.ensure_side_tag_rpm_repository(build_id, side_tag)
 
     logging.warning("Uploading %d RPM file(s) to side-tag repository '%s'", len(rpm_infos), side_tag)
     rpm_pairs, rpm_errors = upload_rpms_parallel(pulp_client, rpm_infos)

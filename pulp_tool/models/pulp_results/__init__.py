@@ -8,6 +8,7 @@ from .constants import (
     PULP_RESULTS_SCHEMA_VERSION,
     RELEASE_SIGN_OPERATION,
     SIDE_TAG_TRANSFER_OPERATION,
+    TRANSFER_ARTIFACTS_UPLOAD_OPERATION,
 )
 from .distributions import aggregate_top_level_distributions, recompute_distributions, retain_distribution_slots
 from .document import PulpResultsDocument
@@ -34,6 +35,7 @@ __all__ = [
     "RELEASE_SIGN_OPERATION",
     "BTS_UPDATE_OPERATION",
     "SIDE_TAG_TRANSFER_OPERATION",
+    "TRANSFER_ARTIFACTS_UPLOAD_OPERATION",
     "HrefHistoryEntry",
     "SideTagRpmTransfer",
     "PulpResultsDocument",

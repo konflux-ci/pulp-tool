@@ -129,19 +129,37 @@ class RepositoryManager:
     and their distributions.
     """
 
-    def __init__(self, pulp_client: PulpClient, parent_package: str | None = None) -> None:
+    def __init__(
+        self,
+        pulp_client: PulpClient,
+        parent_package: str | None = None,
+        *,
+        repository_name_prefix: str | None = None,
+    ) -> None:
         """
         Initialize the repository manager.
 
         Args:
             pulp_client: PulpClient instance for API interactions
             parent_package: Optional parent package name for distribution paths
+            repository_name_prefix: Optional base path for ``{prefix}/{repo_type}`` (transfer;
+                may contain ``/``)
         """
         self.client = pulp_client
         self.namespace = pulp_client.namespace
         self.parent_package = parent_package
+        self._repository_name_prefix = (repository_name_prefix or "").strip() or None
         # Cache for distribution base paths: (build_id, repo_type) -> base_path
         self._distribution_cache: dict[tuple[str, str], str] = {}
+
+    def _aggregate_repository_base_segment(self, build_id: str) -> str:
+        """Base path for aggregate repos (rpms, logs, …): ``build`` or transfer prefix (may be multi-segment)."""
+        if self._repository_name_prefix:
+            return self._repository_name_prefix.strip().strip("/")
+        build_name = strip_namespace_from_build_id(build_id)
+        if not build_name or not build_name.strip():
+            raise ValueError(f"Empty build_name after stripping namespace from build_id: {build_id}")
+        return build_name
 
     def _validate_full_name(self, full_name: str, build_name: str, repo_type: str) -> None:
         """
@@ -339,9 +357,7 @@ class RepositoryManager:
 
             logging.debug("Creating or getting repository: %s/%s", sanitized_build_id, repo_api_type)
 
-            build_name = strip_namespace_from_build_id(build_id)
-            if not build_name or not build_name.strip():
-                raise ValueError(f"Empty build_name after stripping namespace from build_id: {build_id}")
+            build_name = self._aggregate_repository_base_segment(build_id)
             full_name = f"{build_name}/{repo_api_type}"
             self._validate_full_name(full_name, build_name, repo_api_type)
             new_repo = RepositoryRequest(name=full_name, autopublish=True)
@@ -650,9 +666,7 @@ class RepositoryManager:
         async def create_repo(repo_type: str) -> tuple[str, tuple[str, str | None]]:
             """Helper to create repository and return type with result."""
             loop = asyncio.get_event_loop()
-            build_name = strip_namespace_from_build_id(build_id)
-            if not build_name or not build_name.strip():
-                raise ValueError(f"Empty build_name after stripping namespace from build_id: {build_id}")
+            build_name = self._aggregate_repository_base_segment(build_id)
             full_name = f"{build_name}/{repo_type}"
             base_repo_type = repo_type.split("-")[0] if "-" in repo_type else repo_type
             self._validate_full_name(full_name, build_name, base_repo_type)

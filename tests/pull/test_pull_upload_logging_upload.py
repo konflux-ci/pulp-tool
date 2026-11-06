@@ -11,10 +11,11 @@ import httpx
 from httpx import HTTPError
 
 from pulp_tool.models.artifacts import PulledArtifacts
+from pulp_tool.models.context import PullContext
 from pulp_tool.models.pulp_results import PulpResultsDocument
 from pulp_tool.pull import upload_downloaded_files_to_pulp
 from pulp_tool.pull.upload import _upload_rpms_to_repository, _upload_sboms_and_logs
-from pulp_tool.utils import RepositoryRefs
+from pulp_tool.utils import PulpHelper, RepositoryRefs
 
 
 class TestUploadFunctionality:
@@ -52,8 +53,61 @@ class TestUploadFunctionality:
             )
             with patch("pulp_tool.utils.validation.file.validate_file_path") as mock_validate:
                 mock_validate.return_value = None
-                _upload_rpms_to_repository(mock_pulp_client, pulled_artifacts, repositories, upload_info)
+                _upload_rpms_to_repository(mock_pulp_client, pulled_artifacts, repositories, upload_info, PullContext())
                 assert upload_info.uploaded_counts.rpms == 1
+        finally:
+            if os.path.exists(tmp_file_path):
+                os.unlink(tmp_file_path)
+
+    def test_upload_rpms_transfer_populates_result_rows(self, mock_pulp_client, httpx_mock) -> None:
+        """Non-side-tag transfer merges destination RPM metadata into upload_info.artifacts."""
+        with tempfile.NamedTemporaryFile(suffix=".rpm", delete=False) as tmp_file:
+            tmp_file.write(b"fake rpm content")
+            tmp_file_path = tmp_file.name
+        try:
+            pulled_artifacts = PulledArtifacts()
+            pulled_artifacts.add_rpm(
+                "test.rpm",
+                tmp_file_path,
+                {"build_id": "test-build", "arch": "x86_64", "namespace": "ns1"},
+            )
+            repositories = RepositoryRefs(
+                rpms_href="/pulp/api/v3/repositories/12345/",
+                rpms_prn="",
+                logs_href="",
+                logs_prn="",
+                sbom_href="",
+                sbom_prn="",
+                artifacts_href="",
+                artifacts_prn="",
+            )
+            upload_info = PulpResultsDocument(build_id="test-build", repositories=repositories)
+            httpx_mock.post(re.compile(".*/content/rpm/packages/upload/")).mock(
+                return_value=httpx.Response(201, json={"pulp_href": "/pulp/api/v3/content/dest-rpm/"})
+            )
+            httpx_mock.post(re.compile(".*/repositories/12345/modify/")).mock(
+                return_value=httpx.Response(202, json={"task": "/pulp/api/v3/tasks/67890/"})
+            )
+            httpx_mock.get(re.compile(".*/tasks/67890/")).mock(
+                return_value=httpx.Response(
+                    200, json={"pulp_href": "/pulp/api/v3/tasks/67890/", "state": "completed", "created_resources": []}
+                )
+            )
+            ctx = PullContext(operation_label="transfer")
+            with (
+                patch("pulp_tool.utils.validation.file.validate_file_path") as mock_validate,
+                patch.object(
+                    PulpHelper,
+                    "get_distribution_urls",
+                    return_value={"rpms": "https://pulp.example.com/api/pulp-content/ns1/test-build/rpms/"},
+                ),
+            ):
+                mock_validate.return_value = None
+                _upload_rpms_to_repository(mock_pulp_client, pulled_artifacts, repositories, upload_info, ctx)
+            row = upload_info.artifacts.get(os.path.basename(tmp_file_path))
+            assert row is not None
+            assert row.href == "/pulp/api/v3/content/dest-rpm/"
+            assert row.url and "test-build/rpms/" in row.url
         finally:
             if os.path.exists(tmp_file_path):
                 os.unlink(tmp_file_path)
@@ -80,7 +134,7 @@ class TestUploadFunctionality:
             patch("pulp_tool.utils.rpm_operations.logging") as mock_logging,
         ):
             mock_validate.return_value = None
-            _upload_rpms_to_repository(mock_pulp_client, pulled_artifacts, repositories, upload_info)
+            _upload_rpms_to_repository(mock_pulp_client, pulled_artifacts, repositories, upload_info, PullContext())
             mock_logging.error.assert_called()
 
     def test_upload_sboms_and_logs(self, mock_pulp_client, httpx_mock) -> None:
@@ -183,7 +237,7 @@ class TestUploadFunctionality:
             with patch.object(
                 mock_pulp_client, "add_content", side_effect=httpx.HTTPError("Repository addition failed")
             ):
-                _upload_rpms_to_repository(mock_pulp_client, pulled_artifacts, repositories, upload_info)
+                _upload_rpms_to_repository(mock_pulp_client, pulled_artifacts, repositories, upload_info, PullContext())
             mock_logging.error.assert_called()
             assert len(upload_info.upload_errors) > 0
 

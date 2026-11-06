@@ -5,6 +5,7 @@ import argparse
 import json
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 from names import file_repos_for_run, normalize_oci_storage, resolve_run_id, rpm_repos_for_run
@@ -96,7 +97,19 @@ def verify_content(config_path: Path, repo_type: str, name: str, expected_conten
         return False
 
 
-def verify_repos(config_path: Path, run_id: str | None, oci_storage: str | None) -> int:
+def _cli_domain_from_config(config_path: Path) -> str:
+    with open(config_path, "rb") as f:
+        data = tomllib.load(f)
+    raw = data.get("cli", {}).get("domain", "")
+    return str(raw).strip() if raw else ""
+
+
+def verify_repos(
+    config_path: Path,
+    run_id: str | None,
+    oci_storage: str | None,
+    source_domain: str,
+) -> int:
     """Verify all test repositories contain expected content.
 
     Args:
@@ -106,8 +119,8 @@ def verify_repos(config_path: Path, run_id: str | None, oci_storage: str | None)
     Returns:
         Exit code (0 for success, 1 if any failures occurred)
     """
-    rpm_repos = rpm_repos_for_run(run_id, oci_storage)
-    file_repos = file_repos_for_run(run_id, oci_storage)
+    rpm_repos = rpm_repos_for_run(run_id, oci_storage, source_domain=source_domain)
+    file_repos = file_repos_for_run(run_id, oci_storage, source_domain=source_domain)
 
     if run_id:
         print(f"=== Verifying repository content (run id: {run_id}) ===\n")
@@ -168,7 +181,8 @@ def main() -> int:
     config_path = args.config.resolve()
     run_id = resolve_run_id(args.run_id)
     oci_storage = normalize_oci_storage(args.oci_storage)
-    return verify_repos(config_path, run_id, oci_storage or None)
+    source_domain = _cli_domain_from_config(config_path)
+    return verify_repos(config_path, run_id, oci_storage or None, source_domain)
 
 
 if __name__ == "__main__":

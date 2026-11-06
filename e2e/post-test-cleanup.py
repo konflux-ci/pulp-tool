@@ -4,6 +4,7 @@
 import argparse
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 from names import file_repo_names_for_cleanup, normalize_oci_storage, resolve_run_id, rpm_repo_names_for_cleanup
@@ -48,7 +49,20 @@ def destroy_resource(config_path: Path, repo_type: str, resource: str, name: str
     return True
 
 
-def cleanup_repos(config_path: Path, run_id: str | None, oci_storage: str | None, dry_run: bool = False) -> int:
+def _cli_domain_from_config(config_path: Path) -> str:
+    with open(config_path, "rb") as f:
+        data = tomllib.load(f)
+    raw = data.get("cli", {}).get("domain", "")
+    return str(raw).strip() if raw else ""
+
+
+def cleanup_repos(
+    config_path: Path,
+    run_id: str | None,
+    oci_storage: str | None,
+    source_domain: str,
+    dry_run: bool = False,
+) -> int:
     """Clean up all test repositories and distributions.
 
     Args:
@@ -59,8 +73,8 @@ def cleanup_repos(config_path: Path, run_id: str | None, oci_storage: str | None
     Returns:
         Exit code (0 for success, 1 if any failures occurred)
     """
-    rpm_repos = rpm_repo_names_for_cleanup(run_id, oci_storage)
-    file_repos = file_repo_names_for_cleanup(run_id, oci_storage)
+    rpm_repos = rpm_repo_names_for_cleanup(run_id, oci_storage, source_domain=source_domain)
+    file_repos = file_repo_names_for_cleanup(run_id, oci_storage, source_domain=source_domain)
 
     if dry_run:
         print("=== DRY RUN MODE: No resources will be destroyed ===\n")
@@ -157,7 +171,8 @@ def main() -> int:
     config_path = args.config.resolve()
     run_id = resolve_run_id(args.run_id)
     oci_storage = normalize_oci_storage(args.oci_storage)
-    return cleanup_repos(config_path, run_id, oci_storage or None, dry_run=args.dry_run)
+    source_domain = _cli_domain_from_config(config_path)
+    return cleanup_repos(config_path, run_id, oci_storage or None, source_domain, dry_run=args.dry_run)
 
 
 if __name__ == "__main__":

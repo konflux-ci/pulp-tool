@@ -234,3 +234,56 @@ class TestPullService:
         result = PullService().run(context, distribution_client=Mock(), max_workers=1)
         assert not result.success
         assert "signature NOT OK" in result.error_messages[0]
+
+    @patch("pulp_tool.services.pull_service.upload_transfer_pulp_results_json_to_artifacts")
+    @patch("pulp_tool.services.pull_service.upload_downloaded_files_to_pulp")
+    @patch("pulp_tool.services.pull_service.download_artifacts_concurrently")
+    @patch("pulp_tool.services.pull_service.setup_repositories_if_needed")
+    @patch("pulp_tool.services.pull_service.load_and_validate_artifacts")
+    @patch("pulp_tool.services.pull_service.generate_pull_report")
+    def test_run_transfer_uploads_merged_pulp_results_json(
+        self,
+        _mock_report,
+        mock_load,
+        mock_setup,
+        mock_download,
+        mock_upload,
+        mock_results_upload,
+    ) -> None:
+        from pulp_tool.models.artifacts import ArtifactData
+        from pulp_tool.models.pulp_results import PulpResultsDocument
+        from pulp_tool.models.repository import RepositoryRefs
+
+        mock_load.return_value = ArtifactData(
+            artifact_json=PulpResultsDocument(artifacts={}),
+            artifacts={},
+        )
+        mock_client = Mock()
+        mock_repos = RepositoryRefs(
+            rpms_href="",
+            rpms_prn="",
+            logs_href="",
+            logs_prn="",
+            sbom_href="",
+            sbom_prn="",
+            artifacts_href="",
+            artifacts_prn="a",
+        )
+        mock_setup.return_value = Mock(client=mock_client, repositories=mock_repos)
+        mock_download.return_value = make_download_result(completed=1, failed=0)
+        mock_upload.return_value = PulpResultsDocument(build_id="b1", repositories=mock_repos)
+
+        context = PullContext(
+            artifact_location="/tmp/pulp_results.json",
+            config="/cfg.toml",
+            transfer_dest="/dest.toml",
+            operation_label="transfer",
+        )
+        result = PullService().run(context, distribution_client=Mock(), max_workers=1)
+        assert result.success
+        mock_results_upload.assert_called_once_with(
+            mock_client,
+            mock_load.return_value,
+            mock_upload.return_value,
+            context,
+        )

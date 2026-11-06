@@ -5,6 +5,7 @@ This module handles uploading downloaded artifacts to destination Pulp repositor
 """
 
 import logging
+import os
 
 import httpx
 
@@ -97,6 +98,7 @@ def _upload_rpms_to_repository(
     pulled_artifacts: PulledArtifacts,
     repositories: RepositoryRefs,
     upload_info: PulpResultsDocument,
+    context: PullContext,
 ) -> None:
     """Upload RPM files to the RPM repository.
 
@@ -132,6 +134,40 @@ def _upload_rpms_to_repository(
         except (httpx.HTTPError, ValueError, KeyError) as e:
             handle_generic_error(e, "add RPMs to repository")
             upload_info.add_error(f"RPM repository addition: {e}")
+        else:
+            # Non-side-tag transfer: populate session artifacts so merge can record destination href/url/sha256
+            if (getattr(context, "operation_label", None) or "").strip() == "transfer" and not (
+                getattr(context, "side_tag", None) or ""
+            ).strip():
+                transfer_prefix = getattr(context, "transfer_repository_name_prefix", None)
+                helper = PulpHelper(
+                    pulp_client,
+                    parent_package=extract_metadata_from_artifacts(pulled_artifacts, "parent_package"),
+                    repository_name_prefix=transfer_prefix,
+                )
+                distribution_urls = helper.get_distribution_urls(
+                    upload_info.build_id,
+                    skip_logs_repo=True,
+                    skip_sbom_repo=True,
+                )
+                path_to_href = dict(rpm_pairs)
+                for artifact_info in pulled_artifacts.rpms.values():
+                    local_path = artifact_info.file
+                    artifact_href = (path_to_href.get(local_path) or "").strip()
+                    if not artifact_href:
+                        continue
+                    labels = dict(artifact_info.labels)
+                    pulp_client.add_uploaded_artifact_to_results_model(
+                        upload_info,
+                        local_path=local_path,
+                        labels=labels,
+                        is_rpm=True,
+                        distribution_urls=distribution_urls,
+                    )
+                    key = os.path.basename(local_path)
+                    row = upload_info.artifacts.get(key)
+                    if row is not None and artifact_href:
+                        row.href = artifact_href
 
 
 def upload_downloaded_files_to_pulp(
@@ -157,8 +193,8 @@ def upload_downloaded_files_to_pulp(
     parent_package = extract_metadata_from_artifacts(pulled_artifacts, "parent_package")
     logging.debug("Extracted parent_package from artifacts: %s", parent_package)
 
-    # Initialize PulpHelper to get repository information
-    helper = PulpHelper(pulp_client, parent_package=parent_package)
+    transfer_prefix = getattr(args, "transfer_repository_name_prefix", None)
+    helper = PulpHelper(pulp_client, parent_package=parent_package, repository_name_prefix=transfer_prefix)
 
     build_id = determine_build_id(args, pulled_artifacts=pulled_artifacts)  # type: ignore[arg-type]
     if repositories is None:
@@ -169,7 +205,7 @@ def upload_downloaded_files_to_pulp(
 
     # Upload different artifact types
     _upload_sboms_and_logs(pulp_client, pulled_artifacts, repositories, upload_info)
-    _upload_rpms_to_repository(pulp_client, pulled_artifacts, repositories, upload_info)
+    _upload_rpms_to_repository(pulp_client, pulled_artifacts, repositories, upload_info, args)
 
     _log_upload_summary(upload_info)
 

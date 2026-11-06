@@ -12,12 +12,14 @@ from names import (  # noqa: E402
     BASE_PATH_CREATE_REPOSITORY,
     BASE_PATH_CREATE_REPOSITORY_JSON,
     BUILD_ID_E2E_ERROR_EMPTY,
+    BUILD_ID_PULL_GPG_VERIFY,
     BUILD_ID_PULL_SIDE_TAG,
     BUILD_ID_PULL_SIDE_TAG_OCI,
     BUILD_ID_UPLOAD_MINIMAL,
     BUILD_ID_UPLOAD_ORAS,
     BUILD_ID_UPLOAD_TARGET_ARCH,
     e2e_error_upload_repo_names,
+    e2e_transfer_destination_repo_prefix,
     file_repos_for_run,
     normalize_oci_storage,
     oci_storage_e2e_enabled,
@@ -89,9 +91,15 @@ def test_oci_repos_omitted_without_oci_storage() -> None:
     files = file_repos_for_run(run_id, None)
     assert not oci_storage_e2e_enabled(None)
     assert f"{BUILD_ID_UPLOAD_ORAS}-{run_id}/rpms" not in rpm
-    assert f"{BUILD_ID_PULL_SIDE_TAG}-{run_id}/rpms" not in rpm
     assert f"{BUILD_ID_UPLOAD_ORAS}-{run_id}/artifacts" not in files
-    assert f"{BUILD_ID_PULL_SIDE_TAG}-{run_id}/artifacts" not in files
+    domain = "mysuite"
+    rpm_dom = rpm_repos_for_run(run_id, None, source_domain=domain)
+    gpg_bid = scoped_build_id(BUILD_ID_PULL_GPG_VERIFY, run_id)
+    gpg_prefix = e2e_transfer_destination_repo_prefix(source_domain=domain, build_id=gpg_bid)
+    assert f"{gpg_prefix}/rpms" in rpm_dom
+    side_bid = scoped_build_id(BUILD_ID_PULL_SIDE_TAG, run_id)
+    side_prefix = e2e_transfer_destination_repo_prefix(source_domain=domain, build_id=side_bid)
+    assert f"{side_prefix}/rpms" not in rpm_dom
 
 
 def test_normalize_oci_storage_strips_whitespace() -> None:
@@ -103,15 +111,33 @@ def test_normalize_oci_storage_strips_whitespace() -> None:
 def test_side_tag_e2e_name_scoped_with_run_id() -> None:
     assert side_tag_e2e_name(None) == "e2e-test"
     assert side_tag_e2e_name("run1") == "e2e-test-run1"
-    assert pull_side_tag_rpm_repo_key("run1") == "side-tag-e2e-test-run1"
+    assert pull_side_tag_rpm_repo_key("run1") == "e2e-test-run1"
 
 
 def test_oci_repos_included_when_oci_storage_set() -> None:
     oci = "quay.io/example/repo:tag"
     run_id = "run1"
+    domain = "mysuite"
     assert oci_storage_e2e_enabled(oci)
-    assert f"{BUILD_ID_UPLOAD_ORAS}-{run_id}/rpms" in rpm_repos_for_run(run_id, oci)
-    assert f"{BUILD_ID_UPLOAD_ORAS}-{run_id}/artifacts" in file_repos_for_run(run_id, oci)
+    side_bid = scoped_build_id(BUILD_ID_PULL_SIDE_TAG, run_id)
+    side_prefix = e2e_transfer_destination_repo_prefix(source_domain=domain, build_id=side_bid)
+    rpm = rpm_repos_for_run(run_id, oci, source_domain=domain)
+    files = file_repos_for_run(run_id, oci, source_domain=domain)
+    assert f"{BUILD_ID_UPLOAD_ORAS}-{run_id}/rpms" in rpm
+    assert f"{BUILD_ID_UPLOAD_ORAS}-{run_id}/artifacts" in files
+    assert f"{side_prefix}/rpms" in rpm
+    assert f"{side_prefix}/artifacts" in files
+
+
+def test_transfer_gpg_verify_expected_paths_with_source_domain() -> None:
+    run_id = "run1"
+    domain = "mysuite"
+    bid = scoped_build_id(BUILD_ID_PULL_GPG_VERIFY, run_id)
+    prefix = e2e_transfer_destination_repo_prefix(source_domain=domain, build_id=bid)
+    rpm = rpm_repos_for_run(run_id, None, source_domain=domain)
+    files = file_repos_for_run(run_id, None, source_domain=domain)
+    assert f"{prefix}/rpms" in rpm
+    assert f"{prefix}/artifacts" in files
 
 
 def test_scoped_oci_storage_uses_per_build_tag() -> None:

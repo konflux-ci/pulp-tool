@@ -145,6 +145,12 @@ pulp-tool --config /pulp-access/cli.toml pull \
 
 Download build artifacts from **build Pulp** (or OCI `pulp_results`) and promote them to **release Pulp**. Global **`--config`** is **required** (release artifact storage — `/etc/rok-access/cli.toml` in Konflux release). Use **`--source-config`** when build-domain credentials differ from the release destination.
 
+**Destination repository names (transfer only):** under the **destination** Pulp domain, aggregate repos use
+`konflux-<source-domain>/<source-repo>/{rpms|logs|sbom|artifacts}` where `cli.domain` in the **source** config
+(`--source-config`, or destination `--config` when omitted) supplies `<source-domain>` (always normalized to a
+`konflux-…` first path segment), and `<source-repo>` is the build segment from the transferred `build_id` (the part after the
+first `/` for Konflux `namespace/pipeline-run` IDs).
+
 | Argument | Required | Description |
 |----------|----------|-------------|
 | Global `--config` | Yes | Destination Pulp config |
@@ -159,7 +165,7 @@ Download build artifacts from **build Pulp** (or OCI `pulp_results`) and promote
 | `--snapshot-path` | No | Sets `pulpResultsOciManifest` on release snapshot JSON |
 | `--verify-rpm-gpg` / `--gpg-keyring` | No | RPM signature check before destination upload (destination config) |
 
-**Side-tag:** See prior release docs — global `side-tag-<name>` repo, ORAS publish, **`--artifact-results`**, optional **`--snapshot-path`** for trusted-artifact workspaces.
+**Side-tag:** See prior release docs — global **sanitized `--side-tag`** path (single segment, no `side-tag-` prefix), ORAS publish, **`--artifact-results`**, optional **`--snapshot-path`** for trusted-artifact workspaces.
 
 ```bash
 pulp-tool --config /etc/rok-access/cli.toml \

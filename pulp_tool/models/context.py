@@ -126,6 +126,11 @@ class PullContext(KonfluxBaseModel):
         archs: Optional list of architectures to filter
         verify_rpm_gpg: When True, verify RPM GPG signatures after download (before transfer upload)
         gpg_keyring: Optional GnuPG homedir for rpm --checksig (keys imported via gpg export)
+        operation_label: ``pull`` or ``transfer`` (drives transfer-only destination repo naming)
+        transfer_source_config_path: Source ``cli.toml`` for ``transfer``
+            (``--source-config``, or destination when omitted)
+        transfer_repository_name_prefix: Set during transfer setup; ``konflux-<source-domain>/<source-repo>`` path
+            prefix for destination repository base paths (upload must use the same prefix as setup)
     """
 
     artifact_location: str | None = None
@@ -145,6 +150,9 @@ class PullContext(KonfluxBaseModel):
     archs: list[str] | None = None
     verify_rpm_gpg: bool = False
     gpg_keyring: str | None = None
+    operation_label: str = "pull"
+    transfer_source_config_path: str | None = None
+    transfer_repository_name_prefix: str | None = None
 
     @field_validator("content_types")
     @classmethod
@@ -163,6 +171,15 @@ class PullContext(KonfluxBaseModel):
             )
 
         return v
+
+    @field_validator("operation_label")
+    @classmethod
+    def validate_operation_label(cls, value: str) -> str:
+        """Restrict to pull vs transfer for typed CLI flows."""
+        label = (value or "").strip() or "pull"
+        if label not in {"pull", "transfer"}:
+            raise ValueError("operation_label must be 'pull' or 'transfer'")
+        return label
 
 
 class ArchUploadConfig(KonfluxBaseModel):

@@ -33,20 +33,30 @@ class PulpHelper:
     delegating to specialized manager classes.
     """
 
-    def __init__(self, pulp_client: "PulpClient", parent_package: str | None = None) -> None:
+    def __init__(
+        self,
+        pulp_client: "PulpClient",
+        parent_package: str | None = None,
+        *,
+        repository_name_prefix: str | None = None,
+    ) -> None:
         """
         Initialize the helper with a PulpClient instance.
 
         Args:
             pulp_client: PulpClient instance for API interactions
             parent_package: Optional parent package name for distribution paths
+            repository_name_prefix: Optional prefix before ``/{repo-type}`` in repo base paths (transfer-only)
         """
         self.client = pulp_client
         self.namespace = pulp_client.namespace
         self.parent_package = parent_package
+        self.repository_name_prefix = (repository_name_prefix or "").strip() or None
 
         # Initialize specialized managers
-        self._repository_manager = RepositoryManager(pulp_client, parent_package)
+        self._repository_manager = RepositoryManager(
+            pulp_client, parent_package, repository_name_prefix=self.repository_name_prefix
+        )
         # Ensure namespace is a string (default to empty string if None)
         namespace_str = self.namespace if isinstance(self.namespace, str) else ""
         self._distribution_manager = DistributionManager(
@@ -178,11 +188,15 @@ class PulpHelper:
 
     def ensure_side_tag_rpm_repository(self, build_id: str, side_tag: str) -> tuple[str, str]:
         """
-        Create or get an extra RPM repository and distribution for side-tag promotions.
+        Create or get an extra **RPM-only** repository and distribution for side-tag promotions.
 
-        Repository and distribution use global path ``side-tag-<name>`` so multiple source
-        builds can promote RPMs into the same side-tag. ``build_id`` is not used in the path
-        (callers use it for ``origin_build_id`` labels on uploaded content).
+        Only RPM package content is added; callers must not use this path for files or SBOMs.
+        Repository and distribution use a global base path of the **sanitized side-tag name
+        only** (no ``rpms`` segment, no ``side-tag-`` prefix) so multiple source builds can
+        promote into the same tag pool. ``build_id`` is not used in the path (callers use it
+        for ``origin_build_id`` labels on uploaded content).
+        This path is **not** prefixed with ``repository_name_prefix`` (transfer mainline
+        ``konflux-<source-domain>/<source-repo>/…``); side-tag pools are destination-global.
 
         Returns:
             Tuple of (repository_href, distribution_base_url)

@@ -60,16 +60,14 @@ class TestUploadRpmsToSideTagRepository:
             mock_helper = mock_helper_cls.return_value
             mock_helper.ensure_side_tag_rpm_repository.return_value = (
                 "/pulp/side/repo/",
-                "https://rok.example/side-tag-mytest/",
+                "https://rok.example/mytest/",
             )
-            mock_client._build_artifact_distribution_url.return_value = (
-                "https://rok.example/side-tag-mytest/Packages/p/pkg.rpm"
-            )
+            mock_client._build_artifact_distribution_url.return_value = "https://rok.example/mytest/Packages/p/pkg.rpm"
             result = upload_rpms_to_side_tag_repository(mock_client, pulled, artifact_data, context)
         assert len(result.transfers) == 1
         assert result.transfers[0].pulp_href == "/pulp/new/"
         assert result.transfers[0].artifact_key == "pkg.rpm"
-        assert result.distribution_base_url == "https://rok.example/side-tag-mytest/"
+        assert result.distribution_base_url == "https://rok.example/mytest/"
 
     def test_logs_rpm_upload_errors(self) -> None:
         pulled = PulledArtifacts()
@@ -130,3 +128,41 @@ class TestUploadRpmsToSideTagRepository:
             assert upload_rpms_to_side_tag_repository(
                 mock_client, pulled, ArtifactData(artifact_json={}, artifacts={}), context
             ) == SideTagUploadResult(transfers=[], distribution_base_url="https://side/")
+
+    def test_skips_non_rpm_artifact_key_without_repo_create(self) -> None:
+        """Side-tag repo is RPM-only: bad keys are skipped and ensure_side_tag is not called."""
+        pulled = PulledArtifacts()
+        pulled.add_rpm("not-an-rpm.json", "/tmp/x.json", {"build_id": "b1", "arch": "noarch"})
+        context = PullContext(artifact_location="http://example.com/json", side_tag="mytest", build_id="b1")
+        with patch("pulp_tool.pull.side_tag.PulpHelper") as mock_helper_cls:
+            assert upload_rpms_to_side_tag_repository(
+                Mock(),
+                pulled,
+                ArtifactData(
+                    artifact_json=PulpResultsDocument(
+                        artifacts={
+                            "not-an-rpm.json": ArtifactMetadata(
+                                href="/pulp/source/",
+                                url="https://example.com/x.json",
+                                pulp_labels={"build_id": "b1"},
+                            )
+                        }
+                    ),
+                    artifacts={},
+                ),
+                context,
+            ) == SideTagUploadResult(transfers=[], distribution_base_url="")
+            mock_helper_cls.return_value.ensure_side_tag_rpm_repository.assert_not_called()
+
+    def test_skips_non_rpm_file_path_without_repo_create(self) -> None:
+        pulled = PulledArtifacts()
+        pulled.add_rpm("pkg.rpm", "/tmp/pkg.txt", {"build_id": "b1", "arch": "noarch"})
+        context = PullContext(artifact_location="http://example.com/json", side_tag="mytest", build_id="b1")
+        with patch("pulp_tool.pull.side_tag.PulpHelper") as mock_helper_cls:
+            assert upload_rpms_to_side_tag_repository(
+                Mock(),
+                pulled,
+                ArtifactData(artifact_json=PulpResultsDocument(artifacts={}), artifacts={}),
+                context,
+            ) == SideTagUploadResult(transfers=[], distribution_base_url="")
+            mock_helper_cls.return_value.ensure_side_tag_rpm_repository.assert_not_called()

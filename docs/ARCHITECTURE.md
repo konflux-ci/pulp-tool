@@ -128,7 +128,7 @@ No application database: state is on Pulp and in generated JSON artifacts.
 2. **Konflux contracts** (flags, paths, skip-vs-fail) must stay aligned with linked upstream task YAMLs when changing `upload` or the image.
 3. **Labels and APIs:** Pulpcore forbids `,`, `(`, and `)` in label **values**; `signed_by` replaces `,` with `:` and maps parentheses to `[` / `]` before upload and before RPM queries, so `pulp_label_select` is usually applied server-side together with checksum or NVR filters. Client-side label matching remains a fallback when a query cannot be expressed safely.
 4. **Merge gate:** PR diffs require **100% diff coverage** (`make test-diff-coverage`), not only line coverage in unchanged code.
-5. **Side-tag RPM repos:** `transfer --side-tag` uses Pulp repository/distribution path `side-tag-<sanitized-tag>` only (shared across source builds with the same tag). Mainline destination repos (`{build_id}/rpms`, artifacts, etc.) remain per source `build_id`. Multi-build test flows reuse one `--side-tag` and may chain **`--artifact-location`** from the latest OCI digest ref (Tekton **`--artifact-results`** or ORAS publish), not from a field inside `pulp_results.json`.
+5. **Side-tag RPM repos:** `transfer --side-tag` uses Pulp repository/distribution path **`<sanitized-tag>` only** (shared across source builds with the same tag; no `side-tag-` prefix, no `/rpms` segment). **Transfer** mainline destination aggregate repos use `konflux-<source-domain>/<source-repo>/{rpms|logs|sbom|artifacts}` (source **`cli.domain`** from `--source-config` and the build segment of `build_id`), not plain `{build}/…` under the destination domain. Multi-build test flows reuse one `--side-tag` and may chain **`--artifact-location`** from the latest OCI digest ref (Tekton **`--artifact-results`** or ORAS publish), not from a field inside `pulp_results.json`.
 
 ---
 
@@ -211,7 +211,7 @@ Tekton steps are short-lived: each command should use one `PulpClient` and call 
 | **`pulp_results.json`** | Aggregated artifact metadata JSON produced/consumed by uploads |
 | **Build Pulp** | Build-time artifact storage for a Konflux tenant (`pulp-access` secret → `/pulp-access/cli.toml`) |
 | **Release Pulp** | Release-time artifact storage target for promoted builds (`rok-access` secret → `/etc/rok-access/cli.toml`) |
-| **Side-tag** | Named test promotion repo (`side-tag-<name>`) populated during `transfer --side-tag` |
+| **Side-tag** | Named test promotion repo (sanitized `--side-tag` path only) populated during `transfer --side-tag` |
 | **Transfer** | CLI command: download from build Pulp or OCI `pulp_results`, re-upload to **release Pulp**; distinct from download-only **`pull`** |
 
 ---

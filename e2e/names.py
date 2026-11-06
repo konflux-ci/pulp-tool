@@ -8,6 +8,44 @@ from typing import Final
 
 from large_upload import LARGE_RPM_FILENAME
 
+
+def _e2e_strip_namespace_from_build_id(build_id: str) -> str:
+    """Match :func:`pulp_tool.utils.validation.strip_namespace_from_build_id` (no pulp-tool import for cleanup image)."""
+    if not build_id:
+        return ""
+    if "/" in build_id:
+        return build_id.split("/", 1)[1]
+    return build_id
+
+
+def _e2e_sanitize_build_id_for_repository(build_id: str) -> str:
+    """Match :func:`pulp_tool.utils.validation.sanitize_build_id_for_repository` for transfer path segments."""
+    if not build_id or not isinstance(build_id, str):
+        return "default-build"
+    invalid_chars = ["/", "\\", ":", "*", "?", '"', "<", ">", "|"]
+    sanitized = build_id
+    for char in invalid_chars:
+        sanitized = sanitized.replace(char, "-")
+    while "--" in sanitized:
+        sanitized = sanitized.replace("--", "-")
+    sanitized = sanitized.strip("-").lower()
+    return sanitized if sanitized else "default-build"
+
+
+def e2e_transfer_destination_repo_prefix(*, source_domain: str, build_id: str) -> str:
+    """
+    Base path prefix for repos ``transfer`` creates on the destination (matches pulp-tool).
+
+    ``konflux-<source-domain>/<source-repo>`` with ``<source-repo>`` = namespace-stripped ``build_id``.
+    """
+    source_repo = _e2e_strip_namespace_from_build_id(build_id)
+    source_repo_seg = _e2e_sanitize_build_id_for_repository(source_repo)
+    raw_domain = (source_domain or "").strip() or "unknown"
+    if not raw_domain.lower().startswith("konflux-"):
+        raw_domain = f"konflux-{raw_domain}"
+    domain_seg = _e2e_sanitize_build_id_for_repository(raw_domain)
+    return f"{domain_seg}/{source_repo_seg}"
+
 # Build IDs created by the e2e upload/upload-files tests (without run suffix).
 BUILD_ID_UPLOAD_MINIMAL: Final = "test-build-123"
 BUILD_ID_UPLOAD_FULL: Final = "test-build-456"
@@ -26,7 +64,6 @@ BUILD_ID_E2E_ERROR_EMPTY: Final = "test-error-empty-upload"
 BASE_PATH_E2E_ERROR_DUP: Final = "repo_error/dup"
 REPO_E2E_ERROR_DUP: Final = "test-error-dup-repo"
 SIDE_TAG_E2E_NAME: Final = "e2e-test"
-SIDE_TAG_E2E_REPO_SUFFIX: Final = f"side-tag-{SIDE_TAG_E2E_NAME}"
 
 
 def side_tag_e2e_name(run_id: str | None) -> str:
@@ -37,8 +74,9 @@ def side_tag_e2e_name(run_id: str | None) -> str:
 
 
 def side_tag_e2e_repo_suffix(run_id: str | None) -> str:
-    """Repository path segment ``side-tag-<name>`` for validation/cleanup keyed by run."""
-    return f"side-tag-{side_tag_e2e_name(run_id)}"
+    """Sanitized side-tag path segment for validation/cleanup (matches pulp-tool base_path)."""
+    raw = side_tag_e2e_name(run_id)
+    return _e2e_sanitize_build_id_for_repository(raw)
 
 
 def e2e_error_upload_repo_names(build_id: str) -> list[str]:
@@ -52,7 +90,7 @@ def e2e_error_upload_repo_names(build_id: str) -> list[str]:
 
 
 def pull_side_tag_rpm_repo_key(run_id: str | None) -> str:
-    """Global side-tag RPM repo name (``side-tag-<run-scoped tag>``), not under source build_id."""
+    """Global side-tag RPM repo key (sanitized tag only), not under source ``build_id``."""
     return side_tag_e2e_repo_suffix(run_id)
 
 # Standalone repositories from create-repository tests.
@@ -75,9 +113,6 @@ _RPM_REPOS_BASE: Final = {
     f"{BUILD_ID_UPDATE_BUILD}/rpms": ["test.2-1.0.0-1.noarch.rpm"],
     f"{BUILD_ID_UPDATE_BUILD_REPLACED}/rpms": ["test.2-1.0.0-1.noarch.rpm"],
     f"{BUILD_ID_UPDATE_BUILD_PULL}/rpms": ["test.2-1.0.0-1.noarch.rpm"],
-    f"{BUILD_ID_PULL_SIDE_TAG}/rpms": ["test.0-1.0.0-1.noarch.rpm"],
-    f"{BUILD_ID_PULL_SIDE_TAG_OCI}/rpms": ["test.0-1.0.0-1.noarch.rpm"],
-    f"{BUILD_ID_PULL_GPG_VERIFY}/rpms": ["test.3-1.0.0-1.noarch.rpm"],
     # Side-tag RPM repo key is run-scoped via ``pull_side_tag_rpm_repo_key`` in ``rpm_repos_for_run``.
     f"{BUILD_ID_UPLOAD_FULL}/rpms": [],
     f"{BUILD_ID_UPLOAD_FULL}/rpms-signed": [
@@ -98,8 +133,6 @@ _OCI_OPTIONAL_RPM_REPOS: Final = frozenset(
         f"{BUILD_ID_UPDATE_BUILD}/rpms",
         f"{BUILD_ID_UPDATE_BUILD_REPLACED}/rpms",
         f"{BUILD_ID_UPDATE_BUILD_PULL}/rpms",
-        f"{BUILD_ID_PULL_SIDE_TAG}/rpms",
-        f"{BUILD_ID_PULL_SIDE_TAG_OCI}/rpms",
     }
 )
 _OCI_OPTIONAL_FILE_REPOS: Final = frozenset(
@@ -108,10 +141,20 @@ _OCI_OPTIONAL_FILE_REPOS: Final = frozenset(
         f"{BUILD_ID_UPDATE_BUILD}/artifacts",
         f"{BUILD_ID_UPDATE_BUILD_REPLACED}/artifacts",
         f"{BUILD_ID_UPDATE_BUILD_PULL}/artifacts",
-        f"{BUILD_ID_PULL_SIDE_TAG}/artifacts",
-        f"{BUILD_ID_PULL_SIDE_TAG_OCI}/artifacts",
     }
 )
+
+# ``transfer`` promotes these source builds to ``konflux-<source-domain>/<source-repo>/{rpms|artifacts|…}``.
+_TRANSFER_PROMOTED_RPM: Final = {
+    BUILD_ID_PULL_SIDE_TAG: ["test.0-1.0.0-1.noarch.rpm"],
+    BUILD_ID_PULL_SIDE_TAG_OCI: ["test.0-1.0.0-1.noarch.rpm"],
+    BUILD_ID_PULL_GPG_VERIFY: ["test.3-1.0.0-1.noarch.rpm"],
+}
+_TRANSFER_PROMOTED_FILES: Final = {
+    BUILD_ID_PULL_SIDE_TAG: ["pulp_results.json"],
+    BUILD_ID_PULL_SIDE_TAG_OCI: ["pulp_results.json"],
+    BUILD_ID_PULL_GPG_VERIFY: ["pulp_results.json"],
+}
 
 
 def normalize_oci_storage(oci_storage: str | None) -> str:
@@ -177,9 +220,6 @@ _FILE_REPOS_BASE: Final = {
     f"{BUILD_ID_UPDATE_BUILD}/artifacts": ["pulp_results.json"],
     f"{BUILD_ID_UPDATE_BUILD_REPLACED}/artifacts": ["pulp_results.json"],
     f"{BUILD_ID_UPDATE_BUILD_PULL}/artifacts": ["pulp_results.json"],
-    f"{BUILD_ID_PULL_SIDE_TAG}/artifacts": ["pulp_results.json"],
-    f"{BUILD_ID_PULL_SIDE_TAG_OCI}/artifacts": ["pulp_results.json"],
-    f"{BUILD_ID_PULL_GPG_VERIFY}/artifacts": ["pulp_results.json"],
     f"{BUILD_ID_UPLOAD_FULL}/artifacts": ["pulp_results.json"],
     f"{BUILD_ID_UPLOAD_FULL}/sbom": ["sbom.json"],
     f"{BUILD_ID_UPLOAD_TARGET_ARCH}/artifacts": ["pulp_results.json"],
@@ -188,36 +228,106 @@ _FILE_REPOS_BASE: Final = {
 }
 
 
-def rpm_repos_for_run(run_id: str | None, oci_storage: str | None = None) -> dict[str, list[str]]:
+def _transfer_destination_repos(
+    run_id: str | None,
+    source_domain: str,
+    *,
+    include_side_tag_sources: bool,
+) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
+    """RPM and file repo expectations on the Pulp domain after ``transfer`` (mainline aggregate paths)."""
+    rpm_out: dict[str, list[str]] = {}
+    file_out: dict[str, list[str]] = {}
+    for base_build_id, rpms in _TRANSFER_PROMOTED_RPM.items():
+        if not include_side_tag_sources and base_build_id in (
+            BUILD_ID_PULL_SIDE_TAG,
+            BUILD_ID_PULL_SIDE_TAG_OCI,
+        ):
+            continue
+        bid = scoped_build_id(base_build_id, run_id)
+        prefix = e2e_transfer_destination_repo_prefix(source_domain=source_domain, build_id=bid)
+        rpm_out[f"{prefix}/rpms"] = list(rpms)
+    for base_build_id, files in _TRANSFER_PROMOTED_FILES.items():
+        if not include_side_tag_sources and base_build_id in (
+            BUILD_ID_PULL_SIDE_TAG,
+            BUILD_ID_PULL_SIDE_TAG_OCI,
+        ):
+            continue
+        bid = scoped_build_id(base_build_id, run_id)
+        prefix = e2e_transfer_destination_repo_prefix(source_domain=source_domain, build_id=bid)
+        file_out[f"{prefix}/artifacts"] = list(files)
+    return rpm_out, file_out
+
+
+def rpm_repos_for_run(
+    run_id: str | None,
+    oci_storage: str | None = None,
+    *,
+    source_domain: str = "",
+) -> dict[str, list[str]]:
     """Return RPM repository expectations keyed by run-scoped Pulp names."""
     base = _without_optional_oci_repos(dict(_RPM_REPOS_BASE), _OCI_OPTIONAL_RPM_REPOS, oci_storage)
     side_tag_repo: dict[str, list[str]] = {}
     if oci_storage_e2e_enabled(oci_storage):
         side_tag_repo[pull_side_tag_rpm_repo_key(run_id)] = ["test.0-1.0.0-1.noarch.rpm"]
+    domain = (source_domain or "").strip()
+    transfer_rpm: dict[str, list[str]] = {}
+    if domain:
+        transfer_rpm, _ = _transfer_destination_repos(
+            run_id,
+            domain,
+            include_side_tag_sources=oci_storage_e2e_enabled(oci_storage),
+        )
     if not run_id:
         base.update(side_tag_repo)
+        base.update(transfer_rpm)
         return base
     scoped = {scoped_repo_name(name, run_id): content for name, content in base.items()}
     scoped.update(side_tag_repo)
+    scoped.update(transfer_rpm)
     return scoped
 
 
-def file_repos_for_run(run_id: str | None, oci_storage: str | None = None) -> dict[str, list[str]]:
+def file_repos_for_run(
+    run_id: str | None,
+    oci_storage: str | None = None,
+    *,
+    source_domain: str = "",
+) -> dict[str, list[str]]:
     """Return file repository expectations keyed by run-scoped Pulp names."""
     base = _without_optional_oci_repos(dict(_FILE_REPOS_BASE), _OCI_OPTIONAL_FILE_REPOS, oci_storage)
+    domain = (source_domain or "").strip()
+    _, transfer_file = _transfer_destination_repos(
+        run_id,
+        domain,
+        include_side_tag_sources=oci_storage_e2e_enabled(oci_storage),
+    )
     if not run_id:
-        return base
-    return {scoped_repo_name(name, run_id): content for name, content in base.items()}
+        out = dict(base)
+        out.update(transfer_file)
+        return out
+    scoped = {scoped_repo_name(name, run_id): content for name, content in base.items()}
+    scoped.update(transfer_file)
+    return scoped
 
 
-def rpm_repo_names_for_cleanup(run_id: str | None, oci_storage: str | None = None) -> set[str]:
+def rpm_repo_names_for_cleanup(
+    run_id: str | None,
+    oci_storage: str | None = None,
+    *,
+    source_domain: str = "",
+) -> set[str]:
     """RPM repository/distribution names to destroy after a run."""
-    return set(rpm_repos_for_run(run_id, oci_storage))
+    return set(rpm_repos_for_run(run_id, oci_storage, source_domain=source_domain))
 
 
-def file_repo_names_for_cleanup(run_id: str | None, oci_storage: str | None = None) -> set[str]:
+def file_repo_names_for_cleanup(
+    run_id: str | None,
+    oci_storage: str | None = None,
+    *,
+    source_domain: str = "",
+) -> set[str]:
     """File repository/distribution names to destroy after a run."""
-    return set(file_repos_for_run(run_id, oci_storage))
+    return set(file_repos_for_run(run_id, oci_storage, source_domain=source_domain))
 
 
 def resolve_run_id(explicit: str | None = None) -> str | None:

@@ -11,9 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **`transfer`** command: promote build artifacts from **build Pulp** (or OCI `pulp_results`) to **release Pulp**; side-tag ORAS publish, GPG verify, snapshot update, and Konflux **`--artifact-results`** / **`--oci-storage`** flags (moved off **`pull`**) ([5b42de7](https://github.com/konflux-ci/pulp-tool/commit/5b42de7))
 - Shared download/promote runner in **`pulp_tool/cli/artifact_pull_run.py`** used by **`pull`** and **`transfer`** ([5b42de7](https://github.com/konflux-ci/pulp-tool/commit/5b42de7))
+- **`pulp_tool.utils.transfer_repository_naming`**: build **`konflux-<source-domain>/<source-repo>`** path prefixes for transfer destination repos (aligned with Pulp path sanitization)
 
 ### Changed
 
+- **Side-tag RPM repos:** Pulp distribution **`base_path`** is the **sanitized `--side-tag` value only** (no `side-tag-` prefix); pulp-content URLs are `…/pulp-content/<domain>/<tag>/…`; promotion and `SideTagRpmTransfer` records accept **`.rpm` artifact keys only**
+- **`transfer`**: mainline destination aggregate repositories use **`konflux-<source-domain>/<source-repo>/{rpms|logs|sbom|artifacts}`** where **`cli.domain`** comes from the **source** config (`--source-config`, or destination **`--config`** when omitted) and **`<source-repo>`** is the namespace-stripped build segment from **`build_id`**, so promotions stay unique across source domains and easier to browse by domain
+- **E2e:** [`post-test-validation.py`](e2e/post-test-validation.py) and [`post-test-cleanup.py`](e2e/post-test-cleanup.py) read **`cli.domain`** from **`--config`** and match [`e2e/names.py`](e2e/names.py) expectations; coverage in [`tests/e2e/test_names.py`](tests/e2e/test_names.py)
 - **`pull`**: download-only; removed **`--transfer-dest`**, **`--side-tag`**, and related promotion flags (use **`transfer`** instead) ([5b42de7](https://github.com/konflux-ci/pulp-tool/commit/5b42de7))
 - **Docs and agent skills:** **`pull`** vs **`transfer`**, Konflux **`push-artifacts-to-storage`** vs target **`transfer`** contract, **build Pulp** / **release Pulp** terminology (replacing informal “RoK” / “Path 4” wording) ([5b42de7](https://github.com/konflux-ci/pulp-tool/commit/5b42de7))
 - Mintmaker/Renovate dependency updates run every three days (cron `* 0-5 */3 * *`); Dependabot covers GitHub Actions only (Python via Renovate) ([523696c](https://github.com/konflux-ci/pulp-tool/commit/523696c))
@@ -21,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`transfer`** (non-side-tag): after promoting RPMs to the destination, upload an updated **`pulp_results.json`** to the destination **artifacts** repository so Pulp file content lists include **`relative_path: pulp_results.json`** (e.g. RPM-only **`--content-types rpm`** + **`--verify-rpm-gpg`** previously left that repo empty)
 - **`make release-publish`:** infer GitHub **`owner/repo`** from **`RELEASE_GIT_REMOTE`** (not **`GITHUB_REPOSITORY`**) when syncing **`autorelease`** labels; skip tag push when the tag already exists but still mark the release PR; optional **`git config pulp-tool.releaseGitRemote`** ([523696c](https://github.com/konflux-ci/pulp-tool/commit/523696c))
 - **CI (Python 3.15):** set **`asyncio_default_fixture_loop_scope = function`** so pytest-asyncio’s deprecation warning is not promoted to error by **`filterwarnings`** ([523696c](https://github.com/konflux-ci/pulp-tool/commit/523696c))
 

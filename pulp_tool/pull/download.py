@@ -23,6 +23,7 @@ from ..models.results import DownloadResult
 from ..utils import PulpHelper, determine_build_id, extract_metadata_from_artifact_json
 from ..utils.artifact_detection import categorize_artifacts_by_type
 from ..utils.config_manager import ConfigManager
+from ..utils.transfer_repository_naming import transfer_destination_repository_base_name
 
 
 def _categorize_artifacts(
@@ -146,6 +147,44 @@ def setup_repositories_if_needed(
         elif domain:
             logging.debug("Using domain for pull (already has 'konflux-' prefix or empty): %s", domain)
         build_id = determine_build_id(args, artifact_json=artifact_json)
+
+        transfer_repository_name_prefix = None
+        _raw_op = getattr(args, "operation_label", None)
+        if isinstance(_raw_op, str) and _raw_op.strip() in {"pull", "transfer"}:
+            operation_label = _raw_op.strip()
+        else:
+            operation_label = "pull"
+        td_str = str(transfer_dest).strip() if transfer_dest else ""
+        if operation_label == "transfer" and td_str:
+            source_cfg = getattr(args, "transfer_source_config_path", None)
+            source_cfg_path = (source_cfg or "").strip() or None
+            source_domain = ""
+            if source_cfg_path:
+                try:
+                    source_cm = ConfigManager(source_cfg_path)
+                    source_cm.load()
+                    raw_domain = source_cm.get("cli.domain", "")
+                    source_domain = str(raw_domain).strip() if raw_domain else ""
+                except (OSError, ValueError, RuntimeError) as exc:
+                    logging.warning(
+                        "transfer: could not load source config for repository naming (%s): %s",
+                        source_cfg_path,
+                        exc,
+                    )
+            try:
+                transfer_repository_name_prefix = transfer_destination_repository_base_name(
+                    build_id=build_id,
+                    source_domain=source_domain,
+                )
+                logging.info(
+                    "Transfer destination repository base path prefix: %s (from source domain + build_id)",
+                    transfer_repository_name_prefix,
+                )
+            except ValueError as exc:
+                logging.warning("transfer: %s; using default repository naming (build_id segment only)", exc)
+
+            args.transfer_repository_name_prefix = transfer_repository_name_prefix
+
         client = PulpClient.create_from_config_file(
             path=args.config,
             domain=domain if domain else None,
@@ -160,7 +199,11 @@ def setup_repositories_if_needed(
             logging.debug("Extracted parent_package from artifact_json: %s", parent_package)
 
         logging.info("Setting up repositories for pull operations: %s", build_id)
-        repository_helper = PulpHelper(client, parent_package=parent_package)
+        repository_helper = PulpHelper(
+            client,
+            parent_package=parent_package,
+            repository_name_prefix=getattr(args, "transfer_repository_name_prefix", None),
+        )
         repositories = repository_helper.setup_repositories(build_id)
         logging.info("Repository setup completed for pull operations")
 

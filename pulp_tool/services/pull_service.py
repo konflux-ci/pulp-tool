@@ -28,6 +28,7 @@ from ..pull import (
 )
 from ..pull.publish import publish_side_tag_results
 from ..pull.side_tag import upload_rpms_to_side_tag_repository
+from ..pull.transfer_results_upload import upload_transfer_pulp_results_json_to_artifacts
 from ..utils.rpm_gpg_verify import RpmGpgVerifyError, verify_pulled_rpms_gpg
 
 
@@ -263,6 +264,8 @@ class PullService:
                     side_tag_upload.transfers,
                     side_tag_distribution_base=side_tag_upload.distribution_base_url,
                 )
+            elif upload_info:
+                upload_transfer_pulp_results_json_to_artifacts(pulp_client, artifact_data, upload_info, context)
         else:
             logging.info("No Pulp client available, skipping upload to repositories")
 

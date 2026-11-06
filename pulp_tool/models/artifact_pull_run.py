@@ -160,6 +160,7 @@ class ArtifactPullRunOptions(KonfluxBaseModel):
         side_tag: SideTagResolution,
         gpg: GpgPullSettings,
     ) -> PullContext:
+        source_cfg = self.source_config_path or self.dest_config_path
         return PullContext(
             artifact_location=resolved_artifact_location,
             namespace=self.namespace,
@@ -178,6 +179,8 @@ class ArtifactPullRunOptions(KonfluxBaseModel):
             archs=self.parsed_archs(),
             verify_rpm_gpg=gpg.verify_rpm_gpg,
             gpg_keyring=gpg.gpg_keyring,
+            operation_label=self.operation_label,
+            transfer_source_config_path=source_cfg,
         )
 
 

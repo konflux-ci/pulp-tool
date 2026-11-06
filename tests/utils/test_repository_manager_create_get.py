@@ -45,6 +45,16 @@ class TestRepositoryApiOps:
 class TestRepositoryManagerSetupRepositories:
     """Tests for RepositoryManager.setup_repositories() method."""
 
+    def test_aggregate_repository_base_segment_uses_transfer_prefix(self) -> None:
+        """Transfer promotions use ``repository_name_prefix`` as the repo base path (may include ``/``)."""
+        mock_client = Mock()
+        mock_client.namespace = "test-namespace"
+        manager = RepositoryManager(
+            mock_client,
+            repository_name_prefix="  konflux-a-b/pipeline-x  ",
+        )
+        assert manager._aggregate_repository_base_segment("tenant-1/pipeline-x") == "konflux-a-b/pipeline-x"
+
     def test_setup_repositories_invalid_after_sanitization(self) -> None:
         """Test setup_repositories raises ValueError when sanitized build_id is invalid (line 72)."""
         mock_client = Mock()

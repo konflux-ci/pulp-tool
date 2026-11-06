@@ -42,7 +42,7 @@ class TestPublishSideTagResults:
                 context,
                 Mock(),
                 transfers,
-                side_tag_distribution_base="https://rok/side-tag-mytest/",
+                side_tag_distribution_base="https://rok/mytest/",
             )
 
     def test_publish_requires_distribution_base(self) -> None:
@@ -144,7 +144,7 @@ class TestPublishSideTagResults:
                 artifact_key="pkg.rpm",
                 pulp_href="/pulp/new/",
                 sha256="bb",
-                distribution_url="https://rok/side-tag-mytest/Packages/p/pkg.rpm",
+                distribution_url="https://rok/mytest/Packages/p/pkg.rpm",
             )
         ]
         with (
@@ -161,7 +161,7 @@ class TestPublishSideTagResults:
                 context,
                 upload_info,
                 transfers,
-                side_tag_distribution_base="https://rok/side-tag-mytest/",
+                side_tag_distribution_base="https://rok/mytest/",
             )
             mock_write.assert_called_once()
             mock_snapshot.assert_not_called()
@@ -214,7 +214,7 @@ class TestPublishSideTagResults:
                 artifact_key="pkg.rpm",
                 pulp_href="/pulp/new/",
                 sha256="bb",
-                distribution_url="https://rok/side-tag-mytest/Packages/p/pkg.rpm",
+                distribution_url="https://rok/mytest/Packages/p/pkg.rpm",
             )
         ]
         with (

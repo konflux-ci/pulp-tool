@@ -85,9 +85,26 @@ class TestArtifactPullRunOptions:
         )
         assert ctx.artifact_location == "/tmp/pulp_results.json"
         assert ctx.transfer_dest == "/release.toml"
+        assert ctx.transfer_source_config_path == "/release.toml"
         assert ctx.oci_storage == "quay.io/x:y"
         assert ctx.cluster == "c1"
         assert ctx.max_workers == 8
+        assert ctx.operation_label == "pull"
+
+    def test_to_pull_context_transfer_sets_source_config(self) -> None:
+        opts = ArtifactPullRunOptions(
+            operation_label="transfer",
+            source_config_path="/build.toml",
+            dest_config_path="/release.toml",
+        )
+        ctx = opts.to_pull_context(
+            resolved_artifact_location="/tmp/pulp_results.json",
+            auth_key_path=None,
+            side_tag=SideTagResolution(),
+            gpg=opts.resolve_gpg(),
+        )
+        assert ctx.operation_label == "transfer"
+        assert ctx.transfer_source_config_path == "/build.toml"
 
     def test_transfer_requires_dest_config(self) -> None:
         with pytest.raises(ValueError, match="dest_config_path"):

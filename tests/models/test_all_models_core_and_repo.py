@@ -163,6 +163,11 @@ class TestPullContext:
         assert context.max_workers == 8
         assert context.debug == 2
 
+    def test_pull_context_invalid_operation_label(self) -> None:
+        """PullContext rejects unknown operation_label values."""
+        with pytest.raises(ValidationError, match="operation_label"):
+            PullContext(operation_label="sync")
+
 
 class TestArtifactFile:
     """Test ArtifactFile model."""

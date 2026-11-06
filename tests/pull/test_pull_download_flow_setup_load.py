@@ -65,12 +65,104 @@ class TestSetupRepositories:
             assert kwargs["domain"] == "konflux-test-domain"
             mock_logging.debug.assert_called()
 
+    def test_transfer_setup_uses_source_domain_prefix_in_pulp_helper(self, tmp_path) -> None:
+        """transfer: destination repos use konflux-<source-domain>/<source-repo> from source cli.domain."""
+        from pulp_tool.models.context import PullContext
+
+        dest_cfg = tmp_path / "dest.toml"
+        dest_cfg.write_text('[cli]\nbase_url = "https://release.example.com"\ndomain = "release-domain"')
+        src_cfg = tmp_path / "src.toml"
+        src_cfg.write_text('[cli]\nbase_url = "https://build.example.com"\ndomain = "source-domain"')
+        args = PullContext(
+            config=str(dest_cfg),
+            transfer_dest=str(dest_cfg),
+            build_id="tenant-1/plrun-99",
+            namespace="tenant-1",
+            operation_label="transfer",
+            transfer_source_config_path=str(src_cfg),
+        )
+        with (
+            patch("pulp_tool.pull.download.PulpClient") as mock_client_class,
+            patch("pulp_tool.pull.download.PulpHelper") as mock_helper_class,
+        ):
+            mock_client = Mock()
+            mock_client_class.create_from_config_file.return_value = mock_client
+            mock_helper = Mock()
+            mock_helper.setup_repositories.return_value = Mock()
+            mock_helper_class.return_value = mock_helper
+            setup_repositories_if_needed(args, artifact_json=None)
+            mock_helper_class.assert_called_once()
+            call_kw = mock_helper_class.call_args.kwargs
+            assert call_kw["repository_name_prefix"] == "konflux-source-domain/plrun-99"
+
+    def test_transfer_setup_prefix_skips_when_build_id_invalid(self, tmp_path) -> None:
+        """transfer: omit prefix when transfer_destination_repository_base_name raises."""
+        from pulp_tool.models.context import PullContext
+
+        dest_cfg = tmp_path / "dest.toml"
+        dest_cfg.write_text('[cli]\nbase_url = "https://release.example.com"\ndomain = "release-domain"')
+        src_cfg = tmp_path / "src.toml"
+        src_cfg.write_text('[cli]\ndomain = "build"')
+        args = PullContext(
+            config=str(dest_cfg),
+            transfer_dest=str(dest_cfg),
+            build_id="tenant/",
+            namespace="ns",
+            operation_label="transfer",
+            transfer_source_config_path=str(src_cfg),
+        )
+        with (
+            patch("pulp_tool.pull.download.PulpClient") as mock_client_class,
+            patch("pulp_tool.pull.download.PulpHelper") as mock_helper_class,
+            patch("pulp_tool.pull.download.transfer_destination_repository_base_name") as mock_prefix,
+            patch("pulp_tool.pull.download.logging") as mock_logging,
+        ):
+            mock_prefix.side_effect = ValueError("invalid build")
+            mock_client_class.create_from_config_file.return_value = Mock()
+            mock_helper_class.return_value = Mock()
+            mock_helper_class.return_value.setup_repositories.return_value = Mock()
+            setup_repositories_if_needed(args)
+            mock_logging.warning.assert_called()
+            assert args.transfer_repository_name_prefix is None
+            call_kw = mock_helper_class.call_args.kwargs
+            assert call_kw["repository_name_prefix"] is None
+
+    def test_transfer_setup_logs_when_source_config_unreadable(self, tmp_path) -> None:
+        """transfer: warn but continue when source config cannot be loaded."""
+        from pulp_tool.models.context import PullContext
+
+        dest_cfg = tmp_path / "dest.toml"
+        dest_cfg.write_text('[cli]\nbase_url = "https://release.example.com"\ndomain = "release-domain"')
+        missing_src = tmp_path / "nope.toml"
+        args = PullContext(
+            config=str(dest_cfg),
+            transfer_dest=str(dest_cfg),
+            build_id="tenant/pipeline-z",
+            namespace="tenant",
+            operation_label="transfer",
+            transfer_source_config_path=str(missing_src),
+        )
+        with (
+            patch("pulp_tool.pull.download.PulpClient") as mock_client_class,
+            patch("pulp_tool.pull.download.PulpHelper") as mock_helper_class,
+            patch("pulp_tool.pull.download.logging") as mock_logging,
+        ):
+            mock_client_class.create_from_config_file.return_value = Mock()
+            mock_helper_class.return_value = Mock()
+            mock_helper_class.return_value.setup_repositories.return_value = Mock()
+            setup_repositories_if_needed(args)
+            warned = [str(c.args[0]) for c in mock_logging.warning.call_args_list]
+            assert any("could not load source config" in msg for msg in warned)
+
     def test_setup_repositories_with_artifact_json_parent_package(self, mock_config, temp_config_file) -> None:
         """Test setup_repositories_if_needed extracts parent_package from artifact_json (lines 113-114)."""
         args = Mock()
         args.config = temp_config_file
         args.transfer_dest = temp_config_file
         args.build_id = "test-build"
+        args.operation_label = "pull"
+        args.transfer_source_config_path = None
+        args.transfer_repository_name_prefix = None
         artifact_json = {"parent_package": "test-package"}
         with (
             patch("pulp_tool.pull.download.PulpClient.create_from_config_file") as mock_create,
@@ -100,7 +192,11 @@ class TestSetupRepositories:
             assert result is not None
             assert result.client == mock_client
             mock_extract.assert_called_once_with(artifact_json, "parent_package")
-            mock_helper.assert_called_once_with(mock_client, parent_package="test-package")
+            mock_helper.assert_called_once_with(
+                mock_client,
+                parent_package="test-package",
+                repository_name_prefix=None,
+            )
 
 
 class TestLoadAndValidateArtifacts:
