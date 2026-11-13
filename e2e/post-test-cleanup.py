@@ -7,8 +7,37 @@ import sys
 import tomllib
 from pathlib import Path
 
-from names import file_repo_names_for_cleanup, normalize_oci_storage, resolve_run_id, rpm_repo_names_for_cleanup
+from names import (
+    CONTAINER_OCI_E2E_BUILD_IDS,
+    container_oci_names_for_cleanup,
+    file_repo_names_for_cleanup,
+    normalize_oci_storage,
+    resolve_run_id,
+    rpm_repo_names_for_cleanup,
+    scoped_build_id,
+)
 from pulp_cli_env import env_for_pulp_cli
+
+
+def destroy_container_push_oci(config_path: Path, name: str, dry_run: bool = False) -> bool:
+    """Destroy a Pulp container-push repository + distribution pair (``--pulp-oras-cp-target``)."""
+    if dry_run:
+        print(f"[DRY RUN] Would destroy container-push OCI storage: {name}")
+        return True
+    try:
+        from pulp_tool.api.pulp_client.client import PulpClient
+        from pulp_tool.utils.pulp_container_oci import destroy_container_push_oci_storage
+    except ImportError as exc:
+        print(f"Warning: pulp-tool not available for container OCI cleanup: {exc}", file=sys.stderr)
+        return False
+    try:
+        client = PulpClient.create_from_config_file(str(config_path))
+        destroy_container_push_oci_storage(client, name)
+        client.close()
+        return True
+    except Exception as exc:  # pylint: disable=broad-except
+        print(f"Warning: Failed to destroy container-push OCI '{name}': {exc}", file=sys.stderr)
+        return False
 
 
 def destroy_resource(config_path: Path, repo_type: str, resource: str, name: str, dry_run: bool = False) -> bool:
@@ -75,6 +104,10 @@ def cleanup_repos(
     """
     rpm_repos = rpm_repo_names_for_cleanup(run_id, oci_storage, source_domain=source_domain)
     file_repos = file_repo_names_for_cleanup(run_id, oci_storage, source_domain=source_domain)
+    container_oci_names = container_oci_names_for_cleanup(
+        source_domain or "default",
+        [scoped_build_id(build_id, run_id) for build_id in CONTAINER_OCI_E2E_BUILD_IDS],
+    )
 
     if dry_run:
         print("=== DRY RUN MODE: No resources will be destroyed ===\n")
@@ -83,7 +116,7 @@ def cleanup_repos(
     else:
         print("=== Cleaning up test resources ===\n")
 
-    total_resources = (len(rpm_repos) + len(file_repos)) * 2  # repos + distributions
+    total_resources = (len(rpm_repos) + len(file_repos)) * 2 + len(container_oci_names)  # + container OCI stacks
     current = 0
     failures = 0
 
@@ -108,6 +141,12 @@ def cleanup_repos(
             current += 1
             print(f"[{current}/{total_resources}] Destroying file distribution: {repo}")
             if not destroy_resource(config_path, "file", "distribution", repo, dry_run):
+                failures += 1
+
+        for name in container_oci_names:
+            current += 1
+            print(f"[{current}/{total_resources}] Destroying container-push OCI storage: {name}")
+            if not destroy_container_push_oci(config_path, name, dry_run):
                 failures += 1
 
         # Cleanup abandoned packages and files

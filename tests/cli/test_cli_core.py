@@ -96,6 +96,9 @@ class TestCLIHelp:
         assert "promote them to release Pulp" in result.output
         assert "--side-tag" in result.output
         assert "--source-config" in result.output
+        assert "--oras-cp-target" in result.output
+        assert "--pulp-oras-cp-target" in result.output
+        assert "--snapshot-path" in result.output
 
     def test_create_repository_help(self) -> None:
         """Test create-repository command help output."""

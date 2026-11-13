@@ -13,6 +13,7 @@ from pulp_tool.utils.oci_pull import (
     is_oci_artifact_reference,
     normalize_oci_artifact_reference,
     pull_pulp_results_json,
+    resolve_oci_transfer_artifact,
     resolve_pulp_results_oci_pull_ref,
 )
 from pulp_tool.utils.oras_publish import OrasPublishError
@@ -200,6 +201,139 @@ class TestDiscoverPulpResultsReferrers:
         with patch("pulp_tool.utils.oci_pull._run_oras") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="not-json", stderr="")
             assert discover_pulp_results_referrer_refs("quay.io/ns/r@sha256:sub") == []
+
+
+class TestOrasPullRefToDir:
+    def test_empty_reference_raises(self, tmp_path: Path) -> None:
+        with pytest.raises(OrasPublishError, match="empty"):
+            from pulp_tool.utils.oci_pull import _oras_pull_ref_to_dir
+
+            _oras_pull_ref_to_dir("  ", tmp_path)
+
+    def test_pull_without_clearing_existing_files(self, tmp_path: Path) -> None:
+        from pulp_tool.utils.oci_pull import _oras_pull_ref_to_dir
+
+        dest = tmp_path / "dest"
+        dest.mkdir()
+        keep = dest / "keep.txt"
+        keep.write_text("stay", encoding="utf-8")
+
+        def _fake_oras(args: list[str], _target: str, *, cwd: str | Path | None = None) -> MagicMock:
+            return MagicMock(returncode=0, stdout="", stderr="")
+
+        with patch("pulp_tool.utils.oci_pull._run_oras", side_effect=_fake_oras):
+            _oras_pull_ref_to_dir("quay.io/ns/r@sha256:abc", dest, clear_files=False)
+        assert keep.read_text(encoding="utf-8") == "stay"
+
+
+class TestResolveOciTransferArtifact:
+    def test_empty_subject_raises(self, tmp_path: Path) -> None:
+        with pytest.raises(OrasPublishError, match="empty"):
+            resolve_oci_transfer_artifact("  ", tmp_path)
+
+    def test_referrer_pull_success(self, tmp_path: Path) -> None:
+        work = tmp_path / "work"
+        subject = "quay.io/ns/repo@sha256:subject"
+
+        def _fake_oras(args: list[str], _target: str, *, cwd: str | Path | None = None) -> MagicMock:
+            if "discover" in args:
+                return MagicMock(
+                    returncode=0,
+                    stdout=json.dumps({"manifests": [{"digest": "sha256:attach"}]}),
+                    stderr="",
+                )
+            if "pull" in args:
+                out_dir = Path(args[args.index("-o") + 1])
+                out_dir.mkdir(parents=True, exist_ok=True)
+                (out_dir / "pulp_results.json").write_text("{}", encoding="utf-8")
+                return MagicMock(returncode=0, stdout="", stderr="")
+            return MagicMock(returncode=0, stdout="", stderr="")
+
+        with patch("pulp_tool.utils.oci_pull._run_oras", side_effect=_fake_oras):
+            res = resolve_oci_transfer_artifact(subject, work)
+        assert res.kind == "pulp_results"
+
+    def test_referrer_pull_failure_falls_back_to_subject(self, tmp_path: Path) -> None:
+        work = tmp_path / "work"
+        subject = "quay.io/ns/repo@sha256:subject"
+
+        def _fake_oras(args: list[str], _target: str, *, cwd: str | Path | None = None) -> MagicMock:
+            if "discover" in args:
+                return MagicMock(
+                    returncode=0,
+                    stdout=json.dumps({"manifests": [{"digest": "sha256:bad"}]}),
+                    stderr="",
+                )
+            if "pull" in args:
+                ref = args[args.index("pull") + 1]
+                out_dir = Path(args[args.index("-o") + 1])
+                if "bad" in ref:
+                    return MagicMock(returncode=1, stdout="", stderr="nope")
+                out_dir.mkdir(parents=True, exist_ok=True)
+                (out_dir / "pulp_results.json").write_text("{}", encoding="utf-8")
+                return MagicMock(returncode=0, stdout="", stderr="")
+            return MagicMock(returncode=0, stdout="", stderr="")
+
+        with patch("pulp_tool.utils.oci_pull._run_oras", side_effect=_fake_oras):
+            res = resolve_oci_transfer_artifact(subject, work)
+        assert res.kind == "pulp_results"
+
+    def test_no_json_and_no_rpms_raises(self, tmp_path: Path) -> None:
+        work = tmp_path / "work"
+        subject = "quay.io/ns/repo@sha256:subject"
+
+        def _fake_oras(args: list[str], _target: str, *, cwd: str | Path | None = None) -> MagicMock:
+            if "discover" in args:
+                return MagicMock(returncode=1, stdout="", stderr="")
+            if "pull" in args:
+                out_dir = Path(args[args.index("-o") + 1])
+                out_dir.mkdir(parents=True, exist_ok=True)
+                return MagicMock(returncode=0, stdout="", stderr="")
+            return MagicMock(returncode=0, stdout="", stderr="")
+
+        with patch("pulp_tool.utils.oci_pull._run_oras", side_effect=_fake_oras):
+            with pytest.raises(OrasPublishError, match="no pulp_results"):
+                resolve_oci_transfer_artifact(subject, work)
+
+    def test_bundle_fallback_when_no_json(self, tmp_path: Path) -> None:
+        work = tmp_path / "work"
+        subject = "quay.io/ns/repo@sha256:subject"
+
+        def _fake_oras(args: list[str], _target: str, *, cwd: str | Path | None = None) -> MagicMock:
+            if "discover" in args:
+                return MagicMock(returncode=1, stdout="", stderr="")
+            if "pull" in args:
+                out_dir = Path(args[args.index("-o") + 1])
+                out_dir.mkdir(parents=True, exist_ok=True)
+                (out_dir / "pkg.noarch.rpm").write_bytes(b"fake rpm")
+                return MagicMock(returncode=0, stdout="", stderr="")
+            return MagicMock(returncode=0, stdout="", stderr="")
+
+        with patch("pulp_tool.utils.oci_pull._run_oras", side_effect=_fake_oras):
+            res = resolve_oci_transfer_artifact(subject, work)
+        assert res.kind == "oci_bundle"
+        assert res.bundle_dir is not None
+        assert (res.bundle_dir / "pkg.noarch.rpm").is_file()
+
+    def test_subject_json_before_bundle(self, tmp_path: Path) -> None:
+        work = tmp_path / "work"
+        subject = "quay.io/ns/repo@sha256:subject"
+
+        def _fake_oras(args: list[str], _target: str, *, cwd: str | Path | None = None) -> MagicMock:
+            if "discover" in args:
+                return MagicMock(returncode=1, stdout="", stderr="")
+            if "pull" in args:
+                out_dir = Path(args[args.index("-o") + 1])
+                out_dir.mkdir(parents=True, exist_ok=True)
+                (out_dir / "pulp_results.json").write_text('{"version": "1.0.0", "artifacts": {}}', encoding="utf-8")
+                return MagicMock(returncode=0, stdout="", stderr="")
+            return MagicMock(returncode=0, stdout="", stderr="")
+
+        with patch("pulp_tool.utils.oci_pull._run_oras", side_effect=_fake_oras):
+            res = resolve_oci_transfer_artifact(subject, work)
+        assert res.kind == "pulp_results"
+        assert res.pulp_results_path is not None
+        assert res.pulp_results_path.name == "pulp_results.json"
 
 
 class TestSelectNewestReferrerSkipsBadCandidates:

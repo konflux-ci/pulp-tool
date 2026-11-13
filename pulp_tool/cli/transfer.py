@@ -82,7 +82,30 @@ from .artifact_pull_run import run_artifact_pull_flow
     help=(
         "Path to Konflux release snapshot JSON in the trusted-artifact workspace. "
         "After ORAS publish, sets pulpResultsOciManifest for a following "
-        "create-trusted-artifact step."
+        "create-trusted-artifact step; required with --oras-cp-target or --pulp-oras-cp-target."
+    ),
+)
+@click.option(
+    "--oras-cp-target",
+    help=(
+        "After a successful transfer, oras cp the source OCI artifact to this target "
+        "(Konflux ociStorage or repo:tag). Updates matching components[].containerImage "
+        "in --snapshot-path (same trusted-artifact pattern as upload-src-rpm-sbom-attestation)."
+    ),
+)
+@click.option(
+    "--pulp-oras-cp-target",
+    is_flag=True,
+    help=(
+        "After a successful transfer, create (if missing) or reuse a Pulp container distribution "
+        "(registry path namespace/oci/build-id), oras cp the source bundle, and update matching "
+        "components[].containerImage in --snapshot-path (mutually exclusive with --oras-cp-target)."
+    ),
+)
+@click.option(
+    "--oras-cp-source",
+    help=(
+        "Digest-pinned source ref for oras cp. Defaults to --artifact-location when it is an OCI manifest@sha256 ref."
     ),
 )
 @click.option(
@@ -114,6 +137,9 @@ def transfer(  # pylint: disable=too-many-positional-arguments
     side_tag: str | None,
     artifact_results: str | None,
     snapshot_path: str | None,
+    oras_cp_target: str | None,
+    pulp_oras_cp_target: bool,
+    oras_cp_source: str | None,
     oci_storage: str | None,
     verify_rpm_gpg: bool,
     gpg_keyring: str | None,
@@ -147,6 +173,9 @@ def transfer(  # pylint: disable=too-many-positional-arguments
             side_tag=side_tag,
             artifact_results=artifact_results,
             snapshot_path=snapshot_path,
+            oras_cp_target=oras_cp_target,
+            pulp_oras_cp_target=pulp_oras_cp_target,
+            oras_cp_source=oras_cp_source,
             oci_storage=oci_storage,
             verify_rpm_gpg=verify_rpm_gpg,
             gpg_keyring=gpg_keyring,

@@ -162,8 +162,15 @@ first `/` for Konflux `namespace/pipeline-run` IDs).
 | `--side-tag` | Conditional | Extra release-Pulp RPM repo; requires **`--oci-storage`** |
 | `--artifact-results` | Conditional | Tekton OCI URL/digest after side-tag ORAS publish |
 | `--oci-storage` | Conditional | Konflux `ociStorage` |
-| `--snapshot-path` | No | Sets `pulpResultsOciManifest` on release snapshot JSON |
+| `--snapshot-path` | No | Trusted-artifact snapshot JSON path (side-tag ORAS: `pulpResultsOciManifest`; required with `--oras-cp-target` or `--pulp-oras-cp-target`) |
+| `--oras-cp-target` | Conditional | After success, `oras cp` source bundle to this registry target (Konflux `ociStorage` or `repo:tag`) |
+| `--pulp-oras-cp-target` | Conditional | After success, create/reuse Pulp [container](https://pulpproject.org/pulp_container/restapi/) distribution at registry path `namespace/oci/build-id`, `oras cp` into it, update snapshot `containerImage` (exclusive with `--oras-cp-target`) |
+| `--oras-cp-source` | No | Digest-pinned source for `oras cp` (default: OCI `--artifact-location` before ORAS pull) |
 | `--verify-rpm-gpg` / `--gpg-keyring` | No | RPM signature check before destination upload (destination config) |
+
+**Snapshot workspace:** When `--oras-cp-target` or `--pulp-oras-cp-target` is set, matching `components[].containerImage` entries (same `sha256` digest as the copy source) are rewritten to the destination ref before `create-trusted-artifact`, analogous to [upload-src-rpm-sbom-attestation](https://github.com/konflux-ci/release-service-catalog/blob/development/tasks/managed/upload-src-rpm-sbom-attestation/upload-src-rpm-sbom-attestation.yaml) updating snapshot paths in-process. Pulp-backed copy uses destination `cli.toml` credentials (and optional `cli.container_registry`) for registry push auth.
+
+**Digest-pinned OCI `--artifact-location` (transfer):** resolves inputs in order: (1) ORAS-attached `pulp_results` referrer, (2) `pulp_results.json` in the subject manifest layers, (3) **intermediate ORAS bundle** — `oras pull` of the subject (same as [release-service-utils `push_artifacts_to_storage`](https://github.com/konflux-ci/release-service-utils/blob/main/src/tasks/managed/push_artifacts_to_storage/push_artifacts_to_storage.py)) and promote `*.rpm` from the pull directory. Local RPM files are removed after successful upload to limit disk use in Tekton pods.
 
 **Side-tag:** See prior release docs — global **sanitized `--side-tag`** path (single segment, no `side-tag-` prefix), ORAS publish, **`--artifact-results`**, optional **`--snapshot-path`** for trusted-artifact workspaces.
 

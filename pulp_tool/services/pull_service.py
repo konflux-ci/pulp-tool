@@ -26,9 +26,12 @@ from ..pull import (
     setup_repositories_if_needed,
     upload_downloaded_files_to_pulp,
 )
+from ..pull.oras_bundle import collect_pulled_artifacts_from_oras_bundle
 from ..pull.publish import publish_side_tag_results
 from ..pull.side_tag import upload_rpms_to_side_tag_repository
+from ..pull.transfer_oras_copy import finalize_transfer_oci_post_copy
 from ..pull.transfer_results_upload import upload_transfer_pulp_results_json_to_artifacts
+from ..utils import determine_build_id
 from ..utils.rpm_gpg_verify import RpmGpgVerifyError, verify_pulled_rpms_gpg
 
 
@@ -55,6 +58,19 @@ class PullService:
 
     def __init__(self) -> None:
         """Initialize the pull service."""
+
+    @staticmethod
+    def _maybe_finalize_oras_copy(context: PullContext, error_messages: list[str]) -> None:
+        if error_messages or (context.operation_label or "").strip() != "transfer":
+            return
+        has_target = bool((getattr(context, "oras_cp_target", None) or "").strip())
+        has_pulp = bool(getattr(context, "pulp_oras_cp_target", False))
+        if not has_target and not has_pulp:
+            return
+        try:
+            finalize_transfer_oci_post_copy(context)
+        except ValueError as exc:
+            error_messages.append(str(exc))
 
     def load_artifacts(self, context: PullContext, distribution_client: Optional["DistributionClient"]) -> ArtifactData:
         """
@@ -184,6 +200,106 @@ class PullService:
         """
         generate_pull_report(pulled_artifacts, completed, failed, context, upload_info)
 
+    def _run_intermediate_oras_bundle(
+        self,
+        context: PullContext,
+        *,
+        distribution_client: Optional["DistributionClient"],
+    ) -> PullRunResult:
+        """Promote ORAS-pulled RPMs (no ``pulp_results.json``) to release Pulp."""
+        bundle_raw = (context.oci_intermediate_bundle_dir or "").strip()
+        if not bundle_raw:
+            return PullRunResult(
+                pulled_artifacts=PulledArtifacts(),
+                completed=0,
+                failed=0,
+                upload_info=None,
+                error_messages=["Internal error: intermediate ORAS bundle path is missing"],
+            )
+
+        from pathlib import Path
+
+        bundle_dir = Path(bundle_raw)
+        try:
+            pulled_artifacts = collect_pulled_artifacts_from_oras_bundle(bundle_dir, context)
+        except ValueError as exc:
+            return PullRunResult(
+                pulled_artifacts=PulledArtifacts(),
+                completed=0,
+                failed=0,
+                upload_info=None,
+                error_messages=[str(exc)],
+            )
+
+        rpm_count = len(pulled_artifacts.rpms)
+        build_id = determine_build_id(context, pulled_artifacts=pulled_artifacts)  # type: ignore[arg-type]
+        placeholder_doc = PulpResultsDocument(build_id=build_id or "", artifacts={})
+        artifact_data = ArtifactData(artifact_json=placeholder_doc, artifacts={})
+        destination_setup = setup_repositories_if_needed(context, placeholder_doc)
+        pulp_client = destination_setup.client if destination_setup else None
+
+        if context.verify_rpm_gpg:
+            rpm_paths = [artifact.file for artifact in pulled_artifacts.rpms.values()]
+            try:
+                verify_pulled_rpms_gpg(rpm_paths, gpg_keyring=context.gpg_keyring)
+            except RpmGpgVerifyError as exc:
+                return PullRunResult(
+                    pulled_artifacts=pulled_artifacts,
+                    completed=rpm_count,
+                    failed=0,
+                    upload_info=None,
+                    error_messages=[str(exc)],
+                    pulp_client=pulp_client,
+                    distribution_client=distribution_client,
+                )
+
+        upload_info: PulpResultsDocument | None = None
+        if pulp_client:
+            logging.info("Uploading ORAS bundle RPMs to Pulp repositories...")
+            upload_info = upload_downloaded_files_to_pulp(
+                pulp_client,
+                pulled_artifacts,
+                context,
+                repositories=destination_setup.repositories if destination_setup else None,
+            )
+            if context.side_tag and upload_info:
+                side_tag_upload = upload_rpms_to_side_tag_repository(
+                    pulp_client,
+                    pulled_artifacts,
+                    artifact_data,
+                    context,
+                )
+                publish_side_tag_results(
+                    pulp_client,
+                    artifact_data,
+                    context,
+                    upload_info,
+                    side_tag_upload.transfers,
+                    side_tag_distribution_base=side_tag_upload.distribution_base_url,
+                )
+            elif upload_info:
+                upload_transfer_pulp_results_json_to_artifacts(pulp_client, artifact_data, upload_info, context)
+        else:
+            logging.info("No Pulp client available, skipping upload to repositories")
+
+        generate_pull_report(pulled_artifacts, rpm_count, 0, context, upload_info)
+
+        error_messages: list[str] = []
+        if upload_info and upload_info.has_errors:
+            error_messages.append(f"{len(upload_info.upload_errors)} upload error(s) occurred")
+
+        self._maybe_finalize_oras_copy(context, error_messages)
+
+        return PullRunResult(
+            pulled_artifacts=pulled_artifacts,
+            completed=rpm_count,
+            failed=0,
+            upload_info=upload_info,
+            error_messages=error_messages,
+            pulp_client=pulp_client,
+            distribution_client=distribution_client,
+        )
+
     def run(
         self,
         context: PullContext,
@@ -192,6 +308,9 @@ class PullService:
         max_workers: int,
     ) -> PullRunResult:
         """Execute load → setup → download → optional upload/side-tag → report."""
+        if (context.oci_intermediate_bundle_dir or "").strip():
+            return self._run_intermediate_oras_bundle(context, distribution_client=distribution_client)
+
         side_tag_error = validate_pull_side_tag_context(context)
         if side_tag_error:
             return PullRunResult(
@@ -283,6 +402,8 @@ class PullService:
         if upload_info and upload_info.has_errors:
             error_count = len(upload_info.upload_errors)
             error_messages.append(f"{error_count} upload error(s) occurred")
+
+        self._maybe_finalize_oras_copy(context, error_messages)
 
         return PullRunResult(
             pulled_artifacts=download_result.pulled_artifacts,

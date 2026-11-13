@@ -6,6 +6,7 @@ This module handles uploading downloaded artifacts to destination Pulp repositor
 
 import logging
 import os
+from pathlib import Path
 
 import httpx
 
@@ -168,6 +169,13 @@ def _upload_rpms_to_repository(
                     row = upload_info.artifacts.get(key)
                     if row is not None and artifact_href:
                         row.href = artifact_href
+
+    if getattr(context, "delete_local_sources_after_upload", False):
+        for local_path, _href in rpm_pairs:
+            try:
+                Path(local_path).unlink(missing_ok=True)
+            except OSError as exc:
+                logging.warning("Could not remove uploaded ORAS bundle file %s: %s", local_path, exc)
 
 
 def upload_downloaded_files_to_pulp(

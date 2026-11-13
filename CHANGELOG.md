@@ -9,12 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`transfer --pulp-oras-cp-target`**: provision Pulp [container](https://pulpproject.org/pulp_container/restapi/) registry path `namespace/oci/build-id`, `oras cp` the source bundle, and rewrite matching `components[].containerImage` in **`--snapshot-path`** (exclusive with **`--oras-cp-target`**; optional **`cli.container_registry`**)
+- **`transfer --oras-cp-target`** / **`--oras-cp-source`**: post-promotion `oras cp` to a registry target and snapshot `containerImage` update (Konflux trusted-artifact pattern)
+- **`transfer`** digest-pinned OCI **`--artifact-location`**: resolve inputs in order—attached `pulp_results` referrer, subject-layer JSON, or intermediate ORAS RPM bundle (`oras pull` + promote when JSON is absent)
+- **`make lint FIX=1`**, **`make lint-fix`**, and **`make fix`** aliases to run Ruff with auto-fix
 - **`transfer`** command: promote build artifacts from **build Pulp** (or OCI `pulp_results`) to **release Pulp**; side-tag ORAS publish, GPG verify, snapshot update, and Konflux **`--artifact-results`** / **`--oci-storage`** flags (moved off **`pull`**) ([5b42de7](https://github.com/konflux-ci/pulp-tool/commit/5b42de7))
 - Shared download/promote runner in **`pulp_tool/cli/artifact_pull_run.py`** used by **`pull`** and **`transfer`** ([5b42de7](https://github.com/konflux-ci/pulp-tool/commit/5b42de7))
 - **`pulp_tool.utils.transfer_repository_naming`**: build **`konflux-<source-domain>/<source-repo>`** path prefixes for transfer destination repos (aligned with Pulp path sanitization)
 
 ### Changed
 
+- **E2e:** transfer OCI fork 3 and **`--pulp-oras-cp-target`** cases (including RPM-only OCI with generated destination **`pulp_results.json`**); **`post-test-cleanup.py`** destroys container-push OCI stacks from **`CONTAINER_OCI_E2E_BUILD_IDS`**
+- **Docs:** [`docs/cli-reference.md`](docs/cli-reference.md) and [`docs/CLAUDE.md`](docs/CLAUDE.md) document transfer OCI resolution, **`--oras-cp-target`**, and **`--pulp-oras-cp-target`**
 - **Side-tag RPM repos:** Pulp distribution **`base_path`** is the **sanitized `--side-tag` value only** (no `side-tag-` prefix); pulp-content URLs are `…/pulp-content/<domain>/<tag>/…`; promotion and `SideTagRpmTransfer` records accept **`.rpm` artifact keys only**
 - **`transfer`**: mainline destination aggregate repositories use **`konflux-<source-domain>/<source-repo>/{rpms|logs|sbom|artifacts}`** where **`cli.domain`** comes from the **source** config (`--source-config`, or destination **`--config`** when omitted) and **`<source-repo>`** is the namespace-stripped build segment from **`build_id`**, so promotions stay unique across source domains and easier to browse by domain
 - **E2e:** [`post-test-validation.py`](e2e/post-test-validation.py) and [`post-test-cleanup.py`](e2e/post-test-cleanup.py) read **`cli.domain`** from **`--config`** and match [`e2e/names.py`](e2e/names.py) expectations; coverage in [`tests/e2e/test_names.py`](tests/e2e/test_names.py)

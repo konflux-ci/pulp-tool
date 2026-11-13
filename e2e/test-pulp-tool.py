@@ -50,6 +50,12 @@ from names import (
     BUILD_ID_PULL_GPG_VERIFY,
     BUILD_ID_PULL_SIDE_TAG,
     BUILD_ID_PULL_SIDE_TAG_OCI,
+    BUILD_ID_TRANSFER_OCI_ATTACH,
+    BUILD_ID_TRANSFER_OCI_BUNDLE,
+    BUILD_ID_TRANSFER_PULP_ORAS_CP,
+    BUILD_ID_TRANSFER_PULP_ORAS_CP_BUNDLE,
+    BUILD_ID_TRANSFER_OCI_SUBJECT,
+    e2e_pulp_container_oci_object_name,
     BUILD_ID_UPDATE_BUILD,
     BUILD_ID_UPDATE_BUILD_PULL,
     BUILD_ID_UPDATE_BUILD_REPLACED,
@@ -133,6 +139,12 @@ class E2ETestSuite:
         self._side_tag_source_pulp_results_url: str | None = None
         self._side_tag_oci_ref: str | None = None
         self._side_tag_oci_build_id: str | None = None
+        self._transfer_oci_attach_ref: str | None = None
+        self._transfer_oci_attach_build_id: str | None = None
+        self._transfer_oci_subject_ref: str | None = None
+        self._transfer_oci_subject_build_id: str | None = None
+        self._transfer_oci_bundle_ref: str | None = None
+        self._transfer_oci_bundle_build_id: str | None = None
         self._gpg_keyring_dir: Path | None = None
         self._gpg_verify_pulp_results_url: str | None = None
         self._gpg_signed_rpm_name = "test.3-1.0.0-1.noarch.rpm"
@@ -900,6 +912,210 @@ class E2ETestSuite:
                 "oras RPM subject seed failed "
                 f"(exit {result.returncode}): {result.stderr or result.stdout or ''}"
             )
+
+    def _oci_digest_pinned_ref(self, tagged_storage: str) -> str:
+        """Resolve ``repo:tag`` to ``repo@sha256:…`` via ``oras resolve``."""
+        registry_config = self._oras_registry_config_file(tagged_storage)
+        resolve = subprocess.run(
+            ["oras", "--registry-config", str(registry_config), "resolve", tagged_storage],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if resolve.returncode != 0:
+            raise RuntimeError(
+                f"oras resolve failed (exit {resolve.returncode}): {resolve.stderr or resolve.stdout or ''}"
+            )
+        text = (resolve.stdout or "").strip()
+        if not text:
+            raise RuntimeError("oras resolve returned empty output")
+        if "@" in text:
+            return text
+        digest = text if text.startswith("sha256:") else f"sha256:{text}"
+        base = tagged_storage.rsplit(":", 1)[0] if ":" in tagged_storage else tagged_storage
+        return f"{base}@{digest}"
+
+    def _seed_oras_pulp_results_subject(self, tagged_storage: str, pulp_results_path: Path) -> str:
+        """Push ``pulp_results.json`` as the OCI subject manifest (no attach referrer)."""
+        work_dir = pulp_results_path.parent.resolve()
+        registry_config = self._oras_registry_config_file(tagged_storage)
+        rel_name = pulp_results_path.name
+        cmd = [
+            "oras",
+            "--registry-config",
+            str(registry_config),
+            "push",
+            tagged_storage,
+            f"{rel_name}:application/vnd.pulp.results.v0",
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, check=False, cwd=work_dir)
+        if result.returncode != 0:
+            raise RuntimeError(
+                "oras pulp_results subject push failed "
+                f"(exit {result.returncode}): {result.stderr or result.stdout or ''}"
+            )
+        return self._oci_digest_pinned_ref(tagged_storage)
+
+    def _assert_mainline_transfer_destination(self, build_id: str, *, label: str) -> bool:
+        """Assert destination aggregate repo has ``pulp_results.json`` with at least one RPM row."""
+        client = distribution_client_from_config(self.config_file)
+        transfer_prefix = e2e_transfer_destination_repo_prefix(
+            source_domain=self.namespace,
+            build_id=build_id,
+        )
+        pulp_results_url = (
+            f"{self.base_url}/api/pulp-content/{self.namespace}/"
+            f"{transfer_prefix}/artifacts/pulp_results.json"
+        )
+        try:
+            doc = fetch_pulp_results_json(
+                client,
+                pulp_results_url,
+                label=f"{label} destination pulp_results.json",
+            )
+        except DistributionFetchError as exc:
+            self.stats.failed += 1
+            self.log_error(str(exc))
+            return False
+        artifacts = doc.get("artifacts") if isinstance(doc.get("artifacts"), dict) else {}
+        rpm_keys = [key for key in artifacts if str(key).endswith(".rpm")]
+        if not rpm_keys:
+            self.stats.failed += 1
+            self.log_error(f"{label}: destination pulp_results.json has no RPM artifacts")
+            return False
+        href = (artifacts[rpm_keys[0]].get("href") or "").strip()
+        if not href:
+            self.stats.failed += 1
+            self.log_error(f"{label}: RPM artifact row missing href after transfer")
+            return False
+        self.stats.passed += 1
+        self.log_success(f"{label}: promoted RPM with href on destination ({rpm_keys[0]})")
+        return True
+
+    def _run_mainline_transfer_from_oci_ref(
+        self,
+        *,
+        build_id: str,
+        oci_ref: str,
+        step_label: str,
+    ) -> bool:
+        """Run ``transfer`` with digest-pinned ``--artifact-location`` (mainline, no side-tag)."""
+        transfer_config = self._write_transfer_dest_config()
+        work_dir = self.output_dir / "transfer-oci-fork-output"
+        work_dir.mkdir(parents=True, exist_ok=True)
+        self.run_test(step_label, detail=oci_ref[:96])
+        cmd = [
+            "pulp-tool",
+            "--config",
+            str(transfer_config),
+            "--build-id",
+            build_id,
+            "--namespace",
+            self.namespace,
+            "transfer",
+            "--source-config",
+            str(self.config_file),
+            "--artifact-location",
+            oci_ref,
+            "--content-types",
+            "rpm",
+            "--archs",
+            "noarch",
+        ]
+        exit_code, output = self.run_command(cmd, cwd=work_dir)
+        if not self.assert_exit_code(0, exit_code, f"{step_label} completes successfully"):
+            self.log_error(output)
+            return False
+        return self._assert_mainline_transfer_destination(build_id, label=step_label)
+
+    def _assert_transfer_generated_pulp_results_on_destination(self, build_id: str, *, label: str) -> None:
+        """Assert destination ``pulp_results.json`` exists under the transfer aggregate path (fork 3 / promote)."""
+        client = distribution_client_from_config(self.config_file)
+        transfer_prefix = e2e_transfer_destination_repo_prefix(
+            source_domain=self.namespace,
+            build_id=build_id,
+        )
+        pulp_results_url = (
+            f"{self.base_url}/api/pulp-content/{self.namespace}/"
+            f"{transfer_prefix}/artifacts/pulp_results.json"
+        )
+        try:
+            doc = fetch_pulp_results_json(
+                client,
+                pulp_results_url,
+                label=label,
+            )
+        except DistributionFetchError as exc:
+            self.stats.failed += 1
+            self.log_error(str(exc))
+            return
+        artifacts = doc.get("artifacts") if isinstance(doc.get("artifacts"), dict) else {}
+        if not artifacts:
+            self.stats.failed += 1
+            self.log_error(f"{label}: destination pulp_results.json has no artifacts section")
+            return
+        self.stats.passed += 1
+        self.log_success(f"{label}: destination pulp_results.json reachable ({len(artifacts)} artifact row(s))")
+
+    def _run_transfer_pulp_oras_cp(
+        self,
+        *,
+        build_id: str,
+        oci_ref: str,
+        step_label: str,
+    ) -> bool:
+        """Run ``transfer`` with ``--pulp-oras-cp-target`` and snapshot update; cleans up container-push OCI."""
+        transfer_config = self._write_transfer_dest_config()
+        work_dir = self.output_dir / f"transfer-pulp-oras-cp-{build_id}"
+        work_dir.mkdir(parents=True, exist_ok=True)
+        snapshot_path = work_dir / "snapshot.json"
+        snapshot_path.write_text(
+            json.dumps({"components": [{"name": "comp", "containerImage": oci_ref}]}),
+            encoding="utf-8",
+        )
+        self.run_test(step_label, detail=oci_ref[:96])
+        cmd = [
+            "pulp-tool",
+            "--config",
+            str(transfer_config),
+            "--build-id",
+            build_id,
+            "--namespace",
+            self.namespace,
+            "transfer",
+            "--source-config",
+            str(self.config_file),
+            "--artifact-location",
+            oci_ref,
+            "--content-types",
+            "rpm",
+            "--archs",
+            "noarch",
+            "--snapshot-path",
+            str(snapshot_path),
+            "--pulp-oras-cp-target",
+        ]
+        try:
+            exit_code, output = self.run_command(cmd, cwd=work_dir)
+            if not self.assert_exit_code(0, exit_code, f"{step_label} completes"):
+                self.log_error(output)
+                return False
+            snap = json.loads(snapshot_path.read_text(encoding="utf-8"))
+            new_image = (snap.get("components") or [{}])[0].get("containerImage") or ""
+            if "@sha256:" not in new_image:
+                self.stats.failed += 1
+                self.log_error(f"{step_label}: snapshot containerImage not digest-pinned: {new_image!r}")
+                return False
+            expected_name = e2e_pulp_container_oci_object_name(self.namespace, build_id)
+            if expected_name not in new_image:
+                self.stats.failed += 1
+                self.log_error(f"{step_label}: expected {expected_name!r} in snapshot ref {new_image!r}")
+                return False
+            self.stats.passed += 1
+            self.log_success(f"{step_label}: snapshot containerImage OK ({new_image[:80]}…)")
+            return True
+        finally:
+            self._cleanup_pulp_container_oci_storage(build_id, config_path=transfer_config)
 
     def _run_upload_build_oras(
         self,
@@ -2765,6 +2981,289 @@ class E2ETestSuite:
         self.stats.passed += 1
         self.log_success("transfer --verify-rpm-gpg passed for signed RPM and failed for unsigned RPM")
 
+    def test_upload_transfer_oci_attach_source(self):
+        """``upload-build`` ORAS attach for transfer fork 1 (referrer resolution)."""
+        oci_storage = self._oci_oras_prereqs("transfer OCI attach source")
+        if not oci_storage:
+            return
+
+        build_id = self.bid(BUILD_ID_TRANSFER_OCI_ATTACH)
+        rpm_dir = self.rpm_dirs[0] / "noarch"
+        self.run_test(
+            "upload-build (transfer OCI attach source)",
+            detail=f"build_id={build_id}",
+        )
+        image_url_path = self.output_dir / "transfer_oci_attach_image_url"
+        image_digest_path = self.output_dir / "transfer_oci_attach_image_digest"
+        try:
+            oci_ref = self._run_upload_build_oras(
+                oci_storage,
+                build_id,
+                rpm_dir,
+                image_url_path=image_url_path,
+                image_digest_path=image_digest_path,
+            )
+        except RuntimeError as exc:
+            self.stats.failed += 1
+            self.log_error(str(exc))
+            return
+
+        self._transfer_oci_attach_ref = oci_ref
+        self._transfer_oci_attach_build_id = build_id
+        self.defer_distribution_check(
+            "transfer OCI attach source pulp_results on pulp-content",
+            lambda suite: suite._execute_side_tag_source_pulp_results_reachable(
+                f"{suite.base_url}/api/pulp-content/{suite.namespace}/{build_id}/artifacts/pulp_results.json"
+            ),
+            build_id=build_id,
+        )
+
+    def test_upload_transfer_oci_subject_json_source(self):
+        """Pulp upload + ORAS subject-only ``pulp_results`` for transfer fork 2."""
+        if not self.real_server:
+            self.skip_test("upload (transfer OCI subject JSON source)", "DRY RUN")
+            return
+
+        build_id = self.bid(BUILD_ID_TRANSFER_OCI_SUBJECT)
+        rpm_dir = self.rpm_dirs[2] / "noarch"
+        self.run_test(
+            "pulp-tool upload (transfer OCI subject-json source)",
+            detail=f"build_id={build_id}",
+        )
+        upload_cmd = [
+            "pulp-tool",
+            "--config",
+            str(self.config_file),
+            "--build-id",
+            build_id,
+            "--namespace",
+            self.namespace,
+            "upload",
+            "--rpm-path",
+            str(rpm_dir),
+        ]
+        exit_code, output = self.run_command(upload_cmd)
+        if not self.assert_exit_code(0, exit_code, "Upload before subject-json ORAS seed"):
+            self.log_error(output)
+            return
+
+        self._transfer_oci_subject_build_id = build_id
+        pulp_results_url = (
+            f"{self.base_url}/api/pulp-content/{self.namespace}/{build_id}/artifacts/pulp_results.json"
+        )
+        self.defer_distribution_check(
+            "transfer OCI subject-json ORAS seed",
+            lambda suite, url=pulp_results_url, bid=build_id: suite._execute_transfer_oci_subject_json_seed(
+                url, bid
+            ),
+            build_id=build_id,
+        )
+
+    def _execute_transfer_oci_subject_json_seed(self, pulp_results_url: str, build_id: str) -> None:
+        oci_storage = self._oci_oras_prereqs("transfer OCI subject-json seed")
+        if not oci_storage:
+            self.stats.failed += 1
+            self.log_error("Missing ORAS prerequisites for subject-json seed")
+            return
+        try:
+            client = distribution_client_from_config(self.config_file)
+            payload = fetch_bytes(client, pulp_results_url, label="transfer subject-json source pulp_results.json")
+        except DistributionFetchError as exc:
+            self.stats.failed += 1
+            self.log_error(f"Could not fetch source pulp_results.json: {exc}")
+            return
+        json_path = self.output_dir / "transfer_oci_subject_pulp_results.json"
+        json_path.write_bytes(payload)
+        storage = scoped_oci_storage(oci_storage, build_id, self.run_id)
+        try:
+            self._transfer_oci_subject_ref = self._seed_oras_pulp_results_subject(storage, json_path)
+        except RuntimeError as exc:
+            self.stats.failed += 1
+            self.log_error(str(exc))
+            return
+        self.stats.passed += 1
+        self.log_success(f"ORAS subject-json ref for transfer: {self._transfer_oci_subject_ref[:80]}…")
+
+    def test_upload_transfer_oci_bundle_source(self):
+        """ORAS RPM-only bundle (no ``pulp_results``) for transfer fork 3."""
+        oci_storage = self._oci_oras_prereqs("transfer OCI bundle source")
+        if not oci_storage:
+            return
+
+        build_id = self.bid(BUILD_ID_TRANSFER_OCI_BUNDLE)
+        rpm_dir = self.rpm_dirs[2] / "noarch"
+        storage = scoped_oci_storage(oci_storage, build_id, self.run_id)
+        self.run_test(
+            "oras push RPM bundle (transfer intermediate source)",
+            detail=f"build_id={build_id} storage={storage}",
+        )
+        try:
+            self._seed_oras_rpm_build_subject(storage, rpm_dir)
+            self._transfer_oci_bundle_ref = self._oci_digest_pinned_ref(storage)
+        except RuntimeError as exc:
+            self.stats.failed += 1
+            self.log_error(str(exc))
+            return
+        self._transfer_oci_bundle_build_id = build_id
+        self.stats.passed += 1
+        self.log_success(f"Intermediate ORAS bundle ref: {self._transfer_oci_bundle_ref[:80]}…")
+
+    def test_transfer_oci_resolution_attach_referrer(self):
+        """``transfer``: OCI ref with attached ``pulp_results`` referrer (fork 1)."""
+        oci_storage = self._oci_oras_prereqs("transfer OCI attach fork")
+        if not oci_storage:
+            return
+        build_id = self._transfer_oci_attach_build_id or self.bid(BUILD_ID_TRANSFER_OCI_ATTACH)
+        oci_ref = self._transfer_oci_attach_ref
+        if not oci_ref:
+            self.stats.failed += 1
+            self.log_error("Missing OCI attach ref; run upload phase first")
+            return
+        self._run_mainline_transfer_from_oci_ref(
+            build_id=build_id,
+            oci_ref=oci_ref,
+            step_label="transfer OCI resolution fork 1 (attach referrer)",
+        )
+
+    def test_transfer_oci_resolution_subject_json(self):
+        """``transfer``: ``pulp_results.json`` embedded in subject manifest (fork 2)."""
+        if not self._oci_oras_prereqs("transfer OCI subject-json fork"):
+            return
+        build_id = self._transfer_oci_subject_build_id or self.bid(BUILD_ID_TRANSFER_OCI_SUBJECT)
+        oci_ref = self._transfer_oci_subject_ref
+        if not oci_ref:
+            self.stats.failed += 1
+            self.log_error("Missing OCI subject-json ref; run upload/defer seed phase first")
+            return
+        self._run_mainline_transfer_from_oci_ref(
+            build_id=build_id,
+            oci_ref=oci_ref,
+            step_label="transfer OCI resolution fork 2 (subject JSON)",
+        )
+
+    def test_transfer_oci_resolution_intermediate_bundle(self):
+        """``transfer``: ORAS RPM bundle without ``pulp_results`` (fork 3); generates destination JSON."""
+        if not self._oci_oras_prereqs("transfer OCI bundle fork"):
+            return
+        build_id = self._transfer_oci_bundle_build_id or self.bid(BUILD_ID_TRANSFER_OCI_BUNDLE)
+        oci_ref = self._transfer_oci_bundle_ref
+        if not oci_ref:
+            self.stats.failed += 1
+            self.log_error("Missing OCI bundle ref; run upload phase first")
+            return
+        label = "transfer OCI resolution fork 3 (intermediate ORAS bundle)"
+        if not self._run_mainline_transfer_from_oci_ref(
+            build_id=build_id,
+            oci_ref=oci_ref,
+            step_label=label,
+        ):
+            return
+        self._assert_transfer_generated_pulp_results_on_destination(
+            build_id,
+            label=f"{label} generated pulp_results",
+        )
+
+    def _cleanup_pulp_container_oci_storage(self, build_id: str, *, config_path: Path) -> None:
+        from pulp_tool.api.pulp_client.client import PulpClient
+        from pulp_tool.utils.pulp_container_oci import destroy_container_push_oci_storage
+
+        name = e2e_pulp_container_oci_object_name(self.namespace, build_id)
+        try:
+            client = PulpClient.create_from_config_file(str(config_path))
+            try:
+                destroy_container_push_oci_storage(client, name)
+            finally:
+                client.close()
+        except Exception as exc:  # pylint: disable=broad-except
+            self.log_error(f"Pulp container-push cleanup for {name}: {exc}")
+
+    def test_upload_transfer_pulp_oras_cp_source(self):
+        """``upload-build`` ORAS attach source for ``--pulp-oras-cp-target`` transfer."""
+        oci_storage = self._oci_oras_prereqs("transfer Pulp oras cp source")
+        if not oci_storage:
+            return
+
+        build_id = self.bid(BUILD_ID_TRANSFER_PULP_ORAS_CP)
+        rpm_dir = self.rpm_dirs[0] / "noarch"
+        self.run_test(
+            "upload-build (transfer Pulp oras cp source)",
+            detail=f"build_id={build_id}",
+        )
+        image_url_path = self.output_dir / "transfer_pulp_oras_cp_image_url"
+        image_digest_path = self.output_dir / "transfer_pulp_oras_cp_image_digest"
+        try:
+            oci_ref = self._run_upload_build_oras(
+                oci_storage,
+                build_id,
+                rpm_dir,
+                image_url_path=image_url_path,
+                image_digest_path=image_digest_path,
+            )
+        except RuntimeError as exc:
+            self.stats.failed += 1
+            self.log_error(str(exc))
+            return
+
+        self._transfer_pulp_oras_cp_ref = oci_ref
+        self._transfer_pulp_oras_cp_build_id = build_id
+
+    def test_transfer_pulp_oras_cp_target(self):
+        """``transfer --pulp-oras-cp-target`` with OCI subject that has attached ``pulp_results``."""
+        if not self._oci_oras_prereqs("transfer Pulp oras cp"):
+            return
+        build_id = getattr(self, "_transfer_pulp_oras_cp_build_id", None) or self.bid(BUILD_ID_TRANSFER_PULP_ORAS_CP)
+        oci_ref = getattr(self, "_transfer_pulp_oras_cp_ref", None)
+        if not oci_ref:
+            self.stats.failed += 1
+            self.log_error("Missing OCI ref; run upload phase for Pulp oras cp first")
+            return
+        label = "transfer --pulp-oras-cp-target (attached pulp_results source)"
+        if not self._run_transfer_pulp_oras_cp(build_id=build_id, oci_ref=oci_ref, step_label=label):
+            return
+        self._assert_transfer_generated_pulp_results_on_destination(build_id, label=f"{label} destination JSON")
+
+    def test_upload_transfer_pulp_oras_cp_bundle_source(self):
+        """ORAS RPM-only bundle (no ``pulp_results``) for ``--pulp-oras-cp-target`` + generated JSON."""
+        oci_storage = self._oci_oras_prereqs("transfer Pulp oras cp bundle source")
+        if not oci_storage:
+            return
+        build_id = self.bid(BUILD_ID_TRANSFER_PULP_ORAS_CP_BUNDLE)
+        rpm_dir = self.rpm_dirs[2] / "noarch"
+        storage = scoped_oci_storage(oci_storage, build_id, self.run_id)
+        self.run_test(
+            "oras push RPM bundle (Pulp oras cp, no pulp_results)",
+            detail=f"build_id={build_id} storage={storage}",
+        )
+        try:
+            self._seed_oras_rpm_build_subject(storage, rpm_dir)
+            ref = self._oci_digest_pinned_ref(storage)
+        except RuntimeError as exc:
+            self.stats.failed += 1
+            self.log_error(str(exc))
+            return
+        self._transfer_pulp_oras_cp_bundle_ref = ref
+        self._transfer_pulp_oras_cp_bundle_build_id = build_id
+        self.stats.passed += 1
+        self.log_success(f"Pulp oras cp bundle-only OCI ref: {ref[:80]}…")
+
+    def test_transfer_pulp_oras_cp_from_rpm_only_bundle(self):
+        """``transfer --pulp-oras-cp-target`` from RPM-only OCI; generates ``pulp_results`` on destination."""
+        if not self._oci_oras_prereqs("transfer Pulp oras cp from bundle"):
+            return
+        build_id = (
+            getattr(self, "_transfer_pulp_oras_cp_bundle_build_id", None)
+            or self.bid(BUILD_ID_TRANSFER_PULP_ORAS_CP_BUNDLE)
+        )
+        oci_ref = getattr(self, "_transfer_pulp_oras_cp_bundle_ref", None)
+        if not oci_ref:
+            self.stats.failed += 1
+            self.log_error("Missing bundle OCI ref; run upload bundle source phase first")
+            return
+        label = "transfer --pulp-oras-cp-target (RPM-only OCI, generated pulp_results)"
+        if not self._run_transfer_pulp_oras_cp(build_id=build_id, oci_ref=oci_ref, step_label=label):
+            return
+        self._assert_transfer_generated_pulp_results_on_destination(build_id, label=f"{label} destination JSON")
+
     def test_upload_side_tag_transfer_source(self):
         """Upload source build for HTTPS side-tag pull (distribution verify deferred)."""
         if not self.real_server:
@@ -3282,6 +3781,37 @@ class E2ETestSuite:
             f"upload-build ORAS source for side-tag OCI pull; build_id={self.bid(BUILD_ID_PULL_SIDE_TAG_OCI)}.",
             requires_real_server=True,
         )
+        self.invoke_test_case(
+            self.test_upload_transfer_oci_attach_source,
+            "test_upload_transfer_oci_attach_source",
+            f"upload-build ORAS attach for transfer fork 1; build_id={self.bid(BUILD_ID_TRANSFER_OCI_ATTACH)}.",
+            requires_real_server=True,
+        )
+        self.invoke_test_case(
+            self.test_upload_transfer_oci_subject_json_source,
+            "test_upload_transfer_oci_subject_json_source",
+            f"Pulp upload + subject-only ORAS JSON for transfer fork 2; build_id={self.bid(BUILD_ID_TRANSFER_OCI_SUBJECT)}.",
+            requires_real_server=True,
+        )
+        self.invoke_test_case(
+            self.test_upload_transfer_oci_bundle_source,
+            "test_upload_transfer_oci_bundle_source",
+            f"ORAS RPM bundle for transfer fork 3; build_id={self.bid(BUILD_ID_TRANSFER_OCI_BUNDLE)}.",
+            requires_real_server=True,
+        )
+        self.invoke_test_case(
+            self.test_upload_transfer_pulp_oras_cp_source,
+            "test_upload_transfer_pulp_oras_cp_source",
+            f"upload-build ORAS attach for --pulp-oras-cp-target; build_id={self.bid(BUILD_ID_TRANSFER_PULP_ORAS_CP)}.",
+            requires_real_server=True,
+        )
+        self.invoke_test_case(
+            self.test_upload_transfer_pulp_oras_cp_bundle_source,
+            "test_upload_transfer_pulp_oras_cp_bundle_source",
+            f"ORAS RPM bundle (no pulp_results) for --pulp-oras-cp-target; "
+            f"build_id={self.bid(BUILD_ID_TRANSFER_PULP_ORAS_CP_BUNDLE)}.",
+            requires_real_server=True,
+        )
 
         self.run_distribution_verification_phase()
 
@@ -3303,6 +3833,37 @@ class E2ETestSuite:
             self.test_pull_by_build_id,
             "test_pull_by_build_id",
             "Pull by --build-id test-fixture (fixture content in shared Pulp domain).",
+            requires_real_server=True,
+        )
+        self.invoke_test_case(
+            self.test_transfer_oci_resolution_attach_referrer,
+            "test_transfer_oci_resolution_attach_referrer",
+            f"transfer OCI fork 1 (attach); build_id={self.bid(BUILD_ID_TRANSFER_OCI_ATTACH)}.",
+            requires_real_server=True,
+        )
+        self.invoke_test_case(
+            self.test_transfer_oci_resolution_subject_json,
+            "test_transfer_oci_resolution_subject_json",
+            f"transfer OCI fork 2 (subject JSON); build_id={self.bid(BUILD_ID_TRANSFER_OCI_SUBJECT)}.",
+            requires_real_server=True,
+        )
+        self.invoke_test_case(
+            self.test_transfer_oci_resolution_intermediate_bundle,
+            "test_transfer_oci_resolution_intermediate_bundle",
+            f"transfer OCI fork 3 (RPM bundle); build_id={self.bid(BUILD_ID_TRANSFER_OCI_BUNDLE)}.",
+            requires_real_server=True,
+        )
+        self.invoke_test_case(
+            self.test_transfer_pulp_oras_cp_target,
+            "test_transfer_pulp_oras_cp_target",
+            f"transfer --pulp-oras-cp-target; build_id={self.bid(BUILD_ID_TRANSFER_PULP_ORAS_CP)}.",
+            requires_real_server=True,
+        )
+        self.invoke_test_case(
+            self.test_transfer_pulp_oras_cp_from_rpm_only_bundle,
+            "test_transfer_pulp_oras_cp_from_rpm_only_bundle",
+            f"transfer --pulp-oras-cp-target from RPM-only OCI; "
+            f"build_id={self.bid(BUILD_ID_TRANSFER_PULP_ORAS_CP_BUNDLE)}.",
             requires_real_server=True,
         )
         self.invoke_test_case(

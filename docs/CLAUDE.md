@@ -96,7 +96,7 @@ pulp-tool --config /etc/rok-access/cli.toml \
   --snapshot-path "$(params.dataDir)/…/snapshot_spec.json"
 ```
 
-Side-tag, ORAS publish, GPG verify (`--verify-rpm-gpg`, `--gpg-keyring`), and snapshot update flags live on **`transfer`** only. Planned **release-service-catalog** work for **Pulp-backed release promotion** (promote from build Pulp / OCI `pulp_results` instead of ORAS RPM-bundle pull + raw **`upload`**) should invoke **`transfer`**; catalog wiring is still TBD (KONFLUX-14464).
+Side-tag, ORAS publish, GPG verify (`--verify-rpm-gpg`, `--gpg-keyring`), snapshot update (`--snapshot-path`), and post-transfer OCI copy (**`--oras-cp-target`**, **`--pulp-oras-cp-target`**, optional **`--oras-cp-source`**) live on **`transfer`** only. **`--oras-cp-target`** rewrites matching `components[].containerImage` in the snapshot (trusted-artifact workspace) like [upload-src-rpm-sbom-attestation](https://github.com/konflux-ci/release-service-catalog/blob/development/tasks/managed/upload-src-rpm-sbom-attestation/upload-src-rpm-sbom-attestation.yaml). Planned **release-service-catalog** work for **Pulp-backed release promotion** (promote from build Pulp / OCI `pulp_results` instead of ORAS RPM-bundle pull + raw **`upload`**) should invoke **`transfer`**; catalog wiring is still TBD (KONFLUX-14464).
 
 **Where to change code:** [ARCHITECTURE.md](ARCHITECTURE.md) (code map, data flow). Upload logic stays **`PulpHelper` → `pulp_tool.upload`**; pull/transfer orchestration stays **`PullService`** + `pulp_tool/pull/`.
 

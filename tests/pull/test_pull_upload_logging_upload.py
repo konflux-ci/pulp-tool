@@ -5,6 +5,7 @@ Tests for pulp_tool.pull module.
 import os
 import re
 import tempfile
+from pathlib import Path
 from unittest.mock import Mock, mock_open, patch
 
 import httpx
@@ -55,6 +56,139 @@ class TestUploadFunctionality:
                 mock_validate.return_value = None
                 _upload_rpms_to_repository(mock_pulp_client, pulled_artifacts, repositories, upload_info, PullContext())
                 assert upload_info.uploaded_counts.rpms == 1
+        finally:
+            if os.path.exists(tmp_file_path):
+                os.unlink(tmp_file_path)
+
+    def test_upload_rpms_deletes_local_sources_after_upload(self, mock_pulp_client, httpx_mock) -> None:
+        with tempfile.NamedTemporaryFile(suffix=".rpm", delete=False) as tmp_file:
+            tmp_file.write(b"fake rpm content")
+            tmp_file_path = tmp_file.name
+        try:
+            pulled_artifacts = PulledArtifacts()
+            pulled_artifacts.add_rpm("test.rpm", tmp_file_path, {"build_id": "test-build", "arch": "noarch"})
+            repositories = RepositoryRefs(
+                rpms_href="/pulp/api/v3/repositories/12345/",
+                rpms_prn="",
+                logs_href="",
+                logs_prn="",
+                sbom_href="",
+                sbom_prn="",
+                artifacts_href="",
+                artifacts_prn="",
+            )
+            upload_info = PulpResultsDocument(build_id="test-build", repositories=repositories)
+            httpx_mock.post(re.compile(".*/repositories/12345/modify/")).mock(
+                return_value=httpx.Response(202, json={"task": "/pulp/api/v3/tasks/67890/"})
+            )
+            httpx_mock.get(re.compile(".*/tasks/67890/")).mock(
+                return_value=httpx.Response(
+                    200, json={"pulp_href": "/pulp/api/v3/tasks/67890/", "state": "completed", "created_resources": []}
+                )
+            )
+            ctx = PullContext(operation_label="pull", delete_local_sources_after_upload=True)
+            with (
+                patch("pulp_tool.utils.validation.file.validate_file_path") as mock_validate,
+                patch(
+                    "pulp_tool.pull.upload.upload_rpms_parallel",
+                    return_value=([(tmp_file_path, "/pulp/content/rpm/1/")], []),
+                ),
+            ):
+                mock_validate.return_value = None
+                _upload_rpms_to_repository(mock_pulp_client, pulled_artifacts, repositories, upload_info, ctx)
+            assert not os.path.exists(tmp_file_path)
+        finally:
+            if os.path.exists(tmp_file_path):
+                os.unlink(tmp_file_path)
+
+    def test_upload_rpms_warns_when_delete_fails(self, mock_pulp_client) -> None:
+        with tempfile.NamedTemporaryFile(suffix=".rpm", delete=False) as tmp_file:
+            tmp_file.write(b"fake rpm content")
+            tmp_file_path = tmp_file.name
+        try:
+            pulled_artifacts = PulledArtifacts()
+            pulled_artifacts.add_rpm("test.rpm", tmp_file_path, {"build_id": "test-build", "arch": "noarch"})
+            repositories = RepositoryRefs(
+                rpms_href="",
+                rpms_prn="",
+                logs_href="",
+                logs_prn="",
+                sbom_href="",
+                sbom_prn="",
+                artifacts_href="",
+                artifacts_prn="",
+            )
+            upload_info = PulpResultsDocument(build_id="test-build", repositories=repositories)
+            ctx = PullContext(operation_label="pull", delete_local_sources_after_upload=True)
+            mock_pulp_client.add_content = Mock(return_value=Mock(pulp_href="/tasks/1/"))
+            with (
+                patch(
+                    "pulp_tool.pull.upload.upload_rpms_parallel",
+                    return_value=([(tmp_file_path, "/pulp/content/rpm/1/")], []),
+                ),
+                patch("pulp_tool.pull.upload.wait_for_successful_task"),
+                patch.object(Path, "unlink", side_effect=OSError("busy")),
+                patch("pulp_tool.pull.upload.logging") as mock_logging,
+            ):
+                _upload_rpms_to_repository(mock_pulp_client, pulled_artifacts, repositories, upload_info, ctx)
+            assert any("Could not remove" in str(call) for call in mock_logging.warning.call_args_list)
+        finally:
+            if os.path.exists(tmp_file_path):
+                os.unlink(tmp_file_path)
+
+    def test_transfer_deletes_bundle_rpms_after_metadata(self, mock_pulp_client, httpx_mock) -> None:
+        """ORAS bundle cleanup must run after transfer result rows (sha256 from local path)."""
+        with tempfile.NamedTemporaryFile(suffix=".rpm", delete=False) as tmp_file:
+            tmp_file.write(b"fake rpm content")
+            tmp_file_path = tmp_file.name
+        try:
+            pulled_artifacts = PulledArtifacts()
+            pulled_artifacts.add_rpm(
+                "test.rpm",
+                tmp_file_path,
+                {"build_id": "test-build", "arch": "noarch", "namespace": "ns1"},
+            )
+            repositories = RepositoryRefs(
+                rpms_href="/pulp/api/v3/repositories/12345/",
+                rpms_prn="",
+                logs_href="",
+                logs_prn="",
+                sbom_href="",
+                sbom_prn="",
+                artifacts_href="",
+                artifacts_prn="",
+            )
+            upload_info = PulpResultsDocument(build_id="test-build", repositories=repositories)
+            httpx_mock.post(re.compile(".*/repositories/12345/modify/")).mock(
+                return_value=httpx.Response(202, json={"task": "/pulp/api/v3/tasks/67890/"})
+            )
+            httpx_mock.get(re.compile(".*/tasks/67890/")).mock(
+                return_value=httpx.Response(
+                    200, json={"pulp_href": "/pulp/api/v3/tasks/67890/", "state": "completed", "created_resources": []}
+                )
+            )
+            ctx = PullContext(operation_label="transfer", delete_local_sources_after_upload=True)
+            exists_during_metadata: list[bool] = []
+
+            def _capture_add(_upload_info, *, local_path, **_kwargs) -> None:
+                exists_during_metadata.append(os.path.exists(local_path))
+
+            mock_pulp_client.add_uploaded_artifact_to_results_model = Mock(side_effect=_capture_add)
+            with (
+                patch("pulp_tool.utils.validation.file.validate_file_path"),
+                patch(
+                    "pulp_tool.pull.upload.upload_rpms_parallel",
+                    return_value=([(tmp_file_path, "/pulp/content/dest-rpm/")], []),
+                ),
+                patch.object(
+                    PulpHelper,
+                    "get_distribution_urls",
+                    return_value={"rpms": "https://pulp.example.com/rpms/"},
+                ),
+            ):
+                _upload_rpms_to_repository(mock_pulp_client, pulled_artifacts, repositories, upload_info, ctx)
+            assert exists_during_metadata == [True]
+            assert not os.path.exists(tmp_file_path)
         finally:
             if os.path.exists(tmp_file_path):
                 os.unlink(tmp_file_path)
