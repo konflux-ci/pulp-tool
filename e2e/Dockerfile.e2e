@@ -7,7 +7,7 @@
 FROM quay.io/konflux-ci/oras:latest@sha256:308df510e55d560fe60efc9133bd09f67a72fbeea54900f3d711f8e27fcc624f AS oras
 
 # UBI minimal has no rpm-sign package; ship Fedora rpmsign + non-glibc deps for e2e signing only.
-FROM quay.io/fedora/fedora:42 AS rpmsign
+FROM quay.io/fedora/fedora:46 AS rpmsign
 COPY e2e/bundle-rpmsign.sh /usr/local/sbin/bundle-rpmsign.sh
 RUN dnf install -y rpm-sign ima-evm-utils-libs && dnf clean all && \
     chmod +x /usr/local/sbin/bundle-rpmsign.sh && \
