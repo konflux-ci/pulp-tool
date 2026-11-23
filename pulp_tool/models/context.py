@@ -118,7 +118,12 @@ class PullContext(KonfluxBaseModel):
         side_tag: Optional side-tag name for extra release-Pulp RPM promotion (``transfer`` command only)
         artifact_results: Konflux ``url_path,digest_path`` for OCI manifest Tekton results after side-tag transfer
         oci_storage: OCI registry target (--oci-storage) for ORAS push
-        snapshot_path: Optional Konflux release snapshot JSON to update with pulpResultsOciManifest
+        snapshot_path: Optional Konflux release snapshot JSON to update (``pulpResultsOciManifest`` and/or
+            ``components[].containerImage`` when ``--oras-cp-target`` is set)
+        oras_cp_target: When set, ``oras cp`` the source OCI artifact to this registry target after transfer
+        pulp_oras_cp_target: Provision Pulp container OCI storage (registry path ``namespace/oci/build-id``) and
+            ``oras cp`` after transfer
+        oras_cp_source: Optional digest-pinned source for ``oras cp``; defaults to OCI ``--artifact-location``
         cluster: Cluster identity from config (cli.cluster) for origin_cluster labels
         debug: Verbosity level (0=WARNING, 1=INFO, 2=DEBUG, 3+=DEBUG with HTTP logs)
         max_workers: Maximum number of concurrent workers
@@ -131,6 +136,8 @@ class PullContext(KonfluxBaseModel):
             (``--source-config``, or destination when omitted)
         transfer_repository_name_prefix: Set during transfer setup; ``konflux-<source-domain>/<source-repo>`` path
             prefix for destination repository base paths (upload must use the same prefix as setup)
+        oci_intermediate_bundle_dir: ORAS-pulled RPM directory when ``pulp_results.json`` is absent (``transfer`` only)
+        delete_local_sources_after_upload: Remove local RPM files after successful upload (ORAS bundle path)
     """
 
     artifact_location: str | None = None
@@ -143,6 +150,9 @@ class PullContext(KonfluxBaseModel):
     artifact_results: str | None = None
     oci_storage: str | None = None
     snapshot_path: str | None = None
+    oras_cp_target: str | None = None
+    pulp_oras_cp_target: bool = False
+    oras_cp_source: str | None = None
     cluster: str | None = None
     debug: int = 0
     max_workers: int = Field(default=10, ge=1, le=100)
@@ -153,6 +163,8 @@ class PullContext(KonfluxBaseModel):
     operation_label: str = "pull"
     transfer_source_config_path: str | None = None
     transfer_repository_name_prefix: str | None = None
+    oci_intermediate_bundle_dir: str | None = None
+    delete_local_sources_after_upload: bool = False
 
     @field_validator("content_types")
     @classmethod

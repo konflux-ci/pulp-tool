@@ -135,6 +135,8 @@ This is an **input file** (not output) containing references to pre-existing tes
 | `test_pull_artifact_location_oci_manifest_ref` | `pull --artifact-location` with upload-build OCI ref only (no `update-build`; full attach flow is `test_upload_build_update_build_pull_pipeline`) |
 | `test_pull_side_tag_transfer` | **`transfer --side-tag`** from HTTPS `pulp_results` (destination `--config` + `--source-config`); Tekton OCI URL/digest via **`--artifact-results`** |
 | `test_pull_side_tag_transfer_from_oci_artifact_location` | Same with **`transfer --artifact-location`** = digest-pinned OCI ref from upload-build ORAS publish |
+| `test_upload_transfer_oci_*` / `test_transfer_oci_resolution_*` | Three **transfer** OCI resolution forks: (1) attached ``pulp_results`` referrer (`upload-build` ORAS), (2) ``pulp_results.json`` on the subject manifest only, (3) intermediate RPM-only ORAS bundle (generates destination ``pulp_results.json``); mainline ``transfer`` promotes to destination aggregate repos |
+| `test_upload_transfer_pulp_oras_cp_*` / `test_transfer_pulp_oras_cp_*` | ``--pulp-oras-cp-target``: Pulp container-push + snapshot update; bundle variant when OCI has **no** ``pulp_results`` (generated JSON on destination). In-test destroy of container-push repos; [`post-test-cleanup.py`](post-test-cleanup.py) also removes container OCI stacks (`CONTAINER_OCI_E2E_BUILD_IDS` in [`names.py`](names.py)) plus transfer aggregate RPM/file repos |
 | `test_upload_gpg_signed_rpm_source` | GPG-sign a test RPM (`gpg` + `rpmsign --addsign`; e2e image bundles Fedora `rpmsign` + deps under `/opt/rpmsign/lib64` via `LD_LIBRARY_PATH`), upload, defer `pulp_results.json` reachability |
 | `test_pull_verify_rpm_gpg` | **`transfer --verify-rpm-gpg --gpg-keyring`** succeeds on signed upload; fails on unsigned `test-upload-minimal` RPMs |
 
@@ -284,7 +286,7 @@ The e2e test suite runs automatically on pull requests via Konflux Tekton pipeli
 2. **pulp-tool-test**
    - Run `test-pulp-tool.py --real-server` against the real Pulp server (`pulp-tool` CLI is installed in the e2e image at build time for the same revision as `build-e2e-image`)
    - Uses secrets:
-     - `pulp-access` → `/etc/pulp-access/cli.toml` (from [pulp-access-controller](https://github.com/pulp/pulp-access-controller); controller-managed credentials including `username`/`password` for distribution fetches)
+     - `pulp-access` → `/etc/pulp-access/` (**full** secret: `cli.toml`, `username`, `password`, TLS material) from [pulp-access-controller](https://github.com/pulp/pulp-access-controller); required for container-registry push (`--pulp-oras-cp-target`), not only API access via `cli.toml` alone
      - `pulp-results` → `/etc/pulp-results/pulp-results.json` (fixture file with test repo/dist references)
 3. **post-test-validation**
    - Run `post-test-validation.py` to verify repository content (uses pre-installed `pulp-cli`)

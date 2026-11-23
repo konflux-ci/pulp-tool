@@ -21,7 +21,8 @@ from ..cli.runner_helpers import (
 from ..models.artifact_pull_run import ArtifactPullRunOptions
 from ..services.pull_service import PullService
 from ..utils.error_handling import handle_generic_error, handle_http_error
-from ..utils.oci_pull import is_oci_artifact_reference
+from ..utils.oci_pull import is_oci_artifact_reference, resolve_oci_transfer_artifact
+from ..utils.oras_publish import OrasPublishError
 
 
 def _build_distribution_client(auth: DistributionAuthSettings) -> DistributionClient | None:
@@ -60,25 +61,40 @@ def run_artifact_pull_flow(options: ArtifactPullRunOptions) -> None:
     run_result = None
     try:
         with oci_pull_tempdir() as oci_dir:
+            oci_bundle_dir: str | None = None
             try:
-                resolved_location = resolve_artifact_location_for_pull(
-                    artifact_location=options.artifact_location,
-                    namespace=options.namespace,
-                    build_id=options.build_id,
-                    source_config_path=options.source_config_path,
-                    dest_config_path=options.dest_config_path,
-                    oci_dest_dir=(
-                        oci_dir
-                        if options.artifact_location and is_oci_artifact_reference(options.artifact_location)
-                        else None
-                    ),
-                )
+                loc = options.artifact_location
+                if loc and is_oci_artifact_reference(loc) and options.operation_label == "transfer":
+                    try:
+                        resolution = resolve_oci_transfer_artifact(loc, oci_dir)
+                    except OrasPublishError as e:
+                        raise PullRunnerError(str(e)) from e
+                    if resolution.kind == "oci_bundle" and resolution.bundle_dir is not None:
+                        oci_bundle_dir = str(resolution.bundle_dir)
+                        resolved_location = None
+                    elif resolution.pulp_results_path is not None:
+                        resolved_location = str(resolution.pulp_results_path)
+                    else:
+                        raise PullRunnerError(f"OCI transfer resolution failed for {loc!r}")
+                else:
+                    resolved_location = resolve_artifact_location_for_pull(
+                        artifact_location=options.artifact_location,
+                        namespace=options.namespace,
+                        build_id=options.build_id,
+                        source_config_path=options.source_config_path,
+                        dest_config_path=options.dest_config_path,
+                        oci_dest_dir=(
+                            oci_dir
+                            if options.artifact_location and is_oci_artifact_reference(options.artifact_location)
+                            else None
+                        ),
+                    )
             except PullRunnerError as e:
                 click.echo(f"Error: {e.message}", err=True)
                 sys.exit(1)
 
             auth = resolve_pulp_api_base_url_for_remote(
-                artifact_location=resolved_location,
+                artifact_location=resolved_location or oci_bundle_dir or "",
                 auth=auth,
                 fallback_config_paths=(
                     options.dest_config_path,
@@ -86,17 +102,25 @@ def run_artifact_pull_flow(options: ArtifactPullRunOptions) -> None:
                     options.distribution_config,
                 ),
             )
-            try:
-                validate_remote_pull_auth(resolved_location, auth)
-            except PullRunnerError as e:
-                logging.error("%s", e.message)
-                sys.exit(1)
+            if resolved_location:
+                try:
+                    validate_remote_pull_auth(resolved_location, auth)
+                except PullRunnerError as e:
+                    logging.error("%s", e.message)
+                    sys.exit(1)
+
+            oras_cp_source = (options.oras_cp_source or "").strip() or None
+            if not oras_cp_source and loc and is_oci_artifact_reference(loc):
+                oras_cp_source = loc.strip()
 
             pull_context = options.to_pull_context(
                 resolved_artifact_location=resolved_location,
                 auth_key_path=auth.key_path,
                 side_tag=side_tag,
                 gpg=gpg,
+                oci_intermediate_bundle_dir=oci_bundle_dir,
+                delete_local_sources_after_upload=bool(oci_bundle_dir),
+                oras_cp_source=oras_cp_source,
             )
 
             distribution_client = _build_distribution_client(auth)

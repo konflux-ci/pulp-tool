@@ -60,6 +60,3 @@ spec:
     - name: cli-toml-volume
       secret:
         secretName: pulp-access
-        items:
-          - key: cli.toml
-            path: cli.toml

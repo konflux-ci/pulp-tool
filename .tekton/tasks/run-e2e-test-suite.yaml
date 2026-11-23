@@ -94,12 +94,10 @@ spec:
           mountPath: /etc/pulp-access
           readOnly: true
   volumes:
+    # Mount full ``pulp-access`` (cli.toml, username, password, TLS) for API, pulp-content, and registry push.
     - name: cli-toml-volume
       secret:
         secretName: pulp-access
-        items:
-          - key: cli.toml
-            path: cli.toml
     - name: pulp-results-volume
       secret:
         secretName: pulp-results

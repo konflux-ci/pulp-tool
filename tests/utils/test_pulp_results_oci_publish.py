@@ -14,6 +14,40 @@ def _results_doc(raw: dict | None = None) -> PulpResultsDocument:
 
 
 class TestSyncPulpResultsWithOciRegistry:
+    def test_sync_uses_pulp_cli_auth_for_packages_redhat_oci_storage(self) -> None:
+        document = _results_doc({"artifacts": {}})
+        mock_client = Mock()
+        mock_client.config = {
+            "base_url": "https://packages.redhat.com",
+            "username": "u",
+            "password": "p",
+        }
+        target = "packages.redhat.com/ns/oci/build:latest"
+        with (
+            patch(
+                "pulp_tool.utils.pulp_results_oci_publish.create_file_content_and_wait",
+                return_value=Mock(),
+            ),
+            patch(
+                "pulp_tool.utils.pulp_results_oci_publish.push_pulp_results_manifest",
+                return_value=("packages.redhat.com/ns/oci/build", "sha256:one"),
+            ) as mock_push,
+            patch(
+                "pulp_tool.utils.pulp_results_oci_publish.resolve_oci_manifest",
+                return_value=("packages.redhat.com/ns/oci/build", "sha256:final"),
+            ) as mock_resolve,
+        ):
+            sync_pulp_results_with_oci_registry(
+                mock_client,
+                "prn",
+                document,
+                target,
+                {},
+                build_id="b1",
+            )
+        assert mock_push.call_args.kwargs.get("registry_config_override")
+        assert mock_resolve.call_args.kwargs.get("registry_config_override")
+
     def test_sync_sets_version_and_publishes(self) -> None:
         mock_client = Mock()
         document = _results_doc({"artifacts": {}, "distributions": {}})
@@ -80,6 +114,73 @@ class TestSyncPulpResultsWithOciRegistry:
         assert mock_attach.call_args[0][0] == "quay.io/ns/repo@sha256:rpm-subject"
         mock_push.assert_not_called()
         assert oci_ref == "quay.io/ns/repo@sha256:referrer"
+
+    def test_sync_attach_subject_on_pulp_registry_uses_cli_auth(self) -> None:
+        document = _results_doc({"artifacts": {}})
+        mock_client = Mock()
+        mock_client.config = {
+            "base_url": "https://packages.redhat.com",
+            "username": "u",
+            "password": "p",
+        }
+        subject = "packages.redhat.com/ns/oci/build@sha256:subject"
+        with (
+            patch(
+                "pulp_tool.utils.pulp_results_oci_publish.create_file_content_and_wait",
+                return_value=Mock(),
+            ),
+            patch(
+                "pulp_tool.utils.pulp_results_oci_publish.attach_pulp_results_manifest",
+                return_value=("packages.redhat.com/ns/oci/build", "sha256:attached"),
+            ) as mock_attach,
+            patch("pulp_tool.utils.pulp_results_oci_publish.push_pulp_results_manifest"),
+        ):
+            sync_pulp_results_with_oci_registry(
+                mock_client,
+                "prn",
+                document,
+                "packages.redhat.com/ns/oci/build:latest",
+                {},
+                build_id="b1",
+                attach_subject=subject,
+            )
+        assert mock_attach.call_args.kwargs.get("registry_config_override")
+
+    def test_sync_attach_to_resolved_on_pulp_registry_uses_cli_auth(self) -> None:
+        document = _results_doc({"artifacts": {}})
+        mock_client = Mock()
+        mock_client.config = {
+            "base_url": "https://packages.redhat.com",
+            "username": "u",
+            "password": "p",
+        }
+        target = "packages.redhat.com/ns/oci/build:latest"
+        with (
+            patch(
+                "pulp_tool.utils.pulp_results_oci_publish.create_file_content_and_wait",
+                return_value=Mock(),
+            ),
+            patch(
+                "pulp_tool.utils.pulp_results_oci_publish.resolve_oci_manifest",
+                return_value=("packages.redhat.com/ns/oci/build", "sha256:subj"),
+            ) as mock_resolve,
+            patch(
+                "pulp_tool.utils.pulp_results_oci_publish.attach_pulp_results_manifest",
+                return_value=("packages.redhat.com/ns/oci/build", "sha256:referrer"),
+            ) as mock_attach,
+            patch("pulp_tool.utils.pulp_results_oci_publish.push_pulp_results_manifest"),
+        ):
+            sync_pulp_results_with_oci_registry(
+                mock_client,
+                "prn",
+                document,
+                target,
+                {},
+                build_id="b1",
+                attach_to_resolved_subject=True,
+            )
+        assert mock_resolve.call_args.kwargs.get("registry_config_override")
+        assert mock_attach.call_args.kwargs.get("registry_config_override")
 
     def test_sync_uses_attach_when_subject_set(self) -> None:
         document = _results_doc({"artifacts": {}, "version": 1})

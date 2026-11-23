@@ -69,6 +69,14 @@ class TestArtifactPullRunOptions:
         assert resolution.resolved_oci_storage == "quay.io/ns/repo:tag"
         assert resolution.cluster == "cluster-a"
 
+    def test_oras_copy_flags_mutually_exclusive(self) -> None:
+        with pytest.raises(ValueError, match="mutually exclusive"):
+            ArtifactPullRunOptions(
+                dest_config_path="/release.toml",
+                oras_cp_target="quay.io/t:tag",
+                pulp_oras_cp_target=True,
+            )
+
     def test_to_pull_context(self) -> None:
         opts = ArtifactPullRunOptions(
             dest_config_path="/release.toml",

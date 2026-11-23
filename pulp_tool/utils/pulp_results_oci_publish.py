@@ -20,6 +20,7 @@ from .oras_publish import (
     push_pulp_results_manifest,
     resolve_oci_manifest,
 )
+from .pulp_container_oci import pulp_registry_oras_auth, uses_pulp_container_registry
 from .pulp_tasks import create_file_content_and_wait
 
 
@@ -91,16 +92,54 @@ def sync_pulp_results_with_oci_registry(
             operation=upload_operation,
         )
 
+    def _with_pulp_registry_auth(refs: list[str]):
+        unique = [r for r in refs if r and uses_pulp_container_registry(r, pulp_client)]
+        auth_ref = unique[0] if unique else target
+        return pulp_registry_oras_auth(pulp_client, auth_ref)
+
     def oras_publish() -> tuple[str, str]:
         payload = document.to_canonical_json()
         try:
+            auth_refs = [target]
             if attach_subject:
-                return attach_pulp_results_manifest(attach_subject, payload)
-            if attach_to_resolved_subject:
-                subject_image_ref, subject_digest = resolve_oci_manifest(target)
-                subject_ref = _format_oci_ref(subject_image_ref, subject_digest)
-                return attach_pulp_results_manifest(subject_ref, payload)
-            return push_pulp_results_manifest(target, payload)
+                auth_refs.insert(0, attach_subject.strip())
+            with _with_pulp_registry_auth(auth_refs) as (reg_override, tls):
+                if attach_subject:
+                    if reg_override:
+                        return attach_pulp_results_manifest(
+                            attach_subject,
+                            payload,
+                            client_tls_cert=tls,
+                            registry_config_override=reg_override,
+                        )
+                    return attach_pulp_results_manifest(attach_subject, payload)
+                if attach_to_resolved_subject:
+                    if reg_override:
+                        subject_image_ref, subject_digest = resolve_oci_manifest(
+                            target,
+                            client_tls_cert=tls,
+                            registry_config_override=reg_override,
+                        )
+                    else:
+                        subject_image_ref, subject_digest = resolve_oci_manifest(target)
+                    subject_ref = _format_oci_ref(subject_image_ref, subject_digest)
+                    with pulp_registry_oras_auth(pulp_client, subject_ref) as (attach_reg, attach_tls):
+                        if attach_reg:
+                            return attach_pulp_results_manifest(
+                                subject_ref,
+                                payload,
+                                client_tls_cert=attach_tls,
+                                registry_config_override=attach_reg,
+                            )
+                        return attach_pulp_results_manifest(subject_ref, payload)
+                if reg_override:
+                    return push_pulp_results_manifest(
+                        target,
+                        payload,
+                        client_tls_cert=tls,
+                        registry_config_override=reg_override,
+                    )
+                return push_pulp_results_manifest(target, payload)
         except OrasPublishError as e:
             logging.error("ORAS publish failed: %s", e)
             raise
@@ -109,7 +148,15 @@ def sync_pulp_results_with_oci_registry(
     last_task = upload_to_pulp("upload pulp_results.json before ORAS publish")
     image_ref, digest = oras_publish()
     if not used_attach:
-        image_ref, digest = resolve_oci_manifest(target)
+        with pulp_registry_oras_auth(pulp_client, target) as (reg_override, tls):
+            if reg_override:
+                image_ref, digest = resolve_oci_manifest(
+                    target,
+                    client_tls_cert=tls,
+                    registry_config_override=reg_override,
+                )
+            else:
+                image_ref, digest = resolve_oci_manifest(target)
     last_task = upload_to_pulp("upload final pulp_results.json after ORAS publish")
 
     oci_ref = _format_oci_ref(image_ref, digest)

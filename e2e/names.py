@@ -55,6 +55,11 @@ BUILD_ID_UPLOAD_FILES: Final = "test-build-files"
 BUILD_ID_UPLOAD_LARGE: Final = "test-build-large"
 BUILD_ID_PULL_SIDE_TAG: Final = "test-pull-side-tag"
 BUILD_ID_PULL_SIDE_TAG_OCI: Final = "test-pull-side-tag-oci"
+BUILD_ID_TRANSFER_OCI_ATTACH: Final = "test-transfer-oci-attach"
+BUILD_ID_TRANSFER_OCI_SUBJECT: Final = "test-transfer-oci-subject"
+BUILD_ID_TRANSFER_OCI_BUNDLE: Final = "test-transfer-oci-bundle"
+BUILD_ID_TRANSFER_PULP_ORAS_CP: Final = "test-transfer-pulp-oras-cp"
+BUILD_ID_TRANSFER_PULP_ORAS_CP_BUNDLE: Final = "test-transfer-pulp-oras-cp-bundle"
 BUILD_ID_PULL_GPG_VERIFY: Final = "test-pull-gpg-verify"
 BUILD_ID_UPLOAD_ORAS: Final = "test-upload-oras"
 BUILD_ID_UPDATE_BUILD: Final = "test-update-build"
@@ -110,6 +115,8 @@ _RPM_REPOS_BASE: Final = {
         "test.0-1.0.0-1.x86_64.rpm",
     ],
     f"{BUILD_ID_UPLOAD_ORAS}/rpms": ["test.2-1.0.0-1.noarch.rpm"],
+    f"{BUILD_ID_TRANSFER_OCI_SUBJECT}/rpms": ["test.2-1.0.0-1.noarch.rpm"],
+    f"{BUILD_ID_TRANSFER_OCI_ATTACH}/rpms": ["test.2-1.0.0-1.noarch.rpm"],
     f"{BUILD_ID_UPDATE_BUILD}/rpms": ["test.2-1.0.0-1.noarch.rpm"],
     f"{BUILD_ID_UPDATE_BUILD_REPLACED}/rpms": ["test.2-1.0.0-1.noarch.rpm"],
     f"{BUILD_ID_UPDATE_BUILD_PULL}/rpms": ["test.2-1.0.0-1.noarch.rpm"],
@@ -133,11 +140,17 @@ _OCI_OPTIONAL_RPM_REPOS: Final = frozenset(
         f"{BUILD_ID_UPDATE_BUILD}/rpms",
         f"{BUILD_ID_UPDATE_BUILD_REPLACED}/rpms",
         f"{BUILD_ID_UPDATE_BUILD_PULL}/rpms",
+        f"{BUILD_ID_TRANSFER_OCI_ATTACH}/rpms",
+        f"{BUILD_ID_TRANSFER_OCI_SUBJECT}/rpms",
+        f"{BUILD_ID_TRANSFER_PULP_ORAS_CP}/rpms",
     }
 )
 _OCI_OPTIONAL_FILE_REPOS: Final = frozenset(
     {
         f"{BUILD_ID_UPLOAD_ORAS}/artifacts",
+        f"{BUILD_ID_TRANSFER_OCI_ATTACH}/artifacts",
+        f"{BUILD_ID_TRANSFER_OCI_SUBJECT}/artifacts",
+        f"{BUILD_ID_TRANSFER_PULP_ORAS_CP}/artifacts",
         f"{BUILD_ID_UPDATE_BUILD}/artifacts",
         f"{BUILD_ID_UPDATE_BUILD_REPLACED}/artifacts",
         f"{BUILD_ID_UPDATE_BUILD_PULL}/artifacts",
@@ -149,12 +162,28 @@ _TRANSFER_PROMOTED_RPM: Final = {
     BUILD_ID_PULL_SIDE_TAG: ["test.0-1.0.0-1.noarch.rpm"],
     BUILD_ID_PULL_SIDE_TAG_OCI: ["test.0-1.0.0-1.noarch.rpm"],
     BUILD_ID_PULL_GPG_VERIFY: ["test.3-1.0.0-1.noarch.rpm"],
+    BUILD_ID_TRANSFER_OCI_ATTACH: ["test.2-1.0.0-1.noarch.rpm"],
+    BUILD_ID_TRANSFER_OCI_SUBJECT: ["test.2-1.0.0-1.noarch.rpm"],
+    BUILD_ID_TRANSFER_OCI_BUNDLE: ["test.2-1.0.0-1.noarch.rpm"],
+    BUILD_ID_TRANSFER_PULP_ORAS_CP: ["test.2-1.0.0-1.noarch.rpm"],
+    BUILD_ID_TRANSFER_PULP_ORAS_CP_BUNDLE: ["test.2-1.0.0-1.noarch.rpm"],
 }
 _TRANSFER_PROMOTED_FILES: Final = {
     BUILD_ID_PULL_SIDE_TAG: ["pulp_results.json"],
     BUILD_ID_PULL_SIDE_TAG_OCI: ["pulp_results.json"],
     BUILD_ID_PULL_GPG_VERIFY: ["pulp_results.json"],
+    BUILD_ID_TRANSFER_OCI_ATTACH: ["pulp_results.json"],
+    BUILD_ID_TRANSFER_OCI_SUBJECT: ["pulp_results.json"],
+    BUILD_ID_TRANSFER_OCI_BUNDLE: ["pulp_results.json"],
+    BUILD_ID_TRANSFER_PULP_ORAS_CP: ["pulp_results.json"],
+    BUILD_ID_TRANSFER_PULP_ORAS_CP_BUNDLE: ["pulp_results.json"],
 }
+
+# Build IDs that create Pulp container-push OCI storage via ``--pulp-oras-cp-target`` (post-test cleanup).
+CONTAINER_OCI_E2E_BUILD_IDS: Final = (
+    BUILD_ID_TRANSFER_PULP_ORAS_CP,
+    BUILD_ID_TRANSFER_PULP_ORAS_CP_BUNDLE,
+)
 
 
 def normalize_oci_storage(oci_storage: str | None) -> str:
@@ -217,6 +246,8 @@ _FILE_REPOS_BASE: Final = {
     f"{BUILD_ID_UPLOAD_FILES}/sbom": ["sbom.json"],
     f"{BUILD_ID_UPLOAD_MINIMAL}/artifacts": ["pulp_results.json"],
     f"{BUILD_ID_UPLOAD_ORAS}/artifacts": ["pulp_results.json"],
+    f"{BUILD_ID_TRANSFER_OCI_ATTACH}/artifacts": ["pulp_results.json"],
+    f"{BUILD_ID_TRANSFER_OCI_SUBJECT}/artifacts": ["pulp_results.json"],
     f"{BUILD_ID_UPDATE_BUILD}/artifacts": ["pulp_results.json"],
     f"{BUILD_ID_UPDATE_BUILD_REPLACED}/artifacts": ["pulp_results.json"],
     f"{BUILD_ID_UPDATE_BUILD_PULL}/artifacts": ["pulp_results.json"],
@@ -351,6 +382,21 @@ def scoped_base_path(base_path: str, run_id: str | None) -> str:
     if not run_id:
         return base_path
     return f"{base_path}-{run_id}"
+
+
+def e2e_pulp_container_oci_object_name(namespace: str, build_id: str) -> str:
+    """Match :func:`pulp_tool.utils.pulp_container_oci.pulp_container_oci_object_name` for cleanup."""
+    from pulp_tool.utils.pulp_container_oci import pulp_container_oci_object_name
+
+    return pulp_container_oci_object_name(namespace, build_id)
+
+
+def container_oci_names_for_cleanup(
+    namespace: str,
+    build_ids: list[str],
+) -> list[str]:
+    """Pulp container-push repository/distribution names created by ``--pulp-oras-cp-target``."""
+    return [e2e_pulp_container_oci_object_name(namespace, bid) for bid in build_ids]
 
 
 def scoped_repo_name(base_repo: str, run_id: str | None) -> str:

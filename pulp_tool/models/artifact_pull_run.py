@@ -53,6 +53,9 @@ class ArtifactPullRunOptions(KonfluxBaseModel):
     side_tag: str | None = None
     artifact_results: str | None = None
     snapshot_path: str | None = None
+    oras_cp_target: str | None = None
+    pulp_oras_cp_target: bool = False
+    oras_cp_source: str | None = None
     oci_storage: str | None = None
     verify_rpm_gpg: bool = False
     gpg_keyring: str | None = None
@@ -69,6 +72,8 @@ class ArtifactPullRunOptions(KonfluxBaseModel):
         "distribution_config",
         "side_tag",
         "snapshot_path",
+        "oras_cp_target",
+        "oras_cp_source",
         "gpg_keyring",
         "cert_path",
         "key_path",
@@ -90,6 +95,12 @@ class ArtifactPullRunOptions(KonfluxBaseModel):
     def transfer_requires_dest_config(self) -> Self:
         if self.operation_label == "transfer" and not self.dest_config_path:
             raise ValueError("dest_config_path is required for transfer")
+        return self
+
+    @model_validator(mode="after")
+    def oci_copy_target_flags_exclusive(self) -> Self:
+        if self.oras_cp_target and self.pulp_oras_cp_target:
+            raise ValueError("--oras-cp-target and --pulp-oras-cp-target are mutually exclusive")
         return self
 
     def parsed_content_types(self) -> list[str] | None:
@@ -155,10 +166,13 @@ class ArtifactPullRunOptions(KonfluxBaseModel):
     def to_pull_context(
         self,
         *,
-        resolved_artifact_location: str,
+        resolved_artifact_location: str | None,
         auth_key_path: str | None,
         side_tag: SideTagResolution,
         gpg: GpgPullSettings,
+        oci_intermediate_bundle_dir: str | None = None,
+        delete_local_sources_after_upload: bool = False,
+        oras_cp_source: str | None = None,
     ) -> PullContext:
         source_cfg = self.source_config_path or self.dest_config_path
         return PullContext(
@@ -172,6 +186,9 @@ class ArtifactPullRunOptions(KonfluxBaseModel):
             artifact_results=self.artifact_results,
             oci_storage=side_tag.resolved_oci_storage,
             snapshot_path=self.snapshot_path,
+            oras_cp_target=self.oras_cp_target,
+            pulp_oras_cp_target=self.pulp_oras_cp_target,
+            oras_cp_source=oras_cp_source or self.oras_cp_source,
             cluster=side_tag.cluster,
             debug=self.debug,
             max_workers=self.max_workers,
@@ -181,6 +198,8 @@ class ArtifactPullRunOptions(KonfluxBaseModel):
             gpg_keyring=gpg.gpg_keyring,
             operation_label=self.operation_label,
             transfer_source_config_path=source_cfg,
+            oci_intermediate_bundle_dir=oci_intermediate_bundle_dir,
+            delete_local_sources_after_upload=delete_local_sources_after_upload,
         )
 
 
